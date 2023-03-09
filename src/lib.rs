@@ -1,25 +1,17 @@
+#![feature(allocator_api, error_generic_member_access, provide_any)]
+
 #[allow(clippy::all)]
 pub mod protos {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
 
-mod demfile;
-pub use demfile::{DemFile, Visitor};
-
-mod error;
-pub use error::Error;
-
-mod bitbuf;
-pub(crate) use bitbuf::BitBuf;
-
+mod bitreader;
+mod dem;
 mod entity_classes;
-pub(crate) use entity_classes::EntityClasses;
-
+mod error;
 mod flattened_serializers;
-pub(crate) use flattened_serializers::FlattenedSerializers;
-
-mod varint;
-pub(crate) use varint::read_varu32;
-
+mod packet;
+mod packet_entitiy;
+pub mod parser;
 mod string_tables;
-pub(crate) use string_tables::StringTables;
+mod varint;

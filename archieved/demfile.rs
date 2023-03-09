@@ -1,11 +1,13 @@
 use crate::{
-    protos, read_varu32, BitBuf, EntityClasses, Error, FlattenedSerializers, StringTables,
+    protos, varint::VarInt, BitRead, EntityClasses, Error, FlattenedSerializers, StringTables,
 };
 use anyhow::{anyhow, Result};
 use byteorder::{LittleEndian, ReadBytesExt};
 use derivative::Derivative;
+use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
 use prost::Message;
 use std::{
+    alloc::{Allocator, Global},
     fs::File,
     io::{Read, Seek, SeekFrom},
     path::Path,
@@ -20,7 +22,9 @@ pub trait Visitor {
 
 impl Visitor for () {}
 
-pub struct DemFile<Vi: Visitor> {
+// NOTE: A has a Clone trait bound, that's because we expect A to be a reference
+// (https://github.com/rust-lang/rust/pull/98178)
+pub struct DemFile<Vi: Visitor, A: Allocator + Clone = Global> {
     file: File,
     file_info_offset: i32,
     message_data: Vec<u8>,
@@ -28,20 +32,26 @@ pub struct DemFile<Vi: Visitor> {
     packet_data: Vec<u8>,
     visitor: Vi,
     flattened_serializers: Option<FlattenedSerializers>,
-    entity_classes: Option<EntityClasses>,
-    string_tables: StringTables,
+
+    entity_classes: Option<EntityClasses<A>>,
+    string_tables: StringTables<A>,
+    class_baselines: Option<HashMap<i32, Vec<u8, A>, DefaultHashBuilder, A>>,
+    alloc: A,
 }
 
-impl<Vi> DemFile<Vi>
-where
-    Vi: Visitor,
-{
+impl<Vi: Visitor> DemFile<Vi, Global> {
     pub fn open<P: AsRef<Path>>(path: P, visitor: Vi) -> Result<Self> {
+        Self::open_in(path, visitor, Global)
+    }
+}
+
+impl<Vi: Visitor, A: Allocator + Clone> DemFile<Vi, A> {
+    pub fn open_in<P: AsRef<Path>>(path: P, visitor: Vi, alloc: A) -> Result<Self> {
         let file = File::open(path)?;
 
         let header = DemHeader::read(&file)?;
         if header.demo_file_stamp != DEMO_HEADER_ID {
-            return Err(anyhow!(Error::InvalidHeaderId {
+            return Err(anyhow!(Error::InvalidDemHeader {
                 want: DEMO_HEADER_ID,
                 got: header.demo_file_stamp,
             }));
@@ -55,8 +65,11 @@ where
             packet_data: vec![0; 512000],
             visitor,
             flattened_serializers: None,
+
             entity_classes: None,
-            string_tables: StringTables::new(),
+            string_tables: StringTables::new_in(alloc.clone()),
+            class_baselines: None,
+            alloc,
         })
     }
 
@@ -106,13 +119,12 @@ where
                     self.flattened_serializers = Some(FlattenedSerializers::new(message.data)?);
                 }
                 DemClassInfo => {
-                    self.entity_classes = Some(EntityClasses::new(message.data)?);
+                    self.entity_classes =
+                        Some(EntityClasses::new_in(message.data, self.alloc.clone())?);
                 }
                 DemStringTables => {
-                    // let string_tables = protos::CDemoStringTables::decode(message.data)?;
-                    // quote from dotabuff/manta:
+                    // quote from dotabuff/manta (tldr they ignore this):
                     // > These appear to be periodic state dumps and appear every 1800 outer ticks.
-                    // they ignore this.
                 }
                 DemPacket | DemSignonPacket => {
                     let packet = protos::CDemoPacket::decode(message.data)?;
@@ -139,46 +151,108 @@ where
     }
 
     fn handle_packet(&mut self, data: &[u8]) -> Result<()> {
-        let mut bitbuf = BitBuf::new(data);
+        let mut br = BitRead::new(data);
 
-        while !bitbuf.is_empty() {
-            let packet = DemPacket::read(&mut bitbuf, &mut self.packet_data)?;
+        while !br.is_empty() {
+            let packet = DemPacket::read(&mut br, &mut self.packet_data)?;
 
             use protos::SvcMessages::*;
             match packet.command {
                 DemPacketCommand::Svc(v) if v == SvcCreateStringTable => {
                     let proto = protos::CsvcMsgCreateStringTable::decode(packet.data)?;
-                    self.string_tables.insert(proto)?;
+                    // NOTE: we are only interested in `instancebaseline` table
+                    if proto.name.as_ref().expect("some name") == "instancebaseline" {
+                        let string_table = self.string_tables.create(proto)?;
+                        let mut class_baselines: HashMap<i32, Vec<u8, A>, DefaultHashBuilder, A> =
+                            HashMap::with_capacity_in(string_table.len(), self.alloc.clone());
+                        string_table.iter().for_each(|(_, v)| {
+                            let class_id = v
+                                .key
+                                .as_ref()
+                                .expect("instancebaseline key")
+                                .parse::<i32>()
+                                .expect("valid class id");
+                            class_baselines.insert(
+                                class_id,
+                                v.value.as_ref().expect("instancebaseline value").clone(),
+                            );
+                        });
+                        self.class_baselines = Some(class_baselines);
+                    }
                 }
                 DemPacketCommand::Svc(v) if v == SvcUpdateStringTable => {
                     unimplemented!()
+                    // TODO: decompose StringTables.insert into create and parse
+                    // fns, create update fn.
                 }
                 DemPacketCommand::Svc(v) if v == SvcPacketEntities => {
                     let packet_entities = protos::CsvcMsgPacketEntities::decode(packet.data)?;
-
                     let entity_data = &packet_entities.entity_data.expect("some entity data");
-                    let mut bitbuf = BitBuf::new(entity_data);
+                    let mut br = BitRead::new(entity_data);
 
-                    let mut updated_entries = packet_entities
+                    let updated_entries = packet_entities
                         .updated_entries
                         .expect("some updated entries");
                     let mut index: i32 = -1;
 
-                    while updated_entries > 0 {
-                        updated_entries -= 1;
-                        index += bitbuf.read_ubitvar()? as i32 + 1;
+                    let baselines = self
+                        .string_tables
+                        .get("instancebaseline")
+                        .expect("some instancebaseline table");
 
-                        let entity_command = EntityCommand::from(bitbuf.read(2)?);
+                    for _ in 0..updated_entries as usize {
+                        index += br.read_ubitvar()? as i32 + 1;
+
+                        let entity_command = EntityCommand::from(br.read(2)?);
                         match entity_command {
                             EntityCommand::Create => {
-                                let class_id = bitbuf.read(
-                                    self.entity_classes
-                                        .as_ref()
-                                        .expect("some entity classes")
-                                        .bits(),
-                                )?;
-                                bitbuf.read(17)?; // serial
-                                bitbuf.read_varu32()?; // unknown
+                                let entity_classes =
+                                    self.entity_classes.as_ref().expect("some entity classes");
+                                // let mut keys =
+                                //     entity_classes.keys().into_iter().collect::<Vec<&i32>>();
+                                // keys.sort();
+                                // dbg!(keys);
+
+                                let class_id = br.read(entity_classes.bits())? as i32;
+                                let serial = br.read(17)?; // serial
+                                br.read_varu32()?; // unknown
+                                dbg!(class_id, serial);
+
+                                // let mut keys = baselines.keys().into_iter().collect::<Vec<&i32>>();
+                                // keys.sort();
+                                // dbg!(keys);
+
+                                // TODO: we're not finding a baseline that we're looking for
+                                let baseline = self
+                                    .class_baselines
+                                    .as_ref()
+                                    .expect("class baselines table")
+                                    .get(&class_id)
+                                    .expect("class baseline value");
+
+                                let class = entity_classes.get(&class_id).expect("some class");
+
+                                let mut baseline_br = BitRead::new(baseline);
+                                let mut opid = 0;
+                                for _ in 0..17 {
+                                    opid = (opid << 1) | baseline_br.read(1)?;
+                                    dbg!(opid);
+                                }
+                                unimplemented!();
+
+                                // fn manta_read_field_paths(br: BitRead) {}
+                                // manta_read_field_paths(BitRead::new(
+                                //     baseline.value.as_ref().expect("some value"),
+                                // ));
+
+                                // if let Some(ste) = baselines.get(&class_id) {
+                                //     if let Some(value) = &ste.value {
+                                //         let br = BitRead::new(value);
+                                //         // TODO: parse
+                                //     }
+                                // }
+
+                                // TODO: parse
                             }
                             _ => {}
                         }
@@ -227,9 +301,9 @@ impl<'dst> DemMessage<'dst> {
         dst_data: &'dst mut [u8],
         dst_snappy_data: &'dst mut [u8],
     ) -> Result<Self> {
-        let mut command = read_varu32(&mut r)?;
-        let tick = read_varu32(&mut r)?;
-        let mut size = read_varu32(&mut r)?;
+        let mut command = r.read_varu32()?;
+        let tick = r.read_varu32()?;
+        let mut size = r.read_varu32()?;
 
         let mut data = &mut dst_data[0..size as usize];
         r.read_exact(data)?;
@@ -305,12 +379,12 @@ struct DemPacket<'dst> {
 }
 
 impl<'dst> DemPacket<'dst> {
-    fn read<'src>(bitbuf: &mut BitBuf, dst_data: &'dst mut [u8]) -> Result<Self> {
-        let command = DemPacketCommand::from(bitbuf.read_ubitvar()?);
-        let size = bitbuf.read_varu32()?;
+    fn read<'src>(br: &mut BitRead, dst_data: &'dst mut [u8]) -> Result<Self> {
+        let command = DemPacketCommand::from(br.read_ubitvar()?);
+        let size = br.read_varu32()?;
 
         let data = &mut dst_data[0..size as usize];
-        bitbuf.read_bytes(data)?;
+        br.read_bytes(data)?;
 
         Ok(Self {
             command,
@@ -350,7 +424,7 @@ impl From<u32> for EntityCommand {
 // struct SerializedEntity {}
 
 // impl SerializedEntity {
-//     fn parse(bitbuf: &mut BitBuf) -> Result<()> {
+//     fn parse(br: &mut BitRead) -> Result<()> {
 //         Ok(())
 //     }
 // }

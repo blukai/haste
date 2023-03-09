@@ -1,11 +1,9 @@
-use crate::{
-    bitreader::BitReader,
-    error::{required, Result},
-    protos,
-};
+use std::alloc::Allocator;
+
+use crate::{protos, BitRead};
+use anyhow::Result;
 use compact_str::CompactString;
 use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
-use std::alloc::Allocator;
 
 pub struct StringTableEntry<A: Allocator> {
     pub index: i32,
@@ -13,9 +11,7 @@ pub struct StringTableEntry<A: Allocator> {
     pub value: Option<Vec<u8, A>>,
 }
 
-// key is index
-pub type StringTable<A> = HashMap<i32, StringTableEntry<A>, DefaultHashBuilder, A>;
-
+type StringTable<A> = HashMap<i32, StringTableEntry<A>, DefaultHashBuilder, A>;
 type Container<A> = HashMap<CompactString, StringTable<A>, DefaultHashBuilder, A>;
 
 pub struct StringTables<A: Allocator + Clone> {
@@ -31,28 +27,31 @@ impl<A: Allocator + Clone> StringTables<A> {
         }
     }
 
+    pub fn get(&mut self, key: &str) -> Option<&StringTable<A>> {
+        self.container.get(key)
+    }
+
     pub fn create(&mut self, proto: protos::CsvcMsgCreateStringTable) -> Result<&StringTable<A>> {
-        let mut string_data = proto.string_data.ok_or(required!())?;
-        if proto.data_compressed.ok_or(required!())? {
+        let mut string_data = proto.string_data.expect("some string data");
+        if proto.data_compressed.expect("some data compressed") {
             let size = snap::raw::decompress_len(&string_data)?;
             let mut dst = vec![0u8; size];
             snap::raw::Decoder::new().decompress(&string_data, &mut dst[..])?;
             string_data = dst;
         };
-
         let string_table = self.handle_string_table(
-            CompactString::from(&proto.name.ok_or(required!())?),
+            CompactString::from(&proto.name.expect("some name")),
             &string_data,
-            proto.num_entries.ok_or(required!())?,
-            proto.user_data_fixed_size.ok_or(required!())?,
+            proto.num_entries.expect("some num entries"),
+            proto
+                .user_data_fixed_size
+                .expect("some user data fixed size"),
             proto.user_data_size_bits.expect("some user data size bits"),
-            proto.flags.ok_or(required!())?,
+            proto.flags.expect("some flags"),
         )?;
-
         Ok(string_table)
     }
 
-    // TODO: make this merhod nicer (/look into it)
     fn handle_string_table(
         &mut self,
         name: CompactString,
@@ -68,7 +67,7 @@ impl<A: Allocator + Clone> StringTables<A> {
         }
         let string_table = self.container.get_mut(&name).unwrap();
 
-        let mut br = BitReader::new(string_data);
+        let mut br = BitRead::new(string_data);
 
         // NOTE: some comments are stolen from manta.
 
@@ -173,10 +172,5 @@ impl<A: Allocator + Clone> StringTables<A> {
         }
 
         Ok(string_table)
-    }
-
-    #[inline(always)]
-    pub fn get(&self, key: &str) -> Option<&StringTable<A>> {
-        self.container.get(key)
     }
 }

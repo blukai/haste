@@ -1,41 +1,39 @@
-use crate::protos;
-use anyhow::Result;
-use prost::Message;
-use std::{
-    collections::HashMap,
-    ops::{Deref, DerefMut},
+use crate::{
+    error::{required, Result},
+    protos,
 };
+use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
+use std::alloc::Allocator;
 
-type HM = HashMap<i32, protos::c_demo_class_info::ClassT>;
+type Container<A> = HashMap<i32, protos::c_demo_class_info::ClassT, DefaultHashBuilder, A>;
 
-pub struct EntityClasses(HM);
+pub struct EntityClasses<A: Allocator + Clone> {
+    container: Container<A>,
+    bits: u32,
+}
 
-impl EntityClasses {
-    pub fn new(data: &[u8]) -> Result<Self> {
-        let class_info = protos::CDemoClassInfo::decode(data)?;
-        let mut hm = HM::with_capacity(class_info.classes.len());
-        for class in class_info.classes {
-            hm.insert(class.class_id.expect("some class id"), class);
+impl<A: Allocator + Clone> EntityClasses<A> {
+    pub fn new_in(proto: protos::CDemoClassInfo, alloc: A) -> Result<Self> {
+        let n_classes = proto.classes.len();
+
+        let mut container = Container::with_capacity_in(n_classes, alloc);
+        for class in proto.classes {
+            container.insert(class.class_id.ok_or(required!())?, class);
         }
-        Ok(Self(hm))
+
+        // bits is the number of bits to read for entity classes.
+        // stolen from butterfly's entity_classes.hpp.
+        let bits = (n_classes as f32).log2().ceil() as u32;
+
+        Ok(Self { container, bits })
     }
 
-    // bits returns number of bits to read for entity classes.
-    // stolen from butterfly's entity_classes.hpp.
     pub fn bits(&self) -> u32 {
-        (self.0.len() as f32).log2().ceil() as u32
+        self.bits
     }
-}
 
-impl Deref for EntityClasses {
-    type Target = HM;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for EntityClasses {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+    #[inline(always)]
+    pub fn get(&self, id: &i32) -> Option<&protos::c_demo_class_info::ClassT> {
+        self.container.get(id)
     }
 }

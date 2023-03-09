@@ -1,92 +1,99 @@
-use crate::{protos, read_varu32};
-use anyhow::Result;
+use crate::{
+    error::{required, Result},
+    protos,
+    varint::VarIntRead,
+};
+use compact_str::CompactString;
+use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
 use prost::Message;
-use std::{collections::HashMap, io::Cursor};
-
-// TODO: can we not clone strings? can we do something more efficient?
-
-#[derive(Debug)]
-struct FlattenedSerializer {
-    serializer_name: String,
-    serializer_version: i32,
-    fields: Vec<FlattenedSerializerField>,
-}
-
-impl FlattenedSerializer {
-    fn new(
-        msg: &protos::CsvcMsgFlattenedSerializer,
-        fs: &protos::ProtoFlattenedSerializerT,
-    ) -> Self {
-        Self {
-            serializer_name: msg.symbols
-                [fs.serializer_name_sym.expect("some serializer name") as usize]
-                .to_owned(),
-            serializer_version: fs.serializer_version.expect("some serializer version"),
-            fields: Vec::with_capacity(fs.fields_index.len()),
-        }
-    }
-}
+use std::{alloc::Allocator, io::Cursor};
 
 #[derive(Debug)]
 struct FlattenedSerializerField {
-    var_type: Option<String>,
-    var_name: Option<String>,
+    // TODO: figure out which fields should, and which should not be optional
+    var_type: Option<CompactString>,
+    var_name: Option<CompactString>,
     bit_count: Option<i32>,
     low_value: Option<f32>,
     high_value: Option<f32>,
     encode_flags: Option<i32>,
-    field_serializer_name: Option<String>,
+    field_serializer_name: Option<CompactString>,
     field_serializer_version: Option<i32>,
-    send_node: Option<String>,
-    var_encoder: Option<String>,
+    send_node: Option<CompactString>,
+    var_encoder: Option<CompactString>,
 }
 
 impl FlattenedSerializerField {
     fn new(
-        msg: &protos::CsvcMsgFlattenedSerializer,
-        fsf: &protos::ProtoFlattenedSerializerFieldT,
+        fser: &protos::CsvcMsgFlattenedSerializer,
+        fser_field: &protos::ProtoFlattenedSerializerFieldT,
     ) -> Self {
-        let resolve = |v: i32| Some(msg.symbols[v as usize].to_owned());
+        let resolve_string = |v: i32| Some(CompactString::from(&fser.symbols[v as usize]));
         Self {
-            var_type: fsf.var_type_sym.and_then(resolve),
-            var_name: fsf.var_name_sym.and_then(resolve),
-            bit_count: fsf.bit_count,
-            low_value: fsf.low_value,
-            high_value: fsf.high_value,
-            encode_flags: fsf.encode_flags,
-            field_serializer_name: fsf.field_serializer_name_sym.and_then(resolve),
-            field_serializer_version: fsf.field_serializer_version,
-            send_node: fsf.send_node_sym.and_then(resolve),
-            var_encoder: fsf.var_encoder_sym.and_then(resolve),
+            var_type: fser_field.var_type_sym.and_then(resolve_string),
+            var_name: fser_field.var_name_sym.and_then(resolve_string),
+            bit_count: fser_field.bit_count,
+            low_value: fser_field.low_value,
+            high_value: fser_field.high_value,
+            encode_flags: fser_field.encode_flags,
+            field_serializer_name: fser_field
+                .field_serializer_name_sym
+                .and_then(resolve_string),
+            field_serializer_version: fser_field.field_serializer_version,
+            send_node: fser_field.send_node_sym.and_then(resolve_string),
+            var_encoder: fser_field.var_encoder_sym.and_then(resolve_string),
         }
     }
 }
 
-pub struct FlattenedSerializers {
-    serializers: HashMap<String, FlattenedSerializer>,
+#[derive(Debug)]
+struct FlattenedSerializer<A: Allocator + Clone> {
+    serializer_name: CompactString,
+    serializer_version: i32,
+    fields: Vec<FlattenedSerializerField, A>,
 }
 
-impl FlattenedSerializers {
-    pub fn new(data: &[u8]) -> Result<Self> {
-        let st = protos::CDemoSendTables::decode(data)?;
-        let st_data = st.data.expect("some data");
-        let mut st_data_cursor = Cursor::new(&st_data);
+impl<A: Allocator + Clone> FlattenedSerializer<A> {
+    fn new_in(
+        msg: &protos::CsvcMsgFlattenedSerializer,
+        fs: &protos::ProtoFlattenedSerializerT,
+        alloc: A,
+    ) -> Result<Self> {
+        Ok(Self {
+            serializer_name: CompactString::from(
+                &msg.symbols[fs.serializer_name_sym.ok_or(required!())? as usize],
+            ),
+            serializer_version: fs.serializer_version.ok_or(required!())?,
+            fields: Vec::with_capacity_in(fs.fields_index.len(), alloc.clone()),
+        })
+    }
+}
 
-        let size = read_varu32(&mut st_data_cursor)? as usize;
-        let offset = st_data_cursor.position() as usize;
-        let msg = protos::CsvcMsgFlattenedSerializer::decode(&st_data[offset..offset + size])?;
+type Container<A> = HashMap<CompactString, FlattenedSerializer<A>, DefaultHashBuilder, A>;
 
-        let mut serializers: HashMap<String, FlattenedSerializer> = HashMap::new();
+pub struct FlattenedSerializers<A: Allocator + Clone> {
+    container: Container<A>,
+}
 
-        msg.serializers.iter().for_each(|fs| {
-            let mut serializer = FlattenedSerializer::new(&msg, fs);
-            fs.fields_index.iter().for_each(|field_index| {
+impl<A: Allocator + Clone> FlattenedSerializers<A> {
+    pub fn new_in(proto: protos::CDemoSendTables, alloc: A) -> Result<Self> {
+        let data = proto.data.ok_or(required!())?;
+        let mut data_cursor = Cursor::new(&data);
+        let size = data_cursor.read_varu32()? as usize;
+        let offset = data_cursor.position() as usize;
+        let msg = protos::CsvcMsgFlattenedSerializer::decode(&data[offset..offset + size])?;
+
+        let mut container: Container<A> = Container::new_in(alloc.clone());
+
+        for fs in msg.serializers.iter() {
+            let mut serializer = FlattenedSerializer::new_in(&msg, fs, alloc.clone())?;
+            for field_index in fs.fields_index.iter() {
                 let fsf = FlattenedSerializerField::new(&msg, &msg.fields[*field_index as usize]);
                 serializer.fields.push(fsf);
-            });
-            serializers.insert(serializer.serializer_name.to_owned(), serializer);
-        });
+            }
+            container.insert(serializer.serializer_name.clone(), serializer);
+        }
 
-        Ok(Self { serializers })
+        Ok(Self { container })
     }
 }
