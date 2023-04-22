@@ -1,6 +1,10 @@
 use crate::error::Result;
 use std::io::Read;
 
+// TODO: look into https://github.com/HebiRobotics/QuickBuffers/blob/main/runtime/src/main/java/us/hebi/quickbuf/ProtoSource.java#L802-L880
+// that is derived from https://github.com/protocolbuffers/protobuf/blob/main/java/core/src/main/java/com/google/protobuf/CodedInputStream.java#L978-L1118
+// discovered in: https://github.com/HebiRobotics/QuickBuffers/issues/40#issuecomment-1426898262
+
 #[derive(thiserror::Error, Debug)]
 pub enum VarIntError {
     #[error("invalid varint")]

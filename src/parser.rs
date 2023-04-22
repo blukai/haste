@@ -1,19 +1,29 @@
 use crate::{
     bitreader::BitReader,
+    client::{self, UpdateType},
     dem::{self, Msg as DemMsg},
     entity_classes::EntityClasses,
     error::{required, Error, Result},
+    field_path::{build_field_ops_tree, FieldPath, Tree, FIELD_OPS},
     flattened_serializers::FlattenedSerializers,
     packet::{self, Msg as PacketMsg},
-    packet_entitiy::{EntityOp, PacketEntity},
     protos::{self, EDemoCommands},
     string_tables::StringTables,
 };
 use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
 use std::{
     alloc::{Allocator, Global},
+    fmt::Debug,
     io::{self, Read, Seek, SeekFrom},
 };
+
+// TODO: don't read byte-by-byte, use buffered read because it's faster!
+
+// some cool docs on dota 2 replays:
+// https://github.com/skadistats/smoke/wiki/Anatomy-of-a-Dota-2-Replay-File
+
+// ~/.local/share/Steam/steamapps/common/dota 2 beta/game/core/tools/demoinfo2/demoinfo2.txt
+// has some interesting mappings :thinking:
 
 const DEMO_FILE_STAMP: [u8; 8] = *b"PBDEMS2\0";
 const MSG_BUF_SIZE: usize = 1024 * 1024;
@@ -24,14 +34,16 @@ pub enum ParserError {
     InvalidHeader { want: [u8; 8], got: [u8; 8] },
 }
 
-pub struct Parser<R: Read + Seek, A: Allocator + Clone = Global> {
+pub struct Parser<R: Read + Seek, A: Allocator + Clone + Debug = Global> {
     rdr: R,
     file_info_offset: i32,
     buf: Vec<u8, A>,
     entity_classes: Option<EntityClasses<A>>,
     string_tables: StringTables<A>,
     instancebaseline: Option<HashMap<i32, Vec<u8, A>, DefaultHashBuilder, A>>,
-    packet_entities: HashMap<i32, PacketEntity, DefaultHashBuilder, A>,
+    flattened_serializers: Option<FlattenedSerializers<A>>,
+    // packet_entities: HashMap<i32, PacketEntity, DefaultHashBuilder, A>,
+    server_info: Option<protos::CsvcMsgServerInfo>,
     alloc: A,
 }
 
@@ -41,7 +53,7 @@ impl<R: Read + Seek> Parser<R> {
     }
 }
 
-impl<R: Read + Seek, A: Allocator + Clone> Parser<R, A> {
+impl<R: Read + Seek, A: Allocator + Clone + Debug> Parser<R, A> {
     pub fn new_in(mut rdr: R, alloc: A) -> Result<Self> {
         let header = dem::Header::from_reader(&mut rdr)?;
         if header.demo_file_stamp != DEMO_FILE_STAMP {
@@ -62,8 +74,10 @@ impl<R: Read + Seek, A: Allocator + Clone> Parser<R, A> {
             entity_classes: None,
             string_tables: StringTables::new_in(alloc.clone()),
             instancebaseline: None,
+            flattened_serializers: None,
             // NOTE: 20480 is is value of BUTTERFLY_MAX_ENTS in butterfly
-            packet_entities: HashMap::with_capacity_in(20480, alloc.clone()),
+            // packet_entities: HashMap::with_capacity_in(20480, alloc.clone()),
+            server_info: None,
             alloc,
         })
     }
@@ -112,8 +126,8 @@ impl<R: Read + Seek, A: Allocator + Clone> Parser<R, A> {
                             &msg_header,
                             &mut self.buf,
                         )?;
-                        let flattened_serializers =
-                            FlattenedSerializers::new_in(proto, self.alloc.clone())?;
+                        self.flattened_serializers =
+                            Some(FlattenedSerializers::new_in(proto, self.alloc.clone())?);
                     }
                     DemClassInfo => {
                         let proto = protos::CDemoClassInfo::from_reader(
@@ -124,16 +138,21 @@ impl<R: Read + Seek, A: Allocator + Clone> Parser<R, A> {
                         let entity_classes = EntityClasses::new_in(proto, self.alloc.clone())?;
                         self.entity_classes = Some(entity_classes);
                     }
-                    DemFullPacket => {
-                        let proto = protos::CDemoFullPacket::from_reader(
-                            &mut self.rdr,
-                            &msg_header,
-                            &mut self.buf,
-                        )?;
-                        self.handle_packet(
-                            &proto.packet.ok_or(required!())?.data.ok_or(required!())?,
-                        )?;
-                    }
+
+                    // CDemoFullPacket contains the entire state of the world at
+                    // that tick. Full packets are only taken once every 1800
+                    // ticks (1 minute).
+                    // TODO: do we want to handle this now?
+                    // DemFullPacket => {
+                    //     let proto = protos::CDemoFullPacket::from_reader(
+                    //         &mut self.rdr,
+                    //         &msg_header,
+                    //         &mut self.buf,
+                    //     )?;
+                    //     self.handle_packet(
+                    //         &proto.packet.ok_or(required!())?.data.ok_or(required!())?,
+                    //     )?;
+                    // }
                     _ => {
                         self.rdr.seek(SeekFrom::Current(msg_header.size as i64))?;
                     }
@@ -148,6 +167,13 @@ impl<R: Read + Seek, A: Allocator + Clone> Parser<R, A> {
         while !br.is_empty() {
             let packet_header = packet::Header::from_bitreader(&mut br)?;
             match packet_header.command {
+                c if c == protos::SvcMessages::SvcServerInfo as u32 => {
+                    self.server_info = Some(protos::CsvcMsgServerInfo::from_bitreader(
+                        &mut br,
+                        &packet_header,
+                        &mut self.buf,
+                    )?);
+                }
                 c if c == protos::SvcMessages::SvcCreateStringTable as u32 => {
                     let proto = protos::CsvcMsgCreateStringTable::from_bitreader(
                         &mut br,
@@ -195,6 +221,7 @@ impl<R: Read + Seek, A: Allocator + Clone> Parser<R, A> {
     fn handle_packet_entities(&mut self, proto: protos::CsvcMsgPacketEntities) -> Result<()> {
         let entity_classes = self.entity_classes.as_ref().ok_or(required!())?;
         let instancebaseline = self.instancebaseline.as_ref().ok_or(required!())?;
+        let flattened_serializers = self.flattened_serializers.as_ref().ok_or(required!())?;
 
         let entity_data = proto.entity_data.ok_or(required!())?;
         let mut br = BitReader::new(&entity_data);
@@ -203,23 +230,112 @@ impl<R: Read + Seek, A: Allocator + Clone> Parser<R, A> {
 
         for i in 0..proto.updated_entries.ok_or(required!())? {
             idx += br.read_ubitvar()? as i32 + 1;
-            match EntityOp::from(br.read(2)?) {
-                EntityOp::Create => {
+
+            // TODO: what if this not delta packet (proto.is_delta) ?
+            let update_flags = client::parse_delta_header(&mut br)?;
+            let update_type = client::determine_update_type(update_flags);
+
+            match update_type {
+                UpdateType::EnterPVS => {
                     let class_id = br.read(entity_classes.bits())? as i32;
                     let _serial = br.read(17)?;
                     let _unknown = br.read_varu32()?;
 
-                    let class = entity_classes.get(&class_id);
+                    let class = entity_classes.get(&class_id).ok_or(required!())?;
                     let baseline_value = instancebaseline.get(&class_id).ok_or(required!())?;
 
-                    dbg!(class);
-                    dbg!(baseline_value);
+                    {
+                        let read_fields = |br: &mut BitReader| -> Result<()> {
+                            let mut fp = FieldPath::new();
+                            let mut fps: Vec<FieldPath, A> = Vec::new_in(self.alloc.clone());
+
+                            let root = build_field_ops_tree();
+                            let mut node: &Tree<usize> = &root;
+                            while !fp.finished {
+                                let next = if br.read_bool()? {
+                                    node.right().expect("right branch")
+                                } else {
+                                    node.left().expect("left branch")
+                                };
+                                match next {
+                                    Tree::Leaf { value, .. } => {
+                                        node = &root;
+                                        dbg!(&FIELD_OPS[*value].name);
+                                        (&FIELD_OPS[*value].fp)(&mut fp, br)?;
+                                        dbg!(format!("{:?}", &fp.data));
+                                        if !fp.finished {
+                                            fps.push(fp.clone())
+                                        }
+                                    }
+                                    Tree::Node { .. } => node = next,
+                                }
+                            }
+
+                            let serializer = flattened_serializers
+                                .get_by_class_id(&class.network_name.as_ref().ok_or(required!())?)
+                                .ok_or(required!())?;
+
+                            for fp in fps {
+                                let f = match fp.position {
+                                    0 => serializer.fields.get(fp.data[0] as usize),
+                                    1 => serializer.fields.get(fp.data[0] as usize).and_then(|f| {
+                                        // dbg!(&f.var_type, &f.var_name);
+                                        if f.size != 0 {
+                                            Some(f)
+                                        } else if f.is_dynamic {
+                                            Some(f)
+                                        } else {
+                                            f.field_serializer.as_ref().and_then(|serializer| {
+                                                serializer.fields.get(fp.data[1] as usize)
+                                            })
+                                        }
+                                    }),
+                                    _ => unimplemented!(),
+                                };
+
+                                print!(
+                                    "ser={:<8} \tfp={:>2?}",
+                                    &serializer.serializer_name,
+                                    &fp.data[..=fp.position]
+                                );
+
+                                if let Some(f) = f {
+                                    print!(" \tt={:<55} \tn={:<43}", &f.var_type, &f.var_name);
+
+                                    print!(
+                                        "\tbc={:?} \tlv={:?} \thv={:?} \tef={:?} \te={:<24?}",
+                                        &f.bit_count,
+                                        &f.low_value,
+                                        &f.high_value,
+                                        &f.encode_flags,
+                                        &f.var_encoder,
+                                    );
+
+                                    if let Some(value) =
+                                        f.decoder.as_ref().map(|decode| (decode)(br, &f))
+                                    {
+                                        print!(" \tvalue={:?}", value?);
+                                    }
+
+                                    if f.decoder.is_none() {
+                                        unimplemented!();
+                                    }
+                                }
+                                println!();
+                            }
+
+                            Ok(())
+                        };
+
+                        read_fields(&mut BitReader::new(&baseline_value))?;
+                        read_fields(&mut br)?;
+                    }
 
                     // TODO!
-                    unimplemented!()
+                    // unimplemented!()
                 }
-                op => {
-                    dbg!(op);
+                update_type => {
+                    dbg!(update_type);
                     unimplemented!()
                 }
             }
@@ -238,7 +354,7 @@ mod tests {
 
     #[test]
     fn parse() -> Result<()> {
-        let file = File::open("./fixtures/6911306644_1806469309.dem")?;
+        let file = File::open("./fixtures/7116662198_1379602574.dem")?;
         let mut parser = Parser::new(file)?;
         while !parser.process_next_msg()? {}
         Ok(())
@@ -246,9 +362,10 @@ mod tests {
 
     #[test]
     fn parse_file_info() -> Result<()> {
-        let file = File::open("./fixtures/6911306644_1806469309.dem")?;
+        let file = File::open("./fixtures/7116662198_1379602574.dem")?;
         let mut parser = Parser::new(file)?;
         let _file_info = parser.read_file_info()?;
+        // dbg!(file_info);
         Ok(())
     }
 }

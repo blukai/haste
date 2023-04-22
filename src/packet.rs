@@ -50,7 +50,7 @@ mod tests {
 
     #[test]
     fn packet_stuff() -> Result<()> {
-        let mut file = File::open("./fixtures/6911306644_1806469309.dem")?;
+        let mut file = File::open("./fixtures/7049305691_1283097277.dem")?;
         dem::Header::from_reader(&mut file)?;
         loop {
             let msg_header = dem::MsgHeader::from_reader(&mut file)?;
@@ -72,7 +72,7 @@ mod tests {
                                 &packet_header,
                                 &mut buf,
                             )?;
-                            expect!["CnetMsgTick { tick: Some(268), host_frametime: None, host_frametime_std_deviation: None, host_computationtime: None, host_computationtime_std_deviation: None, host_framestarttime_std_deviation: None, host_loss: Some(0), host_unfiltered_frametime: None, hltv_replay_flags: None }"]
+                            expect!["CnetMsgTick { tick: Some(176), host_frametime: None, host_frametime_std_deviation: None, host_computationtime: None, host_computationtime_std_deviation: None, host_framestarttime_std_deviation: None, host_loss: Some(0), host_unfiltered_frametime: None, hltv_replay_flags: None }"]
                                 .assert_eq(&format!("{:?}", &proto));
 
                             return Ok(());

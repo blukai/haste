@@ -47,6 +47,7 @@ impl<A: Allocator + Clone> StringTables<A> {
             proto.user_data_fixed_size.ok_or(required!())?,
             proto.user_data_size_bits.expect("some user data size bits"),
             proto.flags.ok_or(required!())?,
+            proto.using_varint_bitcounts.ok_or(required!())?,
         )?;
 
         Ok(string_table)
@@ -61,6 +62,7 @@ impl<A: Allocator + Clone> StringTables<A> {
         user_data_fixed_size: bool,
         user_data_size: i32,
         flags: i32,
+        using_varint_bitcounts: bool,
     ) -> Result<&StringTable<A>> {
         if !self.container.contains_key(&name) {
             self.container
@@ -122,10 +124,10 @@ impl<A: Allocator + Clone> StringTables<A> {
                     let keyh_len = br.read(5)? as usize;
 
                     let mut key_buf = keyh[keyh_pos];
-                    let len = br.read_str(&mut key_buf[keyh_len..])?.len();
+                    let len = br.read_string(&mut key_buf[keyh_len..])?.len();
                     (key_buf, keyh_len + len)
                 } else {
-                    let len = br.read_str(&mut key_buf)?.len();
+                    let len = br.read_string(&mut key_buf)?.len();
                     (key_buf, len)
                 };
 
@@ -149,7 +151,14 @@ impl<A: Allocator + Clone> StringTables<A> {
                     } else {
                         false
                     };
-                    let size = br.read(17)?;
+                    // NOTE: using_varint_bitcounts bool was introduced in the
+                    // new frontiers update on smaypril twemmieth,
+                    // https://github.com/SteamDatabase/GameTracking-Dota2/commit/8851e24f0e3ef0b618e3a60d276a3b0baf88568c#diff-79c9dd229c77c85f462d6d85e29a65f5daf6bf31f199554438d42bd643e89448R405
+                    let size = if using_varint_bitcounts {
+                        br.read_ubitvar()?
+                    } else {
+                        br.read(17)?
+                    };
 
                     let value = &mut value_buf[..size as usize];
                     br.read_bytes(value)?;

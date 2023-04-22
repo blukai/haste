@@ -5,6 +5,8 @@ use crate::{
 use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
 use std::alloc::Allocator;
 
+// see RecvTable_RecvClassInfos in engine/dt_recv_eng.cpp for refference
+
 type Container<A> = HashMap<i32, protos::c_demo_class_info::ClassT, DefaultHashBuilder, A>;
 
 pub struct EntityClasses<A: Allocator + Clone> {

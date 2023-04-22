@@ -106,19 +106,19 @@ mod tests {
 
     #[test]
     fn dem_stuff() -> Result<()> {
-        let mut file = File::open("./fixtures/6911306644_1806469309.dem")?;
+        let mut file = File::open("./fixtures/7049305691_1283097277.dem")?;
 
         let header = Header::from_reader(&mut file)?;
-        expect!["Header { demo_file_stamp: [80, 66, 68, 69, 77, 83, 50, 0], file_info_offset: 88129159, unknown: [28, 190, 64, 5] }"]
+        expect!["Header { demo_file_stamp: [80, 66, 68, 69, 77, 83, 50, 0], file_info_offset: 46809842, unknown: [125, 66, 202, 2] }"]
             .assert_eq(&format!("{:?}", &header));
 
         let msg_header = MsgHeader::from_reader(&mut file)?;
-        expect!["MsgHeader { command: DemFileHeader, is_compressed: false, tick: 4294967295, size: 182 }"]
+        expect!["MsgHeader { command: DemFileHeader, is_compressed: false, tick: 4294967295, size: 190 }"]
             .assert_eq(&format!("{:?}", &msg_header));
 
         let mut buf = vec![0u8; 1024 * 1024];
         let msg = protos::CDemoFileHeader::from_reader(&mut file, &msg_header, &mut buf[..]);
-        expect![[r#"Ok(CDemoFileHeader { demo_file_stamp: "PBDEMS2\0", network_protocol: Some(47), server_name: Some("Valve Dota 2 Europe Server (srcds417-fra2.274.381)"), client_name: Some("SourceTV Demo"), map_name: Some("start"), game_directory: Some("/opt/srcds/dota/dota_v5566/dota"), fullpackets_version: Some(2), allow_clientside_entities: Some(true), allow_clientside_particles: Some(true), addons: Some(""), demo_version_name: Some("valve_demo_2"), demo_version_guid: Some("8e9d71ab-04a1-4c01-bb61-acfede27c046"), build_num: Some(9506), game: None })"#]]
+        expect![[r#"Ok(CDemoFileHeader { demo_file_stamp: "PBDEMS2\0", network_protocol: Some(47), server_name: Some("Valve Dota 2 USEast Server (srcds1007-iad1.121.200)"), client_name: Some("SourceTV Demo"), map_name: Some("start"), game_directory: Some("/opt/srcds/dota_custom/dota_v5634/dota"), fullpackets_version: Some(2), allow_clientside_entities: Some(true), allow_clientside_particles: Some(true), addons: Some(""), demo_version_name: Some("valve_demo_2"), demo_version_guid: Some("8e9d71ab-04a1-4c01-bb61-acfede27c046"), build_num: Some(9629), game: None })"#]]
             .assert_eq(&format!("{:?}", &msg));
 
         Ok(())
