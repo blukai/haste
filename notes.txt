@@ -1,2 +1,3 @@
-- https://web.archive.org/web/20161229172556/http://dev.dota2.com/showthread.php?t=32672
-- https://developer.valvesoftware.com/wiki/Dota_2_Demo_Format
+interesting stuff:
+https://github.com/ExistedGit/Dota2Cheat
+https://github.com/LWSS/McDota

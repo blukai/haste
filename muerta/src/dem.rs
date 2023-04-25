@@ -106,7 +106,7 @@ mod tests {
 
     #[test]
     fn dem_stuff() -> Result<()> {
-        let mut file = File::open("./fixtures/7049305691_1283097277.dem")?;
+        let mut file = File::open("../fixtures/7049305691_1283097277.dem")?;
 
         let header = Header::from_reader(&mut file)?;
         expect!["Header { demo_file_stamp: [80, 66, 68, 69, 77, 83, 50, 0], file_info_offset: 46809842, unknown: [125, 66, 202, 2] }"]

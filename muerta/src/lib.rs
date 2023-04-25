@@ -5,12 +5,17 @@ pub mod protos {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
 
-mod bitreader;
+#[allow(non_snake_case)]
+pub mod fops {
+    include!(concat!(env!("OUT_DIR"), "/fops.rs"));
+}
+
+pub mod bitreader;
 mod client;
 mod dem;
 mod entity_classes;
-mod error;
-mod field_path;
+pub mod error;
+pub mod field_path;
 mod field_prop;
 mod flattened_serializers;
 mod packet;

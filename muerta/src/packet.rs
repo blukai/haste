@@ -50,7 +50,7 @@ mod tests {
 
     #[test]
     fn packet_stuff() -> Result<()> {
-        let mut file = File::open("./fixtures/7049305691_1283097277.dem")?;
+        let mut file = File::open("../fixtures/7049305691_1283097277.dem")?;
         dem::Header::from_reader(&mut file)?;
         loop {
             let msg_header = dem::MsgHeader::from_reader(&mut file)?;

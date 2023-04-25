@@ -1,0 +1,323 @@
+// NOTE: it is assumed that this will only be used from within the muerta crate.
+
+use crate::{bitreader::BitReader, error::Result, field_path::FieldPath};
+
+#[inline(always)]
+pub fn PlusOne(fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    fp.data[fp.position] += 1;
+    Ok(())
+}
+
+#[inline(always)]
+pub fn PlusTwo(fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    fp.data[fp.position] += 2;
+    Ok(())
+}
+
+#[inline(always)]
+pub fn PlusThree(fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    fp.data[fp.position] += 3;
+    Ok(())
+}
+
+#[inline(always)]
+pub fn PlusFour(fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    fp.data[fp.position] += 4;
+    Ok(())
+}
+
+#[inline(always)]
+pub fn PlusN(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
+    fp.data[fp.position] += br.read_fpbitvar()? + 5;
+    Ok(())
+}
+
+#[inline(always)]
+pub fn PushOneLeftDeltaZeroRightZero(fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    fp.position += 1;
+    fp.data[fp.position] = 0;
+    Ok(())
+}
+
+#[inline(always)]
+pub fn PushOneLeftDeltaZeroRightNonZero(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data.push_back(b.readFPBitVar());
+}
+
+#[inline(always)]
+pub fn PushOneLeftDeltaOneRightZero(fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    fp.data[fp.position] += 1;
+    fp.push_back(0);
+    Ok(())
+}
+
+#[inline(always)]
+pub fn PushOneLeftDeltaOneRightNonZero(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data[f.position] += 1;
+    // f.data.push_back(b.readFPBitVar());
+}
+
+#[inline(always)]
+pub fn PushOneLeftDeltaNRightZero(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data[f.position] += b.readFPBitVar();
+    // f.data.push_back(0);
+}
+
+#[inline(always)]
+pub fn PushOneLeftDeltaNRightNonZero(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data[f.position] += b.readFPBitVar() + 2;
+    // f.data.push_back(b.readFPBitVar() + 1);
+}
+
+#[inline(always)]
+pub fn PushOneLeftDeltaNRightNonZeroPack6Bits(
+    _fp: &mut FieldPath,
+    _br: &mut BitReader,
+) -> Result<()> {
+    unimplemented!()
+    // f.data[f.position] += b.read(3) + 2;
+    // f.data.push_back(b.read(3) + 1);
+}
+
+#[inline(always)]
+pub fn PushOneLeftDeltaNRightNonZeroPack8Bits(
+    _fp: &mut FieldPath,
+    _br: &mut BitReader,
+) -> Result<()> {
+    unimplemented!()
+    // f.data[f.position] += b.read(4) + 2;
+    // f.data.push_back(b.read(4) + 1);
+}
+
+#[inline(always)]
+pub fn PushTwoLeftDeltaZero(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data.push_back(b.readFPBitVar());
+    // f.data.push_back(b.readFPBitVar());
+}
+
+#[inline(always)]
+pub fn PushTwoLeftDeltaOne(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data[f.position] += 1;
+    // f.data.push_back(b.readFPBitVar());
+    // f.data.push_back(b.readFPBitVar());
+}
+
+#[inline(always)]
+pub fn PushTwoLeftDeltaN(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data[f.position] += b.readUBitVar() + 2;
+    // f.data.push_back(b.readFPBitVar());
+    // f.data.push_back(b.readFPBitVar());
+}
+
+#[inline(always)]
+pub fn PushTwoPack5LeftDeltaZero(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data.push_back(b.read(5));
+    // f.data.push_back(b.read(5));
+}
+
+#[inline(always)]
+pub fn PushTwoPack5LeftDeltaOne(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data[f.position] += 1;
+    // f.data.push_back(b.read(5));
+    // f.data.push_back(b.read(5));
+}
+
+#[inline(always)]
+pub fn PushTwoPack5LeftDeltaN(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data[f.position] += b.readUBitVar() + 2;
+    // f.data.push_back(b.read(5));
+    // f.data.push_back(b.read(5));
+}
+
+#[inline(always)]
+pub fn PushThreeLeftDeltaZero(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data.push_back(b.readFPBitVar());
+    // f.data.push_back(b.readFPBitVar());
+    // f.data.push_back(b.readFPBitVar());
+}
+
+#[inline(always)]
+pub fn PushThreeLeftDeltaOne(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data[f.position] += 1;
+    // f.data.push_back(b.readFPBitVar());
+    // f.data.push_back(b.readFPBitVar());
+    // f.data.push_back(b.readFPBitVar());
+}
+
+#[inline(always)]
+pub fn PushThreeLeftDeltaN(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data[f.position] += b.readUBitVar() + 2;
+    // f.data.push_back(b.readFPBitVar());
+    // f.data.push_back(b.readFPBitVar());
+    // f.data.push_back(b.readFPBitVar());
+}
+
+#[inline(always)]
+pub fn PushThreePack5LeftDeltaZero(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data.push_back(b.read(5));
+    // f.data.push_back(b.read(5));
+    // f.data.push_back(b.read(5));
+}
+
+#[inline(always)]
+pub fn PushThreePack5LeftDeltaOne(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data[f.position] += 1;
+    // f.data.push_back(b.read(5));
+    // f.data.push_back(b.read(5));
+    // f.data.push_back(b.read(5));
+}
+
+#[inline(always)]
+pub fn PushThreePack5LeftDeltaN(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data[f.position] += b.readUBitVar() + 2;
+    // f.data.push_back(b.read(5));
+    // f.data.push_back(b.read(5));
+    // f.data.push_back(b.read(5));
+}
+
+#[inline(always)]
+pub fn PushN(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // uint32_t n = b.readUBitVar();
+
+    // for (uint32_t i = 0; i < n; ++i) {
+    //     f.data.push_back(b.readFPBitVar());
+    // }
+}
+
+#[inline(always)]
+pub fn PushNAndNonTopological(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // for (auto &idx : f.data) {
+    //     if (b.read(1)) idx += b.readVarSInt32() + 1;
+    // }
+
+    // uint32_t n = b.readUBitVar();
+    // for (uint32_t i = 0; i < n; ++i) {
+    //     f.data.push_back(b.readFPBitVar());
+    // }
+}
+
+#[inline(always)]
+pub fn PopOnePlusOne(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data.pop_back();
+    // f.data[f.position] += 1;
+}
+
+#[inline(always)]
+pub fn PopOnePlusN(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data.pop_back();
+    // f.data[f.position] += b.readFPBitVar() + 1;
+}
+
+#[inline(always)]
+pub fn PopAllButOnePlusOne(fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    fp.pop(fp.position);
+    fp.data[fp.position] += 1;
+    Ok(())
+}
+
+#[inline(always)]
+pub fn PopAllButOnePlusN(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // f.data.resize(1);
+    // f.data[f.position] += b.readFPBitVar() + 1;
+}
+
+#[inline(always)]
+pub fn PopAllButOnePlusNPack3Bits(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
+    fp.pop(fp.position);
+    fp.data[fp.position] = br.read(3)? as i32 + 1;
+    Ok(())
+}
+
+#[inline(always)]
+pub fn PopAllButOnePlusNPack6Bits(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
+    fp.pop(fp.position);
+    fp.data[fp.position] = br.read(6)? as i32 + 1;
+    Ok(())
+}
+
+#[inline(always)]
+pub fn PopNPlusOne(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // uint32_t nsize = f.data.size() - b.readFPBitVar();
+    // ASSERT_TRUE(nsize < 7 && nsize > 0,  "Invalid fp size for op");
+
+    // f.data.resize(nsize);
+    // f.data[f.position] += 1;
+}
+
+#[inline(always)]
+pub fn PopNPlusN(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // uint32_t nsize = f.data.size() - b.readFPBitVar();
+    // ASSERT_TRUE(nsize < 7 && nsize > 0,  "Invalid fp size for op");
+
+    // f.data.resize(nsize);
+    // f.data[f.position] += b.readVarSInt32();
+}
+
+#[inline(always)]
+pub fn PopNAndNonTopographical(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // uint32_t nsize = f.data.size() - b.readFPBitVar();
+    // ASSERT_TRUE(nsize < 7 && nsize > 0,  "Invalid fp size for op");
+
+    // f.data.resize(nsize);
+
+    // for (auto &idx : f.data) {
+    //     if (b.read(1)) idx += b.readVarSInt32();
+    // }
+}
+
+#[inline(always)]
+pub fn NonTopoComplex(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
+    for i in 0..=fp.position {
+        if br.read_bool()? {
+            fp.data[i] += br.read_vari32()?;
+        }
+    }
+    Ok(())
+}
+
+#[inline(always)]
+pub fn NonTopoPenultimatePlusOne(_fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    unimplemented!()
+    // ASSERT_TRUE(f.data.size() >= 2, "Invalid fp size for op");
+    // f.data[f.data.size() - 2] += 1;
+}
+
+#[inline(always)]
+pub fn NonTopoComplexPack4Bits(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
+    for i in 0..=fp.position {
+        if br.read_bool()? {
+            fp.data[i] += br.read(4)? as i32 - 7;
+        }
+    }
+    Ok(())
+}
+
+#[inline(always)]
+pub fn FieldPathEncodeFinish(fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+    fp.finished = true;
+    Ok(())
+}

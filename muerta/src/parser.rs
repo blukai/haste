@@ -4,8 +4,9 @@ use crate::{
     dem::{self, Msg as DemMsg},
     entity_classes::EntityClasses,
     error::{required, Error, Result},
-    field_path::{build_field_ops_tree, FieldPath, Tree, FIELD_OPS},
+    field_path::FieldPath,
     flattened_serializers::FlattenedSerializers,
+    fops,
     packet::{self, Msg as PacketMsg},
     protos::{self, EDemoCommands},
     string_tables::StringTables,
@@ -249,25 +250,19 @@ impl<R: Read + Seek, A: Allocator + Clone + Debug> Parser<R, A> {
                             let mut fp = FieldPath::new();
                             let mut fps: Vec<FieldPath, A> = Vec::new_in(self.alloc.clone());
 
-                            let root = build_field_ops_tree();
-                            let mut node: &Tree<usize> = &root;
                             while !fp.finished {
-                                let next = if br.read_bool()? {
-                                    node.right().expect("right branch")
-                                } else {
-                                    node.left().expect("left branch")
-                                };
-                                match next {
-                                    Tree::Leaf { value, .. } => {
-                                        node = &root;
-                                        dbg!(&FIELD_OPS[*value].name);
-                                        (&FIELD_OPS[*value].fp)(&mut fp, br)?;
-                                        dbg!(format!("{:?}", &fp.data));
-                                        if !fp.finished {
-                                            fps.push(fp.clone())
-                                        }
-                                    }
-                                    Tree::Node { .. } => node = next,
+                                let mut id: u32 = 0;
+                                let mut op: Option<fops::FieldOp> = None;
+
+                                while op.is_none() {
+                                    id = (id << 1) | (br.read_bool()? as u32);
+                                    op = fops::lookup(id);
+                                }
+
+                                (op.expect("op"))(&mut fp, br)?;
+                                if !fp.finished {
+                                    // TODO: do not clone. construct a pool (or slab?) of fps.
+                                    fps.push(fp.clone())
                                 }
                             }
 
@@ -354,7 +349,7 @@ mod tests {
 
     #[test]
     fn parse() -> Result<()> {
-        let file = File::open("./fixtures/7116662198_1379602574.dem")?;
+        let file = File::open("../fixtures/7116662198_1379602574.dem")?;
         let mut parser = Parser::new(file)?;
         while !parser.process_next_msg()? {}
         Ok(())
@@ -362,7 +357,7 @@ mod tests {
 
     #[test]
     fn parse_file_info() -> Result<()> {
-        let file = File::open("./fixtures/7116662198_1379602574.dem")?;
+        let file = File::open("../fixtures/7116662198_1379602574.dem")?;
         let mut parser = Parser::new(file)?;
         let _file_info = parser.read_file_info()?;
         // dbg!(file_info);
