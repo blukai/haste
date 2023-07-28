@@ -12,24 +12,25 @@ use muerta::{
 };
 use prost::Message;
 use std::{
+    alloc::Allocator,
     fs::File,
-    io::{Read, Seek, SeekFrom},
+    io::{BufReader, Read, Seek, SeekFrom},
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-struct Parser<R: Read + Seek> {
+struct Parser<R: Read + Seek, A: Allocator + Clone> {
     demo_file: DemoFile<R>,
     buf: Vec<u8>,
-    string_tables: StringTables,
-    instance_baseline: InstanceBaseline,
-    flattened_serializers: FlattenedSerializers,
-    entity_classes: EntityClasses,
-    entities: Entities,
+    string_tables: StringTables<A>,
+    instance_baseline: InstanceBaseline<A>,
+    flattened_serializers: FlattenedSerializers<A>,
+    entity_classes: EntityClasses<A>,
+    entities: Entities<A>,
 }
 
-impl<R: Read + Seek> Parser<R> {
-    fn from_reader(r: R) -> Result<Self> {
+impl<R: Read + Seek, A: Allocator + Clone> Parser<R, A> {
+    fn from_reader_in(r: R, alloc: A) -> Result<Self> {
         let mut demo_file = DemoFile::from_reader(r);
         // TODO: validate demo header
         let _demo_header = demo_file.read_demo_header()?;
@@ -38,11 +39,11 @@ impl<R: Read + Seek> Parser<R> {
             demo_file,
             // 2mb
             buf: vec![0; 1024 * 1024 * 2],
-            string_tables: StringTables::new(),
-            instance_baseline: InstanceBaseline::new(),
-            flattened_serializers: FlattenedSerializers::new(),
-            entity_classes: EntityClasses::new(),
-            entities: Entities::new(),
+            string_tables: StringTables::new_in(alloc.clone()),
+            instance_baseline: InstanceBaseline::new_in(alloc.clone()),
+            flattened_serializers: FlattenedSerializers::new_in(alloc.clone()),
+            entity_classes: EntityClasses::new_in(alloc.clone()),
+            entities: Entities::new_in(alloc),
         })
     }
 
@@ -99,20 +100,21 @@ impl<R: Read + Seek> Parser<R> {
 
             let buf = &mut self.buf[..size];
             br.read_bytes(buf)?;
+            let data: &_ = buf;
 
             match command {
                 c if c == SvcMessages::SvcCreateStringTable as u32 => {
-                    let svcmsg = protos::CsvcMsgCreateStringTable::decode(&buf[..])?;
+                    let svcmsg = protos::CsvcMsgCreateStringTable::decode(data)?;
                     self.handle_svcmsg_create_string_table(svcmsg)?;
                 }
 
                 c if c == SvcMessages::SvcUpdateStringTable as u32 => {
-                    let svcmsg = protos::CsvcMsgUpdateStringTable::decode(&buf[..])?;
+                    let svcmsg = protos::CsvcMsgUpdateStringTable::decode(data)?;
                     self.handle_svcmsg_update_string_table(svcmsg)?;
                 }
 
                 c if c == SvcMessages::SvcPacketEntities as u32 => {
-                    let svcmsg = protos::CsvcMsgPacketEntities::decode(&buf[..])?;
+                    let svcmsg = protos::CsvcMsgPacketEntities::decode(data)?;
                     self.handle_svcmsg_packet_entities(svcmsg)?;
                 }
 
@@ -137,11 +139,14 @@ impl<R: Read + Seek> Parser<R> {
         )?;
 
         let string_data = if svcmsg.data_compressed() {
-            snap::raw::Decoder::new().decompress_vec(svcmsg.string_data())?
+            let sd = svcmsg.string_data();
+            let decompress_len = snap::raw::decompress_len(sd)?;
+            snap::raw::Decoder::new().decompress(sd, &mut self.buf)?;
+            &self.buf[..decompress_len]
         } else {
-            svcmsg.string_data().to_vec()
+            svcmsg.string_data()
         };
-        string_table.parse_update(&mut BitReader::new(&string_data), svcmsg.num_entries())?;
+        string_table.parse_update(&mut BitReader::new(string_data), svcmsg.num_entries())?;
 
         if string_table.name.eq(INSTANCE_BASELINE_TABLE_NAME) {
             self.instance_baseline.update(string_table)?;
@@ -186,9 +191,26 @@ impl<R: Read + Seek> Parser<R> {
 }
 
 fn main() -> Result<()> {
-    let file = File::open("./fixtures/7116662198_1379602574.dem")?;
-    let mut parser = Parser::from_reader(file)?;
+    let args: Vec<String> = std::env::args().collect();
+    let filepath = args.get(1);
+    if filepath.is_none() {
+        eprintln!("usage: parseentities <filepath>");
+        std::process::exit(42);
+    }
+
+    #[cfg(feature = "bumpalo")]
+    let bump = bumpalo::Bump::with_capacity(1024 * 1024 * 1024 * 2);
+    #[cfg(feature = "bumpalo")]
+    let alloc = &bump;
+
+    #[cfg(not(feature = "bumpalo"))]
+    let alloc = std::alloc::Global;
+
+    let file = File::open(filepath.unwrap())?;
+    let file = BufReader::new(file);
+    let mut parser = Parser::from_reader_in(file, alloc)?;
     parser.run()?;
     println!("done!");
+
     Ok(())
 }

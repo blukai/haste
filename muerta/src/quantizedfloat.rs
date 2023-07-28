@@ -81,27 +81,35 @@ fn assign_range_multiplier(bit_count: i32, range: f64) -> Result<f32> {
         (1 << bit_count) - 1
     };
 
+    // In C++, when you perform an operation between two different numeric
+    // types, the result will be promoted to the type that can represent both
+    // operands with the least loss of precision. This process is called "type
+    // promotion" or "type coercion."
+
     let mut high_low_mul = if close_enough(range as f32, 0.0, EQUAL_EPSILON) {
-        high_value as f64
+        high_value as f32
     } else {
-        high_value as f64 / range
+        (high_value as f64 / range) as f32
     };
 
     // If the precision is messing us up, then adjust it so it won't.
-    //
-    // according to cpp ref [1] unsigned long is represented by at least 32 bits;
-    // according to rust docs [2] it'll be u64 on most linux-based systems and u32 on windows.
-    // [1] https://en.cppreference.com/w/cpp/language/types
-    // [2] https://doc.rust-lang.org/std/os/raw/type.c_ulong.html
-    if (high_low_mul * range) as u64 > high_value || (high_low_mul * range) > high_value as f64 {
+    if (high_low_mul as f64 * range) as u32 > high_value
+        || (high_low_mul as f64 * range) > high_value as f64
+    {
         // Squeeze it down smaller and smaller until it's going to produce an
         // integer in the valid range when given the highest value.
-        let multipliers: [f64; 5] = [0.9999, 0.99, 0.9, 0.8, 0.7];
+        let multipliers: [f32; 5] = [0.9999, 0.99, 0.9, 0.8, 0.7];
         let mut i = 0;
         while i < multipliers.len() {
-            high_low_mul = (high_value as f64 / range) * multipliers[i];
-            if (high_low_mul * range > high_value as f64)
-                || (high_low_mul * range > high_value as f64)
+            // fHighLowMul = (float)( iHighValue / range ) iHighValue is
+            // unsigned long and range is a double -> the intermediate result
+            // during the division will be a double due to type promotion in cpp.
+            high_low_mul = (high_value as f64 / range) as f32 * multipliers[i];
+
+            // (unsigned long)(fHighLowMul * range) > iHighValue ||
+            //   (fHighLowMul * range) > (double)iHighValue
+            if ((high_low_mul as f64 * range) as u32 > high_value)
+                || ((high_low_mul as f64 * range) > high_value as f64)
             {
                 i += 1;
             } else {
@@ -115,7 +123,7 @@ fn assign_range_multiplier(bit_count: i32, range: f64) -> Result<f32> {
         }
     }
 
-    Ok(high_low_mul as f32)
+    Ok(high_low_mul)
 }
 
 // public/dt_common.h
@@ -185,20 +193,14 @@ impl QuantizedFloat {
         qf.decode_mul = 1.0 / (steps - 1) as f32;
 
         // Remove unessecary flags
-        if (qf.encode_flags & QFE_ROUNDDOWN) != 0 {
-            if qf.quantize(qf.low_value) == qf.low_value {
-                qf.encode_flags &= !QFE_ROUNDDOWN;
-            }
+        if (qf.encode_flags & QFE_ROUNDDOWN) != 0 && qf.quantize(qf.low_value) == qf.low_value {
+            qf.encode_flags &= !QFE_ROUNDDOWN;
         }
-        if (qf.encode_flags & QFE_ROUNDUP) != 0 {
-            if qf.quantize(qf.high_value) == qf.high_value {
-                qf.encode_flags &= !QFE_ROUNDUP;
-            }
+        if (qf.encode_flags & QFE_ROUNDUP) != 0 && qf.quantize(qf.high_value) == qf.high_value {
+            qf.encode_flags &= !QFE_ROUNDUP;
         }
-        if (qf.encode_flags & QFE_ENCODE_ZERO_EXACTLY) != 0 {
-            if qf.quantize(0.0) == 0.0 {
-                qf.encode_flags &= !QFE_ENCODE_ZERO_EXACTLY;
-            }
+        if (qf.encode_flags & QFE_ENCODE_ZERO_EXACTLY) != 0 && qf.quantize(0.0) == 0.0 {
+            qf.encode_flags &= !QFE_ENCODE_ZERO_EXACTLY;
         }
 
         Ok(qf)

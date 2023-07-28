@@ -12,7 +12,15 @@ use std::{
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 fn main() -> Result<()> {
-    let file = File::open("./fixtures/7116662198_1379602574.dem")?;
+    let args: Vec<String> = std::env::args().collect();
+    let filepath = args.get(1);
+    if filepath.is_none() {
+        eprintln!("usage: printuniquetypes <filepath>");
+        std::process::exit(42);
+    }
+
+    let file = File::open(filepath.unwrap())?;
+    let file = BufReader::new(file);
     let mut demo_file = DemoFile::from_reader(BufReader::new(file));
     let _demo_header = demo_file.read_demo_header()?;
 

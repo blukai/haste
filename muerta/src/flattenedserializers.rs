@@ -81,12 +81,12 @@ impl<A: Allocator + Clone> FlattenedSerializerField<A> {
         let field_serializer_name = field.field_serializer_name_sym.and_then(resolve_string);
         let field_serializer_name_hash = field_serializer_name
             .as_ref()
-            .and_then(|field_serializer_name| Some(fnv1a::hash(field_serializer_name)));
+            .map(|field_serializer_name| fnv1a::hash(field_serializer_name));
 
         let var_encoder = field.var_encoder_sym.and_then(resolve_string);
         let var_encoder_hash = var_encoder
             .as_ref()
-            .and_then(|var_encoder| Some(fnv1a::hash(var_encoder)));
+            .map(|var_encoder| fnv1a::hash(var_encoder));
 
         Self {
             var_type,
@@ -210,8 +210,8 @@ pub struct FlattenedSerializers<A: Allocator + Clone = Global> {
     alloc: A,
 }
 
-impl FlattenedSerializers<Global> {
-    pub fn new() -> Self {
+impl Default for FlattenedSerializers<Global> {
+    fn default() -> Self {
         Self::new_in(Global)
     }
 }
@@ -262,26 +262,6 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
                             field.field_serializer = Some(field_serializer.clone());
                         }
                     }
-
-                    // fixed arrays
-                    // if let Some(size) = field.size {
-                    //     let mut field_serializer = FlattenedSerializer {
-                    //         // serializer_name will never be set
-                    //         serializer_name: Vec::with_capacity_in(0, self.alloc.clone()),
-                    //         serializer_version: None,
-                    //         fields: Vec::with_capacity_in(size, self.alloc.clone()),
-                    //         serializer_name_hash: 0,
-                    //     };
-
-                    //     for i in 0..size {
-                    //         let mut field = field.clone();
-                    //         field.var_name = usize_to_byte_vec_in(i, self.alloc.clone());
-                    //         field_serializer.fields.push(field);
-                    //     }
-                    //     field.field_serializer = Some(field_serializer);
-                    // }
-
-                    // TODO: handle dynamic vectors
 
                     fields.insert(*field_index, field);
                 };

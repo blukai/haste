@@ -17,8 +17,8 @@ pub struct InstanceBaseline<A: Allocator + Clone = Global> {
     map: HashMap<i32, Vec<u8, A>, DefaultHashBuilder, A>,
 }
 
-impl InstanceBaseline<Global> {
-    pub fn new() -> Self {
+impl Default for InstanceBaseline<Global> {
+    fn default() -> Self {
         Self::new_in(Global)
     }
 }

@@ -354,15 +354,13 @@ impl<'d> BitReader<'d> {
     // Returns the number of characters left in out when the routine is
     // complete (this will never exceed buf.len()-1).
     pub fn read_string(&mut self, buf: &mut [u8], line: bool) -> Result<usize> {
-        debug_assert!(buf.len() != 0);
+        debug_assert!(!buf.is_empty());
 
         let mut too_small = false;
         let mut num_chars = 0;
         loop {
             let val = self.read_ubitlong(8)? as u8;
-            if val == 0 {
-                break;
-            } else if line && val == b'\n' {
+            if val == 0 || (line && val == b'\n') {
                 break;
             }
 
@@ -559,8 +557,8 @@ mod test {
         let buf = [1];
         let mut br = super::BitReader::new(&buf);
 
-        assert_eq!(br.read_bool()?, true);
-        assert_eq!(br.read_bool()?, false);
+        assert!(br.read_bool()?);
+        assert!(!(br.read_bool()?));
 
         Ok(())
     }

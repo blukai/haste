@@ -88,13 +88,15 @@ impl<A: Allocator + Clone> Entity<A> {
 
             let field_value = field
                 .decoder
-                .and_then(|decoder| Some(decoder(&field, br, self.alloc.clone())))
+                .map(|decoder| decoder(field, br, self.alloc.clone()))
                 .transpose()?
-                .expect(&format!(
-                    "field value (var_name: {}; var_type: {})",
-                    unsafe { std::str::from_utf8_unchecked(&field.var_name) },
-                    unsafe { std::str::from_utf8_unchecked(&field.var_type) },
-                ));
+                .unwrap_or_else(|| {
+                    panic!(
+                        "field value (var_name: {}; var_type: {})",
+                        unsafe { std::str::from_utf8_unchecked(&field.var_name) },
+                        unsafe { std::str::from_utf8_unchecked(&field.var_type) }
+                    )
+                });
 
             self.field_values.insert(field.var_name_hash, field_value);
         }
@@ -108,8 +110,8 @@ pub struct Entities<A: Allocator + Clone = Global> {
     alloc: A,
 }
 
-impl<'a> Entities<Global> {
-    pub fn new() -> Self {
+impl Default for Entities<Global> {
+    fn default() -> Self {
         Self::new_in(Global)
     }
 }
@@ -204,7 +206,7 @@ impl<A: Allocator + Clone> Entities<A> {
         let entity = self
             .entities
             .get_mut(&entity_index)
-            .expect(&format!("entity at {}", entity_index));
+            .unwrap_or_else(|| panic!("entity at {}", entity_index));
         entity.parse(br)
     }
 }

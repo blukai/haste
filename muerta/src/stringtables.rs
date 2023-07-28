@@ -75,8 +75,20 @@ impl<A: Allocator + Clone> StringTable<A> {
     pub fn parse_update(&mut self, br: &mut BitReader, num_entries: i32) -> Result<()> {
         let mut entry_index: i32 = -1;
 
+        // TODO: feature flag or something for a static allocation of history,
+        // string_buf and user_data_buf in single threaded environment (similar
+        // to what butterfly does).
+        // NOTE: making thing static wins us 10ms
+
+        // > cost of zero-initializing a buffer of 1024 bytes on the stack can
+        // be disproportionately high
+        // https://www.reddit.com/r/rust/comments/9ozddb/comment/e7z2qi1/?utm_source=share&utm_medium=web2x&context=3
+
         let mut history = [StringHistoryEntry::default(); 32];
         let mut history_delta_index: usize = 0;
+
+        let mut string_buf = [0u8; 1024];
+        let mut user_data_buf = [0u8; MAX_USERDATA_SIZE];
 
         // Loop through entries in the data structure
         //
@@ -99,7 +111,6 @@ impl<A: Allocator + Clone> StringTable<A> {
                 br.read_uvarint32()? as i32 + 1
             };
 
-            let mut string_buf = [0u8; 1024];
             let has_string = br.read_bool()?;
             let string = if has_string {
                 let mut size: usize = 0;
@@ -146,7 +157,6 @@ impl<A: Allocator + Clone> StringTable<A> {
                 None
             };
 
-            let mut user_data_buf = [0u8; MAX_USERDATA_SIZE];
             let has_user_data = br.read_bool()?;
             let user_data = if has_user_data {
                 let mut size: usize;
@@ -213,8 +223,8 @@ pub struct StringTables<A: Allocator + Clone = Global> {
     alloc: A,
 }
 
-impl StringTables<Global> {
-    pub fn new() -> Self {
+impl Default for StringTables<Global> {
+    fn default() -> Self {
         Self::new_in(Global)
     }
 }
@@ -259,12 +269,10 @@ impl<A: Allocator + Clone> StringTables<A> {
 
     // INetworkStringTable *FindTable( const char *tableName ) const ;
     pub fn find_table(&self, name: &str) -> Option<&StringTable<A>> {
-        for table in self.tables.iter() {
-            if table.name.eq(name.as_bytes()) {
-                return Some(table);
-            }
-        }
-        None
+        let name_as_bytes = name.as_bytes();
+        self.tables
+            .iter()
+            .find(|&table| table.name.eq(name_as_bytes))
     }
 
     // INetworkStringTable	*GetTable( TABLEID stringTable ) const;

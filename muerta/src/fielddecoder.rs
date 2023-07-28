@@ -137,7 +137,7 @@ fn internal_decode_f32<A: Allocator + Clone>(
         return internal_decode_f32_noscale(br);
     }
 
-    return internal_decode_quantized_float(field, br);
+    internal_decode_quantized_float(field, br)
 }
 
 fn decode_f32<A: Allocator + Clone>(
@@ -191,7 +191,7 @@ fn internal_decode_qangle_no_bit_count<A: Allocator + Clone>(
         vec3[2] = br.read_bitcoord()?;
     }
 
-    return Ok(vec3);
+    Ok(vec3)
 }
 
 fn decode_qangle<A: Allocator + Clone>(
@@ -221,7 +221,7 @@ fn decode_vec3<A: Allocator + Clone>(
     vec3[0] = internal_decode_f32(field, br)?;
     vec3[1] = internal_decode_f32(field, br)?;
     vec3[2] = internal_decode_f32(field, br)?;
-    return Ok(vec3.into());
+    Ok(vec3.into())
 }
 
 fn decode_vec2<A: Allocator + Clone>(
@@ -232,7 +232,7 @@ fn decode_vec2<A: Allocator + Clone>(
     let mut vec2 = Box::new_in([0.0f32; 2], alloc);
     vec2[0] = internal_decode_f32(field, br)?;
     vec2[1] = internal_decode_f32(field, br)?;
-    return Ok(vec2.into());
+    Ok(vec2.into())
 }
 
 fn decode_vec4<A: Allocator + Clone>(
@@ -245,7 +245,7 @@ fn decode_vec4<A: Allocator + Clone>(
     vec4[1] = internal_decode_f32(field, br)?;
     vec4[2] = internal_decode_f32(field, br)?;
     vec4[3] = internal_decode_f32(field, br)?;
-    return Ok(vec4.into());
+    Ok(vec4.into())
 }
 
 fn decode_string<A: Allocator + Clone>(
@@ -255,12 +255,15 @@ fn decode_string<A: Allocator + Clone>(
 ) -> Result<FieldValue<A>> {
     let mut buf = [0u8; 1024];
     let num_chars = br.read_string(&mut buf, false)?;
-    return Ok((&buf[..num_chars]).to_vec_in(alloc).into());
+    Ok(buf[..num_chars].to_vec_in(alloc).into())
 }
 
 pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerField<A>) {
+    // TODO: create macros to make this prettier kekw
+
     match field.var_type_hash {
         v if v == hash(b"AbilityBarType_t") => {
+            // enum
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"AbilityID_t") => {
@@ -285,13 +288,23 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
         v if v == hash(b"AnimLoopMode_t") => {
             field.decoder = Some(decode_u32);
         }
-        v if v == hash(b"AttachmentHandle_t") => {}
+        v if v == hash(b"AttachmentHandle_t") => {
+            field.decoder = Some(decode_u32);
+        }
         v if v == hash(b"AttachmentHandle_t[10]") => {
             field.kind = Some(FieldKind::FixedArray { size: 10 });
+            field.decoder = Some(decode_u32);
         }
-        v if v == hash(b"BeamClipStyle_t") => {}
-        v if v == hash(b"BeamType_t") => {}
+        v if v == hash(b"BeamClipStyle_t") => {
+            // enum
+            field.decoder = Some(decode_u32);
+        }
+        v if v == hash(b"BeamType_t") => {
+            // enum
+            field.decoder = Some(decode_u32);
+        }
         v if v == hash(b"CBodyComponent") => {
+            // does not end with a *, but apparently a pointer
             field.decoder = Some(decode_bool);
         }
         v if v == hash(b"CDOTAGameManager*") => {
@@ -304,6 +317,7 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
             field.decoder = Some(decode_bool);
         }
         v if v == hash(b"CDOTA_AbilityDraftAbilityState[MAX_ABILITY_DRAFT_ABILITIES]") => {
+            // TODO: try to parse ability draft match -> shouldn't this be a table?
             field.kind = Some(FieldKind::FixedArray {
                 size: MAX_ABILITY_DRAFT_ABILITIES,
             });
@@ -398,7 +412,10 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
         v if v == hash(b"CHandle< CTonemapController2 >") => {
             field.decoder = Some(decode_u32);
         }
-        v if v == hash(b"CLightComponent") => {}
+        v if v == hash(b"CLightComponent") => {
+            // does not end with a *, but apparently a pointer
+            field.decoder = Some(decode_bool);
+        }
         v if v == hash(b"CNetworkUtlVectorBase< AbilityID_t >") => {
             field.kind = Some(FieldKind::DynamicArray);
             field.decoder = Some(decode_u32);
@@ -435,8 +452,15 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
             field.kind = Some(FieldKind::DynamicArray);
             field.decoder = Some(decode_u32);
         }
-        v if v == hash(b"CNetworkUtlVectorBase< CTransform >") => {}
-        v if v == hash(b"CNetworkUtlVectorBase< CUtlSymbolLarge >") => {}
+        v if v == hash(b"CNetworkUtlVectorBase< CTransform >") => {
+            // public/mathlib/transform.h
+            field.kind = Some(FieldKind::DynamicTable);
+            field.decoder = Some(decode_u32);
+        }
+        v if v == hash(b"CNetworkUtlVectorBase< CUtlSymbolLarge >") => {
+            field.kind = Some(FieldKind::DynamicArray);
+            field.decoder = Some(decode_string);
+        }
         v if v == hash(b"CNetworkUtlVectorBase< NeutralSpawnBoxes_t >") => {
             field.kind = Some(FieldKind::DynamicTable);
             field.decoder = Some(decode_u32);
@@ -445,14 +469,26 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
             field.kind = Some(FieldKind::DynamicArray);
             field.decoder = Some(decode_u32);
         }
-        v if v == hash(b"CNetworkUtlVectorBase< QAngle >") => {}
+        v if v == hash(b"CNetworkUtlVectorBase< QAngle >") => {
+            field.kind = Some(FieldKind::DynamicArray);
+            field.decoder = Some(decode_qangle);
+        }
         v if v == hash(b"CNetworkUtlVectorBase< RegionTriggerBoxes_t >") => {
             field.kind = Some(FieldKind::DynamicTable);
             field.decoder = Some(decode_u32);
         }
-        v if v == hash(b"CNetworkUtlVectorBase< Vector >") => {}
-        v if v == hash(b"CNetworkUtlVectorBase< bool >") => {}
-        v if v == hash(b"CNetworkUtlVectorBase< float32 >") => {}
+        v if v == hash(b"CNetworkUtlVectorBase< Vector >") => {
+            field.kind = Some(FieldKind::DynamicArray);
+            field.decoder = Some(decode_vec3);
+        }
+        v if v == hash(b"CNetworkUtlVectorBase< bool >") => {
+            field.kind = Some(FieldKind::DynamicArray);
+            field.decoder = Some(decode_bool);
+        }
+        v if v == hash(b"CNetworkUtlVectorBase< float32 >") => {
+            field.kind = Some(FieldKind::DynamicArray);
+            field.decoder = Some(decode_f32);
+        }
         v if v == hash(b"CNetworkUtlVectorBase< int32 >") => {
             field.kind = Some(FieldKind::DynamicArray);
             field.decoder = Some(decode_i32);
@@ -478,6 +514,7 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
             field.decoder = Some(decode_bool);
         }
         v if v == hash(b"CRenderComponent") => {
+            // does not end with a *, but apparently a pointer
             field.decoder = Some(decode_bool);
         }
         v if v == hash(b"CStrongHandle< InfoForResourceTypeCModel >") => {
@@ -506,14 +543,24 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
         }
         v if v == hash(b"CUtlSymbolLarge[10]") => {
             field.kind = Some(FieldKind::FixedArray { size: 10 });
+            field.decoder = Some(decode_string);
         }
         v if v == hash(b"CUtlVector< CEconItemAttribute >") => {
             field.kind = Some(FieldKind::DynamicTable);
             field.decoder = Some(decode_u32);
         }
-        v if v == hash(b"CUtlVectorEmbeddedNetworkVar< CAnimationLayer >") => {}
-        v if v == hash(b"CUtlVectorEmbeddedNetworkVar< CDOTACustomShopInfo >") => {}
-        v if v == hash(b"CUtlVectorEmbeddedNetworkVar< CDOTACustomShopItemInfo >") => {}
+        v if v == hash(b"CUtlVectorEmbeddedNetworkVar< CAnimationLayer >") => {
+            field.kind = Some(FieldKind::DynamicTable);
+            field.decoder = Some(decode_u32);
+        }
+        v if v == hash(b"CUtlVectorEmbeddedNetworkVar< CDOTACustomShopInfo >") => {
+            field.kind = Some(FieldKind::DynamicTable);
+            field.decoder = Some(decode_u32);
+        }
+        v if v == hash(b"CUtlVectorEmbeddedNetworkVar< CDOTACustomShopItemInfo >") => {
+            field.kind = Some(FieldKind::DynamicTable);
+            field.decoder = Some(decode_u32);
+        }
         v if v == hash(b"CUtlVectorEmbeddedNetworkVar< CDOTASubChallengeInfo >") => {
             field.kind = Some(FieldKind::DynamicTable);
             field.decoder = Some(decode_u32);
@@ -546,8 +593,14 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
             field.kind = Some(FieldKind::DynamicTable);
             field.decoder = Some(decode_u32);
         }
-        v if v == hash(b"CUtlVectorEmbeddedNetworkVar< FowBlocker_t >") => {}
-        v if v == hash(b"CUtlVectorEmbeddedNetworkVar< InGamePredictionData_t >") => {}
+        v if v == hash(b"CUtlVectorEmbeddedNetworkVar< FowBlocker_t >") => {
+            field.kind = Some(FieldKind::DynamicTable);
+            field.decoder = Some(decode_u32);
+        }
+        v if v == hash(b"CUtlVectorEmbeddedNetworkVar< InGamePredictionData_t >") => {
+            field.kind = Some(FieldKind::DynamicTable);
+            field.decoder = Some(decode_u32);
+        }
         v if v == hash(b"CUtlVectorEmbeddedNetworkVar< PingConfirmationState_t >") => {
             field.kind = Some(FieldKind::DynamicTable);
             field.decoder = Some(decode_u32);
@@ -592,13 +645,19 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"Color") => {
+            // public/color.h
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"CourierState_t") => {
+            // enum
             field.decoder = Some(decode_u32);
         }
-        v if v == hash(b"DOTACustomHeroPickRulesPhase_t") => {}
+        v if v == hash(b"DOTACustomHeroPickRulesPhase_t") => {
+            // enum
+            field.decoder = Some(decode_u32);
+        }
         v if v == hash(b"DOTATeam_t") => {
+            // enum
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"DOTA_CombatLogQueryProgress") => {
@@ -606,23 +665,35 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"DOTA_HeroPickState") => {
+            // enum
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"DOTA_PlayerDraftState") => {
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"DOTA_SHOP_TYPE") => {
+            // enum
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"DamageOptions_t") => {
+            // enum
             field.decoder = Some(decode_u32);
         }
-        v if v == hash(b"ECrowdLevel") => {}
+        v if v == hash(b"ECrowdLevel") => {
+            field.decoder = Some(decode_u32);
+        }
         v if v == hash(b"ERoshanSpawnPhase") => {
+            // enum
             field.decoder = Some(decode_u32);
         }
-        v if v == hash(b"EntityDisolveType_t") => {}
-        v if v == hash(b"FowBlockerShape_t") => {}
+        v if v == hash(b"EntityDisolveType_t") => {
+            // enum
+            field.decoder = Some(decode_u32);
+        }
+        v if v == hash(b"FowBlockerShape_t") => {
+            // num
+            field.decoder = Some(decode_u32);
+        }
         v if v == hash(b"GameTick_t") => {
             field.decoder = Some(decode_u32);
         }
@@ -654,9 +725,11 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
             field.decoder = Some(decode_u64);
         }
         v if v == hash(b"MoveCollide_t") => {
+            // enum
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"MoveType_t") => {
+            // enum
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"PeriodicResourceID_t") => {
@@ -665,8 +738,12 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
         v if v == hash(b"PhysicsRagdollPose_t*") => {
             field.decoder = Some(decode_bool);
         }
-        v if v == hash(b"PingConfirmationIconType") => {}
+        v if v == hash(b"PingConfirmationIconType") => {
+            // enum
+            field.decoder = Some(decode_u32);
+        }
         v if v == hash(b"PlayerConnectedState") => {
+            // enum
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"PlayerID_t") => {
@@ -684,36 +761,67 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
             field.kind = Some(FieldKind::FixedArray { size: 2 });
             field.decoder = Some(decode_u32);
         }
-        v if v == hash(b"PointWorldTextJustifyHorizontal_t") => {}
-        v if v == hash(b"PointWorldTextJustifyVertical_t") => {}
-        v if v == hash(b"PointWorldTextReorientMode_t") => {}
+        v if v == hash(b"PointWorldTextJustifyHorizontal_t") => {
+            // enum
+            field.decoder = Some(decode_u32);
+        }
+        v if v == hash(b"PointWorldTextJustifyVertical_t") => {
+            // enum
+            field.decoder = Some(decode_u32);
+        }
+        v if v == hash(b"PointWorldTextReorientMode_t") => {
+            // enum
+            field.decoder = Some(decode_u32);
+        }
         v if v == hash(b"QAngle") => {
             field.decoder = Some(decode_qangle);
         }
         v if v == hash(b"RenderFx_t") => {
+            // enum
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"RenderMode_t") => {
+            // enum
             field.decoder = Some(decode_u32);
         }
-        v if v == hash(b"ScoutState_t") => {}
+        v if v == hash(b"ScoutState_t") => {
+            field.decoder = Some(decode_u32);
+        }
         v if v == hash(b"ShopItemViewMode_t") => {
+            // enum
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"SolidType_t") => {
+            // enum
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"SurroundingBoundsType_t") => {
+            // enum
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"TakeDamageFlags_t") => {
             field.decoder = Some(decode_u32);
         }
-        v if v == hash(b"ValueRemapperHapticsType_t") => {}
-        v if v == hash(b"ValueRemapperInputType_t") => {}
-        v if v == hash(b"ValueRemapperMomentumType_t") => {}
-        v if v == hash(b"ValueRemapperOutputType_t") => {}
-        v if v == hash(b"ValueRemapperRatchetType_t") => {}
+        v if v == hash(b"ValueRemapperHapticsType_t") => {
+            // enum
+            field.decoder = Some(decode_u32);
+        }
+        v if v == hash(b"ValueRemapperInputType_t") => {
+            // enum
+            field.decoder = Some(decode_u32);
+        }
+        v if v == hash(b"ValueRemapperMomentumType_t") => {
+            // enum
+            field.decoder = Some(decode_u32);
+        }
+        v if v == hash(b"ValueRemapperOutputType_t") => {
+            // enum
+            field.decoder = Some(decode_u32);
+        }
+        v if v == hash(b"ValueRemapperRatchetType_t") => {
+            // enum
+            field.decoder = Some(decode_u32);
+        }
         v if v == hash(b"Vector") => {
             field.decoder = Some(decode_vec3);
         }
@@ -735,7 +843,10 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
             field.kind = Some(FieldKind::FixedArray { size: 8 });
             field.decoder = Some(decode_vec3);
         }
-        v if v == hash(b"WeaponState_t") => {}
+        v if v == hash(b"WeaponState_t") => {
+            // enum
+            field.decoder = Some(decode_u32);
+        }
         v if v == hash(b"WeightedAbilitySuggestion_t[15]") => {
             field.kind = Some(FieldKind::FixedTable { size: 15 });
         }
@@ -748,8 +859,12 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
         v if v == hash(b"WorldGroupId_t") => {
             field.decoder = Some(decode_u32);
         }
-        v if v == hash(b"attrib_definition_index_t") => {}
+        v if v == hash(b"attrib_definition_index_t") => {
+            // game/shared/econ/econ_item_constants.h
+            field.decoder = Some(decode_u32);
+        }
         v if v == hash(b"attributeprovidertypes_t") => {
+            // game/shared/econ/attribute_manager.h
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"bool") => {
@@ -892,6 +1007,7 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
             field.decoder = Some(decode_i32);
         }
         v if v == hash(b"item_definition_index_t") => {
+            // game/shared/econ/econ_item_constants.h
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"item_definition_index_t[15]") => {
@@ -899,7 +1015,8 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"itemid_t") => {
-            field.decoder = Some(decode_u32);
+            // game/shared/econ/econ_item_constants.h
+            field.decoder = Some(decode_u64);
         }
         v if v == hash(b"itemid_t[10]") => {
             field.kind = Some(FieldKind::FixedArray { size: 10 });
@@ -910,6 +1027,7 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"style_index_t") => {
+            // game/shared/econ/econ_item_constants.h
             field.decoder = Some(decode_u32);
         }
         v if v == hash(b"uint16") => {

@@ -2,9 +2,5 @@
 
 members = [
     "muerta",
+    "examples/*"
 ]
-
-# https://stackoverflow.com/questions/38803760/how-to-get-a-release-build-with-debugging-information-when-using-cargo
-[profile.release-with-debug]
-inherits = "release"
-debug = true

@@ -15,8 +15,6 @@ pub struct FieldPath {
     pub data: [i32; 7],
     pub position: usize,
     pub finished: bool,
-
-    pub __ids: Vec<u32>,
 }
 
 impl FieldPath {
@@ -25,7 +23,6 @@ impl FieldPath {
             data: [-1, 0, 0, 0, 0, 0, 0],
             position: 0,
             finished: false,
-            __ids: vec![],
         }
     }
 
@@ -473,8 +470,6 @@ pub fn read_field_paths_in<A: Allocator>(
 
         let op = op.expect("exhausted max operation bits");
         op(&mut fp, br)?;
-
-        fp.__ids.push(id);
 
         if fp.finished {
             break;

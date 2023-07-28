@@ -14,8 +14,8 @@ pub struct EntityClasses<A: Allocator + Clone = Global> {
     alloc: A,
 }
 
-impl EntityClasses<Global> {
-    pub fn new() -> Self {
+impl Default for EntityClasses<Global> {
+    fn default() -> Self {
         Self::new_in(Global)
     }
 }
