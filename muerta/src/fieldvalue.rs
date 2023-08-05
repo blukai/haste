@@ -1,3 +1,4 @@
+use crate::allocstring::AllocString;
 use std::alloc::Allocator;
 
 // NOTE: Clone derive is needed here because Entity in entities.rs needs to be
@@ -10,7 +11,7 @@ pub enum FieldValue<A: Allocator + Clone> {
     I64(u64),
     F32(f32),
     Bool(bool),
-    String(Vec<u8, A>), // idially should hold String<A>, but String does not support allocator api
+    String(AllocString<A>),
     Vec3(Box<[f32; 3], A>),
     Vec2(Box<[f32; 2], A>),
     Vec4(Box<[f32; 4], A>),
@@ -54,7 +55,7 @@ impl<A: Allocator + Clone> From<bool> for FieldValue<A> {
 
 impl<A: Allocator + Clone> From<Vec<u8, A>> for FieldValue<A> {
     fn from(value: Vec<u8, A>) -> Self {
-        FieldValue::String(value)
+        FieldValue::String(AllocString::from(value))
     }
 }
 
@@ -85,7 +86,7 @@ impl<A: Allocator + Clone> ToString for FieldValue<A> {
             Self::U64(value) | Self::I64(value) => format!("{:?}", value),
             Self::F32(value) => format!("{:?}", value),
             Self::Bool(value) => format!("{:?}", value),
-            Self::String(value) => format!("{}", unsafe { std::str::from_utf8_unchecked(value) }),
+            Self::String(value) => format!("{:?}", value),
             Self::Vec3(value) => format!("{:?}", value),
             Self::Vec2(value) => format!("{:?}", value),
             Self::Vec4(value) => format!("{:?}", value),

@@ -1,4 +1,4 @@
-use crate::stringtables::StringTable;
+use crate::{allocstring::AllocString, stringtables::StringTable};
 use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
 use std::alloc::{Allocator, Global};
 
@@ -14,7 +14,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub const INSTANCE_BASELINE_TABLE_NAME: &[u8] = b"instancebaseline";
 
 pub struct InstanceBaseline<A: Allocator + Clone = Global> {
-    map: HashMap<i32, Vec<u8, A>, DefaultHashBuilder, A>,
+    map: HashMap<i32, AllocString<A>, DefaultHashBuilder, A>,
 }
 
 impl Default for InstanceBaseline<Global> {
@@ -32,7 +32,7 @@ impl<A: Allocator + Clone> InstanceBaseline<A> {
 
     pub fn update(&mut self, string_table: &StringTable<A>) -> Result<()> {
         for (_entity_index, item) in string_table.iter() {
-            let string = &item
+            let string = item
                 .string
                 .as_ref()
                 .expect("instance baseline class id string");
@@ -42,7 +42,7 @@ impl<A: Allocator + Clone> InstanceBaseline<A> {
                 string.len()
             );
 
-            let class_id = unsafe { std::str::from_utf8_unchecked(string) }.parse::<i32>()?;
+            let class_id = string.as_str().parse::<i32>()?;
             self.map.insert(
                 class_id,
                 item.user_data.clone().expect("instance baseline data"),
@@ -51,7 +51,7 @@ impl<A: Allocator + Clone> InstanceBaseline<A> {
         Ok(())
     }
 
-    pub fn get_data(&self, class_id: i32) -> Option<&Vec<u8, A>> {
+    pub fn get_data(&self, class_id: i32) -> Option<&AllocString<A>> {
         self.map.get(&class_id)
     }
 }

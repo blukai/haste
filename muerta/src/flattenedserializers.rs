@@ -1,4 +1,5 @@
 use crate::{
+    allocstring::{AllocString, AllocStringFromIn},
     fielddecoder::{self, FieldDecoder},
     fieldkind::FieldKind,
     fieldpath::FieldPath,
@@ -26,10 +27,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone)]
 pub struct FlattenedSerializerField<A: Allocator + Clone> {
-    pub var_type: Vec<u8, A>,
+    pub var_type: AllocString<A>,
     pub var_type_hash: u64,
 
-    pub var_name: Vec<u8, A>,
+    pub var_name: AllocString<A>,
     pub var_name_hash: u64,
 
     // TODO: figure out which fields should, and which should not be optional
@@ -38,14 +39,14 @@ pub struct FlattenedSerializerField<A: Allocator + Clone> {
     pub high_value: Option<f32>,
     pub encode_flags: Option<i32>,
 
-    pub field_serializer_name: Option<Vec<u8, A>>,
+    pub field_serializer_name: Option<AllocString<A>>,
     pub field_serializer_name_hash: Option<u64>,
     pub field_serializer: Option<FlattenedSerializer<A>>,
 
     pub field_serializer_version: Option<i32>,
-    pub send_node: Option<Vec<u8, A>>,
+    pub send_node: Option<AllocString<A>>,
 
-    pub var_encoder: Option<Vec<u8, A>>,
+    pub var_encoder: Option<AllocString<A>>,
     pub var_encoder_hash: Option<u64>,
 
     pub kind: Option<FieldKind>,
@@ -58,35 +59,28 @@ impl<A: Allocator + Clone> FlattenedSerializerField<A> {
         field: &protos::ProtoFlattenedSerializerFieldT,
         alloc: A,
     ) -> Self {
-        let resolve_string = |v: i32| {
-            Some(
-                svcmsg.symbols[v as usize]
-                    .as_bytes()
-                    .to_vec_in(alloc.clone()),
-            )
+        let resolve_sym = |v: i32| {
+            Some(AllocString::from_in(
+                &svcmsg.symbols[v as usize],
+                alloc.clone(),
+            ))
         };
 
-        let var_type = field
-            .var_type_sym
-            .and_then(resolve_string)
-            .expect("var type");
-        let var_type_hash = fnv1a::hash(&var_type);
+        let var_type = field.var_type_sym.and_then(resolve_sym).expect("var type");
+        let var_type_hash = fnv1a::hash(&var_type.as_bytes());
 
-        let var_name = field
-            .var_name_sym
-            .and_then(resolve_string)
-            .expect("var name");
-        let var_name_hash = fnv1a::hash(&var_name);
+        let var_name = field.var_name_sym.and_then(resolve_sym).expect("var name");
+        let var_name_hash = fnv1a::hash(&var_name.as_bytes());
 
-        let field_serializer_name = field.field_serializer_name_sym.and_then(resolve_string);
+        let field_serializer_name = field.field_serializer_name_sym.and_then(resolve_sym);
         let field_serializer_name_hash = field_serializer_name
             .as_ref()
-            .map(|field_serializer_name| fnv1a::hash(field_serializer_name));
+            .map(|field_serializer_name| fnv1a::hash(field_serializer_name.as_bytes()));
 
-        let var_encoder = field.var_encoder_sym.and_then(resolve_string);
+        let var_encoder = field.var_encoder_sym.and_then(resolve_sym);
         let var_encoder_hash = var_encoder
             .as_ref()
-            .map(|var_encoder| fnv1a::hash(var_encoder));
+            .map(|var_encoder| fnv1a::hash(var_encoder.as_bytes()));
 
         Self {
             var_type,
@@ -105,7 +99,7 @@ impl<A: Allocator + Clone> FlattenedSerializerField<A> {
             field_serializer: None,
 
             field_serializer_version: field.field_serializer_version,
-            send_node: field.send_node_sym.and_then(resolve_string),
+            send_node: field.send_node_sym.and_then(resolve_sym),
 
             var_encoder,
             var_encoder_hash,
@@ -156,7 +150,7 @@ impl<A: Allocator + Clone> FlattenedSerializerField<A> {
 // clonable which means that all members of it also should be clonable.
 #[derive(Clone)]
 pub struct FlattenedSerializer<A: Allocator + Clone> {
-    pub serializer_name: Vec<u8, A>,
+    pub serializer_name: AllocString<A>,
     pub serializer_version: Option<i32>,
     pub fields: Vec<FlattenedSerializerField<A>, A>,
 
@@ -169,18 +163,18 @@ impl<A: Allocator + Clone> FlattenedSerializer<A> {
         fs: &protos::ProtoFlattenedSerializerT,
         alloc: A,
     ) -> Result<Self> {
-        let resolve_string = |v: i32| {
-            Some(
-                svcmsg.symbols[v as usize]
-                    .as_bytes()
-                    .to_vec_in(alloc.clone()),
-            )
+        let resolve_sym = |v: i32| {
+            Some(AllocString::from_in(
+                &svcmsg.symbols[v as usize],
+                alloc.clone(),
+            ))
         };
+
         let serializer_name = fs
             .serializer_name_sym
-            .and_then(resolve_string)
+            .and_then(resolve_sym)
             .expect("serializer name");
-        let serializer_name_hash = fnv1a::hash(&serializer_name);
+        let serializer_name_hash = fnv1a::hash(serializer_name.as_bytes());
 
         Ok(Self {
             serializer_name,

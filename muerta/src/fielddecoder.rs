@@ -1091,9 +1091,10 @@ pub(crate) fn supplement<A: Allocator + Clone>(field: &mut FlattenedSerializerFi
             field.decoder = Some(decode_u32);
         }
         _ => {
-            panic!("unhandled flattened serializer var type: {}", unsafe {
-                std::str::from_utf8_unchecked(&field.var_type)
-            });
+            panic!(
+                "unhandled flattened serializer var type: {}",
+                &field.var_type
+            );
         }
     }
 }

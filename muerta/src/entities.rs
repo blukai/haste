@@ -93,8 +93,7 @@ impl<A: Allocator + Clone> Entity<A> {
                 .unwrap_or_else(|| {
                     panic!(
                         "field value (var_name: {}; var_type: {})",
-                        unsafe { std::str::from_utf8_unchecked(&field.var_name) },
-                        unsafe { std::str::from_utf8_unchecked(&field.var_type) }
+                        &field.var_name, &field.var_type
                     )
                 });
 
@@ -192,8 +191,12 @@ impl<A: Allocator + Clone> Entities<A> {
             alloc: self.alloc.clone(),
         };
 
-        let mut baseline_br =
-            BitReader::new(instance_baseline.get_data(class_id).expect("baseline data"));
+        let mut baseline_br = BitReader::new(
+            instance_baseline
+                .get_data(class_id)
+                .expect("baseline data")
+                .as_bytes(),
+        );
         entity.parse(&mut baseline_br)?;
         entity.parse(br)?;
 

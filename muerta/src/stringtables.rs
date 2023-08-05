@@ -1,4 +1,7 @@
-use crate::bitbuf::{self, BitReader};
+use crate::{
+    allocstring::{AllocString, AllocStringFromIn},
+    bitbuf::{self, BitReader},
+};
 use hashbrown::{
     hash_map::{DefaultHashBuilder, Iter},
     HashMap,
@@ -31,12 +34,12 @@ const MAX_USERDATA_BITS: usize = 17;
 const MAX_USERDATA_SIZE: usize = 1 << MAX_USERDATA_BITS;
 
 pub struct StringTableItem<A: Allocator + Clone> {
-    pub string: Option<Vec<u8, A>>,
-    pub user_data: Option<Vec<u8, A>>,
+    pub string: Option<AllocString<A>>,
+    pub user_data: Option<AllocString<A>>,
 }
 
 pub struct StringTable<A: Allocator + Clone> {
-    pub name: Vec<u8, A>,
+    pub name: AllocString<A>,
     user_data_fixed_size: bool,
     user_data_size: i32,
     user_data_size_bits: i32,
@@ -57,7 +60,7 @@ impl<A: Allocator + Clone> StringTable<A> {
         alloc: A,
     ) -> Self {
         Self {
-            name: name.as_bytes().to_vec_in(alloc.clone()),
+            name: AllocString::from_in(name, alloc.clone()),
             user_data_fixed_size,
             user_data_size,
             user_data_size_bits,
@@ -199,8 +202,8 @@ impl<A: Allocator + Clone> StringTable<A> {
             self.items.insert(
                 entry_index,
                 StringTableItem {
-                    string: string.map(|s| s.to_vec_in(self.alloc.clone())),
-                    user_data: user_data.map(|ud| ud.to_vec_in(self.alloc.clone())),
+                    string: string.map(|v| AllocString::from_in(v, self.alloc.clone())),
+                    user_data: user_data.map(|v| AllocString::from_in(v, self.alloc.clone())),
                 },
             );
         }
@@ -269,10 +272,7 @@ impl<A: Allocator + Clone> StringTables<A> {
 
     // INetworkStringTable *FindTable( const char *tableName ) const ;
     pub fn find_table(&self, name: &str) -> Option<&StringTable<A>> {
-        let name_as_bytes = name.as_bytes();
-        self.tables
-            .iter()
-            .find(|&table| table.name.eq(name_as_bytes))
+        self.tables.iter().find(|&table| table.name.eq(name))
     }
 
     // INetworkStringTable	*GetTable( TABLEID stringTable ) const;
