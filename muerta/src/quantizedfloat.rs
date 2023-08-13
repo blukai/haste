@@ -139,6 +139,9 @@ fn num_bits_for_count(n_max_elements: i32) -> i32 {
     n_bits
 }
 
+// NOTE: Clone is derived because QuantizedFloatDecoder that implmenets Decode
+// trait needs it
+#[derive(Clone)]
 pub struct QuantizedFloat {
     bit_count: i32,
     encode_flags: i32,

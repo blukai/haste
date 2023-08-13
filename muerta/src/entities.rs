@@ -76,7 +76,7 @@ fn determine_update_type(update_flags: usize) -> UpdateType {
 #[derive(Clone)]
 pub struct Entity<A: Allocator + Clone> {
     flattened_serializer: FlattenedSerializer<A>,
-    field_values: HashMap<u64, FieldValue<A>, DefaultHashBuilder, A>,
+    field_values: HashMap<u64, FieldValue, DefaultHashBuilder, A>,
     alloc: A,
 }
 
@@ -140,7 +140,7 @@ impl<A: Allocator + Clone> Entity<A> {
             let field_value = field
                 .metadata
                 .as_ref()
-                .map(|metadata| (metadata.decoder)(field, br, self.alloc.clone()))
+                .map(|metadata| metadata.decoder.decode(br))
                 .transpose()?
                 .unwrap_or_else(|| {
                     panic!(

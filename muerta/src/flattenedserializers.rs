@@ -1,6 +1,6 @@
 use crate::{
     allocstring::{AllocString, AllocStringFromIn},
-    fieldmetadata::{get_field_metadata, FieldMetadata, FieldSpecialType},
+    fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialType},
     fnv1a, protos, varint,
 };
 use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
@@ -18,6 +18,8 @@ pub enum Error {
     // crate
     #[error(transparent)]
     Varint(#[from] varint::Error),
+    #[error(transparent)]
+    FieldMetadata(#[from] fieldmetadata::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -50,7 +52,7 @@ pub struct FlattenedSerializerField<A: Allocator + Clone> {
     pub var_encoder: Option<AllocString<A>>,
     pub var_encoder_hash: Option<u64>,
 
-    pub metadata: Option<FieldMetadata<A>>,
+    pub metadata: Option<FieldMetadata>,
 }
 
 impl<A: Allocator + Clone> FlattenedSerializerField<A> {
@@ -266,7 +268,7 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
                         }
                     }
 
-                    field.metadata = get_field_metadata(&field);
+                    field.metadata = get_field_metadata(&field)?;
                     match field.metadata.as_ref() {
                         Some(field_metadata) => match field_metadata.special_type {
                             Some(FieldSpecialType::Array { length }) => {
