@@ -98,13 +98,13 @@ fn assign_range_multiplier(bit_count: i32, range: f64) -> Result<f32> {
     {
         // Squeeze it down smaller and smaller until it's going to produce an
         // integer in the valid range when given the highest value.
-        let multipliers: [f32; 5] = [0.9999, 0.99, 0.9, 0.8, 0.7];
+        const MULTIPLIERS: [f32; 5] = [0.9999, 0.99, 0.9, 0.8, 0.7];
         let mut i = 0;
-        while i < multipliers.len() {
+        while i < MULTIPLIERS.len() {
             // fHighLowMul = (float)( iHighValue / range ) iHighValue is
             // unsigned long and range is a double -> the intermediate result
             // during the division will be a double due to type promotion in cpp.
-            high_low_mul = (high_value as f64 / range) as f32 * multipliers[i];
+            high_low_mul = (high_value as f64 / range) as f32 * MULTIPLIERS[i];
 
             // (unsigned long)(fHighLowMul * range) > iHighValue ||
             //   (fHighLowMul * range) > (double)iHighValue
@@ -117,7 +117,7 @@ fn assign_range_multiplier(bit_count: i32, range: f64) -> Result<f32> {
             }
         }
 
-        if i == multipliers.len() {
+        if i == MULTIPLIERS.len() {
             // Doh! We seem to be unable to represent this range.
             return Err(Error::InvalidRange);
         }

@@ -6,7 +6,10 @@ use hashbrown::{
     hash_map::{DefaultHashBuilder, Iter},
     HashMap,
 };
-use std::alloc::{Allocator, Global};
+use std::{
+    alloc::{Allocator, Global},
+    mem::MaybeUninit,
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -25,9 +28,18 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 const SUBSTRING_BITS: usize = 5;
 
-#[derive(Default, Copy, Clone)]
+#[derive(Copy, Clone)]
 struct StringHistoryEntry {
     string: [u8; 1 << SUBSTRING_BITS],
+}
+
+impl StringHistoryEntry {
+    unsafe fn new_uninit() -> Self {
+        Self {
+            #[allow(invalid_value)]
+            string: MaybeUninit::uninit().assume_init(),
+        }
+    }
 }
 
 const MAX_USERDATA_BITS: usize = 17;
@@ -87,11 +99,14 @@ impl<A: Allocator + Clone> StringTable<A> {
         // be disproportionately high
         // https://www.reddit.com/r/rust/comments/9ozddb/comment/e7z2qi1/?utm_source=share&utm_medium=web2x&context=3
 
-        let mut history = [StringHistoryEntry::default(); 32];
+        let mut history = [unsafe { StringHistoryEntry::new_uninit() }; 32];
         let mut history_delta_index: usize = 0;
 
-        let mut string_buf = [0u8; 1024];
-        let mut user_data_buf = [0u8; MAX_USERDATA_SIZE];
+        #[allow(invalid_value)]
+        let mut string_buf: [u8; 1024] = unsafe { MaybeUninit::uninit().assume_init() };
+        #[allow(invalid_value)]
+        let mut user_data_buf: [u8; MAX_USERDATA_SIZE] =
+            unsafe { MaybeUninit::uninit().assume_init() };
 
         // Loop through entries in the data structure
         //
@@ -148,7 +163,7 @@ impl<A: Allocator + Clone> StringTable<A> {
                     size += br.read_string(&mut string_buf, false)?;
                 }
 
-                let mut she = StringHistoryEntry::default();
+                let mut she = unsafe { StringHistoryEntry::new_uninit() };
                 let she_string_len = she.string.len();
                 she.string.copy_from_slice(&string_buf[..she_string_len]);
 
@@ -187,10 +202,10 @@ impl<A: Allocator + Clone> StringTable<A> {
                     br.read_bytes(&mut user_data_buf[..size])?;
 
                     if is_compressed {
-                        let buf_copy = user_data_buf.clone();
+                        let user_data_buf_clone = user_data_buf.clone();
                         snap::raw::Decoder::new()
-                            .decompress(&buf_copy[..size], &mut user_data_buf)?;
-                        size = snap::raw::decompress_len(&buf_copy)?;
+                            .decompress(&user_data_buf_clone[..size], &mut user_data_buf)?;
+                        size = snap::raw::decompress_len(&user_data_buf_clone)?;
                     }
                 }
 

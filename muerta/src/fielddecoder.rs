@@ -5,7 +5,7 @@ use crate::{
     fnv1a::hash,
     quantizedfloat::{self, QuantizedFloat},
 };
-use std::alloc::Allocator;
+use std::{alloc::Allocator, mem::MaybeUninit};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -251,7 +251,8 @@ pub fn decode_string<A: Allocator + Clone>(
     br: &mut BitReader,
     alloc: A,
 ) -> Result<FieldValue<A>> {
-    let mut buf = [0u8; 1024];
+    #[allow(invalid_value)]
+    let mut buf: [u8; 1024] = unsafe { MaybeUninit::uninit().assume_init() };
     let num_chars = br.read_string(&mut buf, false)?;
     Ok(buf[..num_chars].to_vec_in(alloc).into())
 }
