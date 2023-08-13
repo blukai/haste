@@ -69,10 +69,10 @@ impl<A: Allocator + Clone> FlattenedSerializerField<A> {
         };
 
         let var_type = field.var_type_sym.and_then(resolve_sym).expect("var type");
-        let var_type_hash = fnv1a::hash(&var_type.as_bytes());
+        let var_type_hash = fnv1a::hash(var_type.as_bytes());
 
         let var_name = field.var_name_sym.and_then(resolve_sym).expect("var name");
-        let var_name_hash = fnv1a::hash(&var_name.as_bytes());
+        let var_name_hash = fnv1a::hash(var_name.as_bytes());
 
         let field_serializer_name = field.field_serializer_name_sym.and_then(resolve_sym);
         let field_serializer_name_hash = field_serializer_name
@@ -299,9 +299,8 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
                             }) => {
                                 let mut sub_field =
                                     FlattenedSerializerField::default_in(self.alloc.clone());
-                                sub_field.field_serializer = serializers
-                                    .get(&element_serializer_name_hash)
-                                    .map(|v| v.clone());
+                                sub_field.field_serializer =
+                                    serializers.get(&element_serializer_name_hash).cloned();
 
                                 const SIZE: usize = 256;
                                 let mut sub_fields =

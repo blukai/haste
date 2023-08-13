@@ -74,11 +74,11 @@ impl U64Decoder {
     pub fn new<A: Allocator + Clone>(field: &FlattenedSerializerField<A>) -> Self {
         if field.is_var_encoder_hash_eq(hash(b"fixed64")) {
             Self {
-                decoder: Box::new(InternalU64Fixed64Decoder::default()),
+                decoder: Box::<InternalU64Fixed64Decoder>::default(),
             }
         } else {
             Self {
-                decoder: Box::new(InternalU64Decoder::default()),
+                decoder: Box::<InternalU64Decoder>::default(),
             }
         }
     }
@@ -215,7 +215,7 @@ impl QAngleDecoder {
 
         if bit_count == 0 {
             return Self {
-                decoder: Box::new(InternalQAngleNoBitCountDecoder::default()),
+                decoder: Box::<InternalQAngleNoBitCountDecoder>::default(),
             };
         }
 
@@ -333,13 +333,13 @@ impl InternalF32Decoder {
             || field.var_name_hash == hash(b"m_flAnimTime")
         {
             return Ok(Self {
-                decoder: Box::new(InternalF32SimulationTimeDecoder::default()),
+                decoder: Box::<InternalF32SimulationTimeDecoder>::default(),
             });
         }
 
         if field.is_var_encoder_hash_eq(hash(b"coord")) {
             return Ok(Self {
-                decoder: Box::new(InternalF32CoordDecoder::default()),
+                decoder: Box::<InternalF32CoordDecoder>::default(),
             });
         }
 
@@ -347,7 +347,7 @@ impl InternalF32Decoder {
         // why would it be greater than 32? :thinking:
         if bit_count == 0 || bit_count >= 32 {
             return Ok(Self {
-                decoder: Box::new(InternalF32NoScaleDecoder::default()),
+                decoder: Box::<InternalF32NoScaleDecoder>::default(),
             });
         }
 
@@ -360,7 +360,7 @@ impl InternalF32Decoder {
 impl InternalF32Decode for InternalF32Decoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<f32> {
-        Ok(self.decoder.decode(br)?)
+        self.decoder.decode(br)
     }
 }
 
