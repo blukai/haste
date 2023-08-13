@@ -12,7 +12,7 @@ pub mod demofile;
 pub mod entities;
 pub mod entityclasses;
 pub mod fielddecoder;
-pub mod fieldkind;
+pub mod fieldmetadata;
 pub mod fieldpath;
 pub mod fieldvalue;
 pub mod flattenedserializers;

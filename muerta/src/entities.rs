@@ -82,13 +82,65 @@ pub struct Entity<A: Allocator + Clone> {
 
 impl<A: Allocator + Clone> Entity<A> {
     fn parse(&mut self, br: &mut BitReader) -> Result<()> {
+        // eprintln!("-- {}", self.flattened_serializer.serializer_name);
+
         let fps = fieldpath::read_field_paths_in(br, self.alloc.clone())?;
         for fp in fps {
-            let field = self.flattened_serializer.get_field_for_field_path(fp, 0);
+            let field = match fp.position {
+                0 => self.flattened_serializer.get_child(fp.get(0)),
+                1 => self
+                    .flattened_serializer
+                    .get_child(fp.get(0))
+                    .get_child(fp.get(1)),
+                2 => self
+                    .flattened_serializer
+                    .get_child(fp.get(0))
+                    .get_child(fp.get(1))
+                    .get_child(fp.get(2)),
+                3 => self
+                    .flattened_serializer
+                    .get_child(fp.get(0))
+                    .get_child(fp.get(1))
+                    .get_child(fp.get(2))
+                    .get_child(fp.get(3)),
+                4 => self
+                    .flattened_serializer
+                    .get_child(fp.get(0))
+                    .get_child(fp.get(1))
+                    .get_child(fp.get(2))
+                    .get_child(fp.get(3))
+                    .get_child(fp.get(4)),
+                5 => self
+                    .flattened_serializer
+                    .get_child(fp.get(0))
+                    .get_child(fp.get(1))
+                    .get_child(fp.get(2))
+                    .get_child(fp.get(3))
+                    .get_child(fp.get(4))
+                    .get_child(fp.get(5)),
+                6 => self
+                    .flattened_serializer
+                    .get_child(fp.get(0))
+                    .get_child(fp.get(1))
+                    .get_child(fp.get(2))
+                    .get_child(fp.get(3))
+                    .get_child(fp.get(4))
+                    .get_child(fp.get(5))
+                    .get_child(fp.get(6)),
+                _ => panic!("invalid position"),
+            };
+
+            // eprint!(
+            //     "{:?} {} {} ",
+            //     &fp.data[..=fp.position],
+            //     field.var_name,
+            //     field.var_type
+            // );
 
             let field_value = field
-                .decoder
-                .map(|decoder| decoder(field, br, self.alloc.clone()))
+                .metadata
+                .as_ref()
+                .map(|metadata| (metadata.decoder)(field, br, self.alloc.clone()))
                 .transpose()?
                 .unwrap_or_else(|| {
                     panic!(
@@ -96,6 +148,8 @@ impl<A: Allocator + Clone> Entity<A> {
                         &field.var_name, &field.var_type
                     )
                 });
+
+            // eprintln!(" -> {:?}", field_value);
 
             self.field_values.insert(field.var_name_hash, field_value);
         }

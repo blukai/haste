@@ -39,7 +39,14 @@ impl FieldPath {
             self.position -= 1;
         }
     }
+
+    #[inline(always)]
+    pub fn get(&self, index: usize) -> usize {
+        self.data[index] as usize
+    }
 }
+
+// ----
 
 // PlusOne
 #[inline(always)]
@@ -450,16 +457,15 @@ pub fn read_field_paths_in<A: Allocator>(
     br: &mut BitReader,
     alloc: A,
 ) -> Result<Vec<FieldPath, A>> {
-    // TODO: create field path object pool
     let mut fp = FieldPath::new();
     let mut fps = Vec::new_in(alloc);
 
     loop {
-        // stolen from butterfly.
+        // stolen from butterfly
         let mut id = 0;
         let mut op: Option<FieldPathOp> = None;
 
-        // 17 is max depth of huffman tree I assume (didn't check).
+        // 17 is max depth of huffman tree I assume (didn't check)
         for _ in 0..17 {
             id = (id << 1) | (br.read_bool()? as u32);
             op = lookup_op(id);

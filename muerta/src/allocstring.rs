@@ -10,6 +10,14 @@ pub struct AllocString<A: Allocator> {
 impl<A: Allocator> AllocString<A> {
     #[inline]
     #[must_use]
+    pub fn new_in(alloc: A) -> Self {
+        Self {
+            vec: Vec::new_in(alloc),
+        }
+    }
+
+    #[inline]
+    #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         &self.vec
     }
