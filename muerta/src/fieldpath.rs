@@ -18,6 +18,7 @@ pub struct FieldPath {
 }
 
 impl FieldPath {
+    #[inline(always)]
     fn new() -> Self {
         Self {
             data: [-1, 0, 0, 0, 0, 0, 0],
@@ -401,56 +402,55 @@ fn field_path_encode_finish(fp: &mut FieldPath, _br: &mut BitReader) -> Result<(
 
 // ----
 
-type FieldPathOp = fn(&mut FieldPath, &mut BitReader) -> Result<()>;
-
 #[inline(always)]
-fn lookup_op(id: u32) -> Option<FieldPathOp> {
+fn lookup_exec_op(id: u32, fp: &mut FieldPath, br: &mut BitReader) -> Result<bool> {
     // stolen from butterfly.
     // those ids are result of encoding sequence of bools into numeric
     // representation like so (in a loop): id = ( id << 1 ) | br.readBool().
     match id {
-        0 => Some(plus_one),
-        2 => Some(field_path_encode_finish),
-        14 => Some(plus_two),
-        15 => Some(push_one_left_delta_n_right_non_zero_pack6_bits),
-        24 => Some(push_one_left_delta_one_right_non_zero),
-        26 => Some(plus_n),
-        50 => Some(plus_three),
-        51 => Some(pop_all_but_one_plus_one),
-        217 => Some(push_one_left_delta_n_right_non_zero),
-        218 => Some(push_one_left_delta_one_right_zero),
-        220 => Some(push_one_left_delta_n_right_zero),
-        222 => Some(pop_all_but_one_plus_n_pack6_bits),
-        223 => Some(plus_four),
-        432 => Some(pop_all_but_one_plus_n),
-        438 => Some(push_one_left_delta_n_right_non_zero_pack8_bits),
-        439 => Some(non_topo_penultimate_plus_one),
-        442 => Some(pop_all_but_one_plus_n_pack3_bits),
-        443 => Some(push_n_and_non_topological),
-        866 => Some(non_topo_complex_pack4_bits),
-        1735 => Some(non_topo_complex),
-        3469 => Some(push_one_left_delta_zero_right_zero),
-        27745 => Some(pop_one_plus_one),
-        27749 => Some(push_one_left_delta_zero_right_non_zero),
-        55488 => Some(pop_n_and_non_topographical),
-        55489 => Some(pop_n_plus_n),
-        55492 => Some(push_n),
-        55493 => Some(push_three_pack5_left_delta_n),
-        55494 => Some(pop_n_plus_one),
-        55495 => Some(pop_one_plus_n),
-        55496 => Some(push_two_left_delta_zero),
-        110994 => Some(push_three_left_delta_zero),
-        110995 => Some(push_two_pack5_left_delta_zero),
-        111000 => Some(push_two_left_delta_n),
-        111001 => Some(push_three_pack5_left_delta_one),
-        111002 => Some(push_three_left_delta_n),
-        111003 => Some(push_two_pack5_left_delta_n),
-        111004 => Some(push_two_left_delta_one),
-        111005 => Some(push_three_pack5_left_delta_zero),
-        111006 => Some(push_three_left_delta_one),
-        111007 => Some(push_two_pack5_left_delta_one),
-        _ => None,
-    }
+        0 => plus_one(fp, br)?,
+        2 => field_path_encode_finish(fp, br)?,
+        14 => plus_two(fp, br)?,
+        15 => push_one_left_delta_n_right_non_zero_pack6_bits(fp, br)?,
+        24 => push_one_left_delta_one_right_non_zero(fp, br)?,
+        26 => plus_n(fp, br)?,
+        50 => plus_three(fp, br)?,
+        51 => pop_all_but_one_plus_one(fp, br)?,
+        217 => push_one_left_delta_n_right_non_zero(fp, br)?,
+        218 => push_one_left_delta_one_right_zero(fp, br)?,
+        220 => push_one_left_delta_n_right_zero(fp, br)?,
+        222 => pop_all_but_one_plus_n_pack6_bits(fp, br)?,
+        223 => plus_four(fp, br)?,
+        432 => pop_all_but_one_plus_n(fp, br)?,
+        438 => push_one_left_delta_n_right_non_zero_pack8_bits(fp, br)?,
+        439 => non_topo_penultimate_plus_one(fp, br)?,
+        442 => pop_all_but_one_plus_n_pack3_bits(fp, br)?,
+        443 => push_n_and_non_topological(fp, br)?,
+        866 => non_topo_complex_pack4_bits(fp, br)?,
+        1735 => non_topo_complex(fp, br)?,
+        3469 => push_one_left_delta_zero_right_zero(fp, br)?,
+        27745 => pop_one_plus_one(fp, br)?,
+        27749 => push_one_left_delta_zero_right_non_zero(fp, br)?,
+        55488 => pop_n_and_non_topographical(fp, br)?,
+        55489 => pop_n_plus_n(fp, br)?,
+        55492 => push_n(fp, br)?,
+        55493 => push_three_pack5_left_delta_n(fp, br)?,
+        55494 => pop_n_plus_one(fp, br)?,
+        55495 => pop_one_plus_n(fp, br)?,
+        55496 => push_two_left_delta_zero(fp, br)?,
+        110994 => push_three_left_delta_zero(fp, br)?,
+        110995 => push_two_pack5_left_delta_zero(fp, br)?,
+        111000 => push_two_left_delta_n(fp, br)?,
+        111001 => push_three_pack5_left_delta_one(fp, br)?,
+        111002 => push_three_left_delta_n(fp, br)?,
+        111003 => push_two_pack5_left_delta_n(fp, br)?,
+        111004 => push_two_left_delta_one(fp, br)?,
+        111005 => push_three_pack5_left_delta_zero(fp, br)?,
+        111006 => push_three_left_delta_one(fp, br)?,
+        111007 => push_two_pack5_left_delta_one(fp, br)?,
+        _ => return Ok(false),
+    };
+    Ok(true)
 }
 
 pub fn read_field_paths_in<A: Allocator>(
@@ -458,31 +458,29 @@ pub fn read_field_paths_in<A: Allocator>(
     alloc: A,
 ) -> Result<Vec<FieldPath, A>> {
     let mut fp = FieldPath::new();
-    let mut fps = Vec::new_in(alloc);
-
-    loop {
+    // NOTE: 10 is just an arbitrary value that performs better then not
+    // specifying capacity or specifying larger capacity (eg. 20); it's based on
+    // frequency of fps.len();
+    //
+    // sort out.txt | uniq -c | sort -nr
+    let mut fps = Vec::with_capacity_in(10, alloc);
+    'epic_loop: loop {
         // stolen from butterfly
         let mut id = 0;
-        let mut op: Option<FieldPathOp> = None;
-
         // 17 is max depth of huffman tree I assume (didn't check)
         for _ in 0..17 {
             id = (id << 1) | (br.read_bool()? as u32);
-            op = lookup_op(id);
-            if op.is_some() {
-                break;
+            if !lookup_exec_op(id, &mut fp, br)? {
+                continue;
             }
+            if fp.finished {
+                return Ok(fps);
+            }
+            fps.push(fp.clone());
+            continue 'epic_loop;
         }
 
-        let op = op.expect("exhausted max operation bits");
-        op(&mut fp, br)?;
-
-        if fp.finished {
-            break;
-        }
-
-        fps.push(fp.clone());
+        // TODO: don't panic
+        panic!("exhausted max operation bits");
     }
-
-    Ok(fps)
 }

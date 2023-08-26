@@ -9,7 +9,7 @@ pub enum Error {
     Underflow,
     #[error("malformed varint")]
     MalformedVarint,
-    #[error("string buffer is to small")]
+    #[error("string buffer is too small")]
     StringBufTooSmol,
 }
 
@@ -389,42 +389,28 @@ impl<'d> BitReader<'d> {
 
     //              uint32                  ReadVarInt32();
     pub fn read_uvarint32(&mut self) -> Result<u32> {
-        let mut result: u32 = 0;
-        let mut count: usize = 0;
-        loop {
-            if count == varint::MAX_VARINT32_BYTES {
-                return Err(Error::MalformedVarint);
-            }
-
+        let mut result = 0;
+        for count in 0..=varint::MAX_VARINT32_BYTES {
             let byte = self.read_ubitlong(8)?;
             result |= (byte & varint::PAYLOAD_BITS) << (count * 7);
-            count += 1;
-
             if (byte & varint::CONTINUE_BIT) == 0 {
-                break;
+                return Ok(result);
             }
         }
-        Ok(result)
+        Err(Error::MalformedVarint)
     }
 
     //              uint64                  ReadVarInt64();
     pub fn read_uvarint64(&mut self) -> Result<u64> {
-        let mut result: u64 = 0;
-        let mut count: usize = 0;
-        loop {
-            if count == varint::MAX_VARINT64_BYTES {
-                return Err(Error::MalformedVarint);
-            }
-
+        let mut result = 0;
+        for count in 0..=varint::MAX_VARINT64_BYTES {
             let byte = self.read_ubitlong(8)?;
             result |= ((byte & varint::PAYLOAD_BITS) as u64) << (count * 7);
-            count += 1;
-
             if (byte & varint::CONTINUE_BIT) == 0 {
-                break;
+                return Ok(result);
             }
         }
-        Ok(result)
+        Err(Error::MalformedVarint)
     }
 
     // stolen from csgo public/tier1/bitbuf.h

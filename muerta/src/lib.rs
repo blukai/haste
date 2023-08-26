@@ -17,6 +17,7 @@ pub mod fieldpath;
 pub mod fieldvalue;
 pub mod flattenedserializers;
 pub mod fnv1a;
+pub(crate) mod hashers;
 pub mod instancebaseline;
 pub mod quantizedfloat;
 pub mod stringtables;

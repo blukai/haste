@@ -5,10 +5,11 @@ use crate::{
     fieldpath::{self},
     fieldvalue::FieldValue,
     flattenedserializers::{FlattenedSerializer, FlattenedSerializers},
+    hashers::{I32HashBuilder, U64HashBuiler},
     instancebaseline::InstanceBaseline,
     protos,
 };
-use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
+use hashbrown::HashMap;
 use std::alloc::{Allocator, Global};
 
 #[derive(thiserror::Error, Debug)]
@@ -76,7 +77,7 @@ fn determine_update_type(update_flags: usize) -> UpdateType {
 #[derive(Clone)]
 pub struct Entity<A: Allocator + Clone> {
     flattened_serializer: FlattenedSerializer<A>,
-    field_values: HashMap<u64, FieldValue, DefaultHashBuilder, A>,
+    field_values: HashMap<u64, FieldValue, U64HashBuiler, A>,
     alloc: A,
 }
 
@@ -137,17 +138,12 @@ impl<A: Allocator + Clone> Entity<A> {
             //     field.var_type
             // );
 
-            let field_value = field
-                .metadata
-                .as_ref()
-                .map(|metadata| metadata.decoder.decode(br))
-                .transpose()?
-                .unwrap_or_else(|| {
-                    panic!(
-                        "field value (var_name: {}; var_type: {})",
-                        &field.var_name, &field.var_type
-                    )
-                });
+            // SAFETY: metadata is being generated for the field in
+            // flattenedserializers.rs; if metadata cannot be generated -
+            // FlattenedSerializers::parse will error thus we'll never get here.
+            // it is safe to assume that this cannot be None.
+            let field_metadata = unsafe { field.metadata.as_ref().unwrap_unchecked() };
+            let field_value = field_metadata.decoder.decode(br)?;
 
             // eprintln!(" -> {:?}", field_value);
 
@@ -159,7 +155,10 @@ impl<A: Allocator + Clone> Entity<A> {
 }
 
 pub struct Entities<A: Allocator + Clone = Global> {
-    entities: HashMap<usize, Entity<A>, DefaultHashBuilder, A>,
+    // TODO: use Vec<Option<.. or Vec<MaybeUninit<.. or implement NoOpHasher
+    // because keys are indexes, see
+    // https://sourcegraph.com/github.com/actix/actix-web@d8df60bf4c04c3cbb99bcf19a141c202223e07ea/-/blob/actix-http/src/extensions.rs?L13
+    entities: HashMap<i32, Entity<A>, I32HashBuilder, A>,
     alloc: A,
 }
 
@@ -172,7 +171,11 @@ impl Default for Entities<Global> {
 impl<A: Allocator + Clone> Entities<A> {
     pub fn new_in(alloc: A) -> Self {
         Self {
-            entities: HashMap::new_in(alloc.clone()),
+            entities: HashMap::with_capacity_and_hasher_in(
+                4096,
+                I32HashBuilder::default(),
+                alloc.clone(),
+            ),
             alloc,
         }
     }
@@ -197,7 +200,7 @@ impl<A: Allocator + Clone> Entities<A> {
             match update_type {
                 UpdateType::EnterPVS => {
                     self.handle_create(
-                        entidx as usize,
+                        entidx,
                         &mut br,
                         entity_classes,
                         instance_baseline,
@@ -206,11 +209,11 @@ impl<A: Allocator + Clone> Entities<A> {
                 }
                 UpdateType::LeavePVS => {
                     if (update_flags & FHDR_DELETE) != 0 {
-                        self.entities.remove(&(entidx as usize));
+                        self.entities.remove(&(entidx));
                     }
                 }
                 UpdateType::DeltaEnt => {
-                    self.handle_update(entidx as usize, &mut br)?;
+                    self.handle_update(entidx, &mut br)?;
                 }
             }
         }
@@ -220,7 +223,7 @@ impl<A: Allocator + Clone> Entities<A> {
 
     fn handle_create(
         &mut self,
-        entity_index: usize,
+        entidx: i32,
         br: &mut BitReader,
         entity_classes: &EntityClasses<A>,
         instance_baseline: &InstanceBaseline<A>,
@@ -236,8 +239,11 @@ impl<A: Allocator + Clone> Entities<A> {
             .expect("flattened serializer")
             .clone();
 
-        let field_values =
-            HashMap::with_capacity_in(flattened_serializer.fields.len(), self.alloc.clone());
+        let field_values = HashMap::with_capacity_and_hasher_in(
+            flattened_serializer.fields.len(),
+            U64HashBuiler::default(),
+            self.alloc.clone(),
+        );
 
         let mut entity = Entity {
             flattened_serializer,
@@ -254,16 +260,15 @@ impl<A: Allocator + Clone> Entities<A> {
         entity.parse(&mut baseline_br)?;
         entity.parse(br)?;
 
-        self.entities.insert(entity_index, entity);
+        self.entities.insert(entidx, entity);
 
         Ok(())
     }
 
-    fn handle_update(&mut self, entity_index: usize, br: &mut BitReader) -> Result<()> {
-        let entity = self
-            .entities
-            .get_mut(&entity_index)
-            .unwrap_or_else(|| panic!("entity at {}", entity_index));
+    fn handle_update(&mut self, entidx: i32, br: &mut BitReader) -> Result<()> {
+        // SAFETY: if entity was ever created, and not deleted, it can be
+        // updated!
+        let entity = unsafe { self.entities.get_mut(&entidx).unwrap_unchecked() };
         entity.parse(br)
     }
 }

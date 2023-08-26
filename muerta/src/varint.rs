@@ -40,47 +40,33 @@ fn read_byte<R: Read>(rdr: &mut R) -> Result<u8> {
 // - https://github.com/as-com/varint-simd
 // - https://github.com/lemire/MaskedVByte
 pub fn read_uvarint32<R: Read>(rdr: &mut R) -> Result<(u32, usize)> {
-    let mut result: u32 = 0;
-    let mut count: usize = 0;
-    loop {
-        if count == MAX_VARINT32_BYTES {
-            // If we get here it means that the fifth bit had its high bit
-            // set, which implies corrupt data.
-            return Err(Error::MalformedVarint);
-        }
-
+    let mut result = 0;
+    for count in 0..=MAX_VARINT32_BYTES {
         let byte = read_byte(rdr)? as u32;
         result |= (byte & PAYLOAD_BITS) << (count * 7);
-
         if (byte & CONTINUE_BIT) == 0 {
             return Ok((result, count));
         }
-
-        count += 1;
     }
+    // If we get here it means that the fifth bit had its high bit
+    // set, which implies corrupt data.
+    Err(Error::MalformedVarint)
 }
 
 // NOTE: nameing is somewhat inspired by go's encoding/binary -
 // https://pkg.go.dev/encoding/binary
 
 pub fn uvarint32(buf: &[u8]) -> Result<(u32, usize)> {
-    let mut result: u32 = 0;
-    let mut count: usize = 0;
-    loop {
-        if count == MAX_VARINT32_BYTES {
-            return Err(Error::MalformedVarint);
-        }
-
+    let mut result = 0;
+    for count in 0..=MAX_VARINT32_BYTES {
         let byte = buf
             .get(count)
             .map(|b| *b as u32)
             .ok_or_else(|| Error::MalformedVarint)?;
         result |= (byte & PAYLOAD_BITS) << (count * 7);
-
         if (byte & CONTINUE_BIT) == 0 {
             return Ok((result, count));
         }
-
-        count += 1;
     }
+    Err(Error::MalformedVarint)
 }

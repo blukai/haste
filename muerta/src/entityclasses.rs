@@ -1,12 +1,12 @@
-use crate::{fnv1a, protos};
-use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
+use crate::{fnv1a, hashers::I32HashBuilder, protos};
+use hashbrown::HashMap;
 use std::alloc::{Allocator, Global};
 
 pub struct ClassInfo {
     pub network_name_hash: u64,
 }
 
-type ClassInfoMap<A> = HashMap<i32, ClassInfo, DefaultHashBuilder, A>;
+type ClassInfoMap<A> = HashMap<i32, ClassInfo, I32HashBuilder, A>;
 
 pub struct EntityClasses<A: Allocator + Clone = Global> {
     class_infos: Option<ClassInfoMap<A>>,
@@ -36,7 +36,11 @@ impl<A: Allocator + Clone> EntityClasses<A> {
         );
 
         let n_classes = proto.classes.len();
-        let mut class_infos = ClassInfoMap::with_capacity_in(n_classes, self.alloc.clone());
+        let mut class_infos = ClassInfoMap::with_capacity_and_hasher_in(
+            n_classes,
+            I32HashBuilder::default(),
+            self.alloc.clone(),
+        );
         for class in proto.classes {
             let class_info = ClassInfo {
                 network_name_hash: fnv1a::hash(class.network_name().as_bytes()),

@@ -1,11 +1,9 @@
 use crate::{
     allocstring::{AllocString, AllocStringFromIn},
     bitbuf::{self, BitReader},
+    hashers::I32HashBuilder,
 };
-use hashbrown::{
-    hash_map::{DefaultHashBuilder, Iter},
-    HashMap,
-};
+use hashbrown::{hash_map::Iter, HashMap};
 use std::{
     alloc::{Allocator, Global},
     mem::MaybeUninit,
@@ -57,7 +55,7 @@ pub struct StringTable<A: Allocator + Clone> {
     user_data_size_bits: i32,
     flags: i32,
     using_varint_bitcounts: bool,
-    items: HashMap<i32, StringTableItem<A>, DefaultHashBuilder, A>,
+    items: HashMap<i32, StringTableItem<A>, I32HashBuilder, A>,
     alloc: A,
 }
 
@@ -78,7 +76,7 @@ impl<A: Allocator + Clone> StringTable<A> {
             user_data_size_bits,
             flags,
             using_varint_bitcounts,
-            items: HashMap::new_in(alloc.clone()),
+            items: HashMap::with_hasher_in(I32HashBuilder::default(), alloc.clone()),
             alloc,
         }
     }

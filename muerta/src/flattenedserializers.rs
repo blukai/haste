@@ -1,9 +1,11 @@
 use crate::{
     allocstring::{AllocString, AllocStringFromIn},
     fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialType},
-    fnv1a, protos, varint,
+    fnv1a,
+    hashers::{I32HashBuilder, U64HashBuiler},
+    protos, varint,
 };
-use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
+use hashbrown::HashMap;
 use prost::Message;
 use std::{
     alloc::{Allocator, Global},
@@ -208,8 +210,8 @@ impl<A: Allocator + Clone> FlattenedSerializer<A> {
     }
 }
 
-type FieldMap<A> = HashMap<i32, Rc<FlattenedSerializerField<A>>, DefaultHashBuilder, A>;
-type SerializerMap<A> = HashMap<u64, Rc<FlattenedSerializer<A>>, DefaultHashBuilder, A>;
+type FieldMap<A> = HashMap<i32, Rc<FlattenedSerializerField<A>>, I32HashBuilder, A>;
+type SerializerMap<A> = HashMap<u64, Rc<FlattenedSerializer<A>>, U64HashBuiler, A>;
 
 pub struct FlattenedSerializers<A: Allocator + Clone = Global> {
     serializers: Option<SerializerMap<A>>,
@@ -243,9 +245,13 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
             protos::CsvcMsgFlattenedSerializer::decode(&data[offset..offset + size])?
         };
 
-        let mut fields: FieldMap<A> = FieldMap::new_in(self.alloc.clone());
-        let mut serializers: SerializerMap<A> =
-            SerializerMap::with_capacity_in(svcmsg.serializers.len(), self.alloc.clone());
+        let mut fields: FieldMap<A> =
+            FieldMap::with_hasher_in(I32HashBuilder::default(), self.alloc.clone());
+        let mut serializers: SerializerMap<A> = SerializerMap::with_capacity_and_hasher_in(
+            svcmsg.serializers.len(),
+            U64HashBuiler::default(),
+            self.alloc.clone(),
+        );
 
         for serializer in svcmsg.serializers.iter() {
             let mut flattened_serializer =

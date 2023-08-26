@@ -1,5 +1,5 @@
-use crate::{allocstring::AllocString, stringtables::StringTable};
-use hashbrown::{hash_map::DefaultHashBuilder, HashMap};
+use crate::{allocstring::AllocString, hashers::I32HashBuilder, stringtables::StringTable};
+use hashbrown::HashMap;
 use std::alloc::{Allocator, Global};
 
 #[derive(thiserror::Error, Debug)]
@@ -14,7 +14,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub const INSTANCE_BASELINE_TABLE_NAME: &[u8] = b"instancebaseline";
 
 pub struct InstanceBaseline<A: Allocator + Clone = Global> {
-    map: HashMap<i32, AllocString<A>, DefaultHashBuilder, A>,
+    map: HashMap<i32, AllocString<A>, I32HashBuilder, A>,
 }
 
 impl Default for InstanceBaseline<Global> {
@@ -26,7 +26,7 @@ impl Default for InstanceBaseline<Global> {
 impl<A: Allocator + Clone> InstanceBaseline<A> {
     pub fn new_in(alloc: A) -> Self {
         Self {
-            map: HashMap::new_in(alloc),
+            map: HashMap::with_hasher_in(I32HashBuilder::default(), alloc),
         }
     }
 
