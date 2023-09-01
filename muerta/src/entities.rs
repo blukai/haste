@@ -10,7 +10,6 @@ use crate::{
     protos,
 };
 use hashbrown::HashMap;
-use std::alloc::{Allocator, Global};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -75,17 +74,16 @@ fn determine_update_type(update_flags: usize) -> UpdateType {
 }
 
 #[derive(Clone)]
-pub struct Entity<A: Allocator + Clone> {
-    flattened_serializer: FlattenedSerializer<A>,
-    field_values: HashMap<u64, FieldValue, U64HashBuiler, A>,
-    alloc: A,
+pub struct Entity {
+    flattened_serializer: FlattenedSerializer,
+    field_values: HashMap<u64, FieldValue, U64HashBuiler>,
 }
 
-impl<A: Allocator + Clone> Entity<A> {
+impl Entity {
     fn parse(&mut self, br: &mut BitReader) -> Result<()> {
         // eprintln!("-- {}", self.flattened_serializer.serializer_name);
 
-        let fps = fieldpath::read_field_paths_in(br, self.alloc.clone())?;
+        let fps = fieldpath::read_field_paths(br)?;
         for fp in fps {
             let field = match fp.position {
                 0 => self.flattened_serializer.get_child(fp.get(0)),
@@ -154,38 +152,28 @@ impl<A: Allocator + Clone> Entity<A> {
     }
 }
 
-pub struct Entities<A: Allocator + Clone = Global> {
+pub struct Entities {
     // TODO: use Vec<Option<.. or Vec<MaybeUninit<.. or implement NoOpHasher
     // because keys are indexes, see
     // https://sourcegraph.com/github.com/actix/actix-web@d8df60bf4c04c3cbb99bcf19a141c202223e07ea/-/blob/actix-http/src/extensions.rs?L13
-    entities: HashMap<i32, Entity<A>, I32HashBuilder, A>,
-    alloc: A,
+    entities: HashMap<i32, Entity, I32HashBuilder>,
 }
 
-impl Default for Entities<Global> {
+impl Default for Entities {
     fn default() -> Self {
-        Self::new_in(Global)
-    }
-}
-
-impl<A: Allocator + Clone> Entities<A> {
-    pub fn new_in(alloc: A) -> Self {
         Self {
-            entities: HashMap::with_capacity_and_hasher_in(
-                4096,
-                I32HashBuilder::default(),
-                alloc.clone(),
-            ),
-            alloc,
+            entities: HashMap::with_capacity_and_hasher(4096, I32HashBuilder::default()),
         }
     }
+}
 
+impl Entities {
     pub fn read_packet_entities(
         &mut self,
         svcmsg: protos::CsvcMsgPacketEntities,
-        entity_classes: &EntityClasses<A>,
-        instance_baseline: &InstanceBaseline<A>,
-        flattened_serializers: &FlattenedSerializers<A>,
+        entity_classes: &EntityClasses,
+        instance_baseline: &InstanceBaseline,
+        flattened_serializers: &FlattenedSerializers,
     ) -> Result<()> {
         let entity_data = svcmsg.entity_data.expect("entity data");
         let mut br = BitReader::new(&entity_data);
@@ -225,9 +213,9 @@ impl<A: Allocator + Clone> Entities<A> {
         &mut self,
         entidx: i32,
         br: &mut BitReader,
-        entity_classes: &EntityClasses<A>,
-        instance_baseline: &InstanceBaseline<A>,
-        flattened_serializers: &FlattenedSerializers<A>,
+        entity_classes: &EntityClasses,
+        instance_baseline: &InstanceBaseline,
+        flattened_serializers: &FlattenedSerializers,
     ) -> Result<()> {
         let class_id = br.read_ubitlong(entity_classes.bits() as usize)? as i32;
         let _serial = br.read_ubitlong(17)?;
@@ -239,16 +227,14 @@ impl<A: Allocator + Clone> Entities<A> {
             .expect("flattened serializer")
             .clone();
 
-        let field_values = HashMap::with_capacity_and_hasher_in(
+        let field_values = HashMap::with_capacity_and_hasher(
             flattened_serializer.fields.len(),
             U64HashBuiler::default(),
-            self.alloc.clone(),
         );
 
         let mut entity = Entity {
             flattened_serializer,
             field_values,
-            alloc: self.alloc.clone(),
         };
 
         let mut baseline_br = BitReader::new(

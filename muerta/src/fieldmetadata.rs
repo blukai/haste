@@ -7,7 +7,6 @@ use crate::{
     flattenedserializers::FlattenedSerializerField,
     fnv1a::hash,
 };
-use std::alloc::Allocator;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -34,9 +33,7 @@ pub struct FieldMetadata {
 
 const MAX_ABILITY_DRAFT_ABILITIES: usize = 48;
 
-pub fn get_field_metadata<A: Allocator + Clone>(
-    field: &FlattenedSerializerField<A>,
-) -> Result<Option<FieldMetadata>> {
+pub fn get_field_metadata(field: &FlattenedSerializerField) -> Result<Option<FieldMetadata>> {
     // TODO: create macros to make this prettier kekw
     let field_metadata = match field.var_type_hash {
         v if v == hash(b"AbilityBarType_t") => {

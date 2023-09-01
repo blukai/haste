@@ -3,10 +3,7 @@ use crate::{
     hashers::I32HashBuilder,
 };
 use hashbrown::{hash_map::Iter, HashMap};
-use std::{
-    alloc::{Allocator, Global},
-    mem::MaybeUninit,
-};
+use std::mem::MaybeUninit;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -47,25 +44,24 @@ pub struct StringTableItem {
     pub user_data: Option<Box<str>>,
 }
 
-pub struct StringTable<A: Allocator + Clone> {
+pub struct StringTable {
     pub name: Box<str>,
     user_data_fixed_size: bool,
     user_data_size: i32,
     user_data_size_bits: i32,
     flags: i32,
     using_varint_bitcounts: bool,
-    items: HashMap<i32, StringTableItem, I32HashBuilder, A>,
+    items: HashMap<i32, StringTableItem, I32HashBuilder>,
 }
 
-impl<A: Allocator + Clone> StringTable<A> {
-    pub fn new_in(
+impl StringTable {
+    pub fn new(
         name: &str,
         user_data_fixed_size: bool,
         user_data_size: i32,
         user_data_size_bits: i32,
         flags: i32,
         using_varint_bitcounts: bool,
-        alloc: A,
     ) -> Self {
         Self {
             name: name.into(),
@@ -74,7 +70,7 @@ impl<A: Allocator + Clone> StringTable<A> {
             user_data_size_bits,
             flags,
             using_varint_bitcounts,
-            items: HashMap::with_hasher_in(I32HashBuilder::default(), alloc),
+            items: HashMap::with_hasher(I32HashBuilder::default()),
         }
     }
 
@@ -235,25 +231,12 @@ impl<A: Allocator + Clone> StringTable<A> {
     }
 }
 
-pub struct StringTables<A: Allocator + Clone = Global> {
-    tables: Vec<StringTable<A>, A>,
-    alloc: A,
+#[derive(Default)]
+pub struct StringTables {
+    tables: Vec<StringTable>,
 }
 
-impl Default for StringTables<Global> {
-    fn default() -> Self {
-        Self::new_in(Global)
-    }
-}
-
-impl<A: Allocator + Clone> StringTables<A> {
-    pub fn new_in(alloc: A) -> Self {
-        Self {
-            tables: Vec::new_in(alloc.clone()),
-            alloc,
-        }
-    }
-
+impl StringTables {
     // INetworkStringTable *CreateStringTable( const char *tableName, int maxentries, int userdatafixedsize = 0, int userdatanetworkbits = 0, int flags = NSF_NONE );
     pub fn create_string_table_mut(
         &mut self,
@@ -263,20 +246,19 @@ impl<A: Allocator + Clone> StringTables<A> {
         user_data_size_bits: i32,
         flags: i32,
         using_varint_bitcounts: bool,
-    ) -> Result<&mut StringTable<A>> {
+    ) -> Result<&mut StringTable> {
         let table = self.find_table(name);
         if table.is_some() {
             return Err(Error::DuplicateStringTable(name.to_string()));
         }
 
-        let table = StringTable::new_in(
+        let table = StringTable::new(
             name,
             user_data_fixed_size,
             user_data_size,
             user_data_size_bits,
             flags,
             using_varint_bitcounts,
-            self.alloc.clone(),
         );
 
         let len = self.tables.len();
@@ -285,18 +267,18 @@ impl<A: Allocator + Clone> StringTables<A> {
     }
 
     // INetworkStringTable *FindTable( const char *tableName ) const ;
-    pub fn find_table(&self, name: &str) -> Option<&StringTable<A>> {
+    pub fn find_table(&self, name: &str) -> Option<&StringTable> {
         self.tables
             .iter()
             .find(|&table| table.name.as_ref().eq(name))
     }
 
     // INetworkStringTable	*GetTable( TABLEID stringTable ) const;
-    pub fn get_table(&self, id: usize) -> Option<&StringTable<A>> {
+    pub fn get_table(&self, id: usize) -> Option<&StringTable> {
         self.tables.get(id)
     }
 
-    pub fn get_table_mut(&mut self, id: usize) -> Option<&mut StringTable<A>> {
+    pub fn get_table_mut(&mut self, id: usize) -> Option<&mut StringTable> {
         self.tables.get_mut(id)
     }
 

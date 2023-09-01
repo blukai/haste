@@ -1,34 +1,19 @@
 use crate::{fnv1a, hashers::I32HashBuilder, protos};
 use hashbrown::HashMap;
-use std::alloc::{Allocator, Global};
 
 pub struct ClassInfo {
     pub network_name_hash: u64,
 }
 
-type ClassInfoMap<A> = HashMap<i32, ClassInfo, I32HashBuilder, A>;
+type ClassInfoMap = HashMap<i32, ClassInfo, I32HashBuilder>;
 
-pub struct EntityClasses<A: Allocator + Clone = Global> {
-    class_infos: Option<ClassInfoMap<A>>,
+#[derive(Default)]
+pub struct EntityClasses {
+    class_infos: Option<ClassInfoMap>,
     bits: Option<i32>,
-    alloc: A,
 }
 
-impl Default for EntityClasses<Global> {
-    fn default() -> Self {
-        Self::new_in(Global)
-    }
-}
-
-impl<A: Allocator + Clone> EntityClasses<A> {
-    pub fn new_in(alloc: A) -> Self {
-        Self {
-            class_infos: None,
-            bits: None,
-            alloc,
-        }
-    }
-
+impl EntityClasses {
     pub fn parse(&mut self, proto: protos::CDemoClassInfo) {
         debug_assert!(
             self.class_infos.is_none(),
@@ -36,11 +21,8 @@ impl<A: Allocator + Clone> EntityClasses<A> {
         );
 
         let n_classes = proto.classes.len();
-        let mut class_infos = ClassInfoMap::with_capacity_and_hasher_in(
-            n_classes,
-            I32HashBuilder::default(),
-            self.alloc.clone(),
-        );
+        let mut class_infos =
+            ClassInfoMap::with_capacity_and_hasher(n_classes, I32HashBuilder::default());
         for class in proto.classes {
             let class_info = ClassInfo {
                 network_name_hash: fnv1a::hash(class.network_name().as_bytes()),
@@ -52,7 +34,7 @@ impl<A: Allocator + Clone> EntityClasses<A> {
     }
 
     #[inline(always)]
-    fn class_infos(&self) -> &ClassInfoMap<A> {
+    fn class_infos(&self) -> &ClassInfoMap {
         self.class_infos.as_ref().expect("class infos to be parsed")
     }
 

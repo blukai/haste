@@ -1,4 +1,3 @@
-#![feature(allocator_api)]
 #![feature(const_for)]
 
 #[allow(clippy::all)]

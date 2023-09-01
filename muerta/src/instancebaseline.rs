@@ -1,6 +1,5 @@
 use crate::{hashers::I32HashBuilder, stringtables::StringTable};
 use hashbrown::HashMap;
-use std::alloc::{Allocator, Global};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -13,24 +12,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 pub const INSTANCE_BASELINE_TABLE_NAME: &str = "instancebaseline";
 
-pub struct InstanceBaseline<A: Allocator + Clone = Global> {
-    map: HashMap<i32, Box<str>, I32HashBuilder, A>,
+#[derive(Default)]
+pub struct InstanceBaseline {
+    map: HashMap<i32, Box<str>, I32HashBuilder>,
 }
 
-impl Default for InstanceBaseline<Global> {
-    fn default() -> Self {
-        Self::new_in(Global)
-    }
-}
-
-impl<A: Allocator + Clone> InstanceBaseline<A> {
-    pub fn new_in(alloc: A) -> Self {
-        Self {
-            map: HashMap::with_hasher_in(I32HashBuilder::default(), alloc),
-        }
-    }
-
-    pub fn update(&mut self, string_table: &StringTable<A>) -> Result<()> {
+impl InstanceBaseline {
+    pub fn update(&mut self, string_table: &StringTable) -> Result<()> {
         for (_entity_index, item) in string_table.iter() {
             let string = item
                 .string

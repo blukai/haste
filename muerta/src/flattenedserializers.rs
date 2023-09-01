@@ -6,10 +6,7 @@ use crate::{
 };
 use hashbrown::HashMap;
 use prost::Message;
-use std::{
-    alloc::{Allocator, Global},
-    rc::Rc,
-};
+use std::rc::Rc;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -30,7 +27,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 // https://developer.valvesoftware.com/wiki/Networking_Entities
 
 #[derive(Clone)]
-pub struct FlattenedSerializerField<A: Allocator + Clone> {
+pub struct FlattenedSerializerField {
     pub var_type: Box<str>,
     pub var_type_hash: u64,
 
@@ -45,7 +42,7 @@ pub struct FlattenedSerializerField<A: Allocator + Clone> {
 
     pub field_serializer_name: Option<Box<str>>,
     pub field_serializer_name_hash: Option<u64>,
-    pub field_serializer: Option<Rc<FlattenedSerializer<A>>>,
+    pub field_serializer: Option<Rc<FlattenedSerializer>>,
 
     pub field_serializer_version: Option<i32>,
     pub send_node: Option<Box<str>>,
@@ -56,7 +53,7 @@ pub struct FlattenedSerializerField<A: Allocator + Clone> {
     pub metadata: Option<FieldMetadata>,
 }
 
-impl<A: Allocator + Clone> FlattenedSerializerField<A> {
+impl FlattenedSerializerField {
     fn new(
         svcmsg: &protos::CsvcMsgFlattenedSerializer,
         field: &protos::ProtoFlattenedSerializerFieldT,
@@ -157,19 +154,18 @@ impl<A: Allocator + Clone> FlattenedSerializerField<A> {
 // NOTE: Clone derive is needed here because Entity in entities.rs needs to be
 // clonable which means that all members of it also should be clonable.
 #[derive(Clone)]
-pub struct FlattenedSerializer<A: Allocator + Clone> {
+pub struct FlattenedSerializer {
     pub serializer_name: Box<str>,
     pub serializer_version: Option<i32>,
-    pub fields: Vec<Rc<FlattenedSerializerField<A>>, A>,
+    pub fields: Vec<Rc<FlattenedSerializerField>>,
 
     pub serializer_name_hash: u64,
 }
 
-impl<A: Allocator + Clone> FlattenedSerializer<A> {
-    fn new_in(
+impl FlattenedSerializer {
+    fn new(
         svcmsg: &protos::CsvcMsgFlattenedSerializer,
         fs: &protos::ProtoFlattenedSerializerT,
-        alloc: A,
     ) -> Result<Self> {
         let resolve_sym = |v: i32| Some(svcmsg.symbols[v as usize].clone().into_boxed_str());
 
@@ -182,13 +178,13 @@ impl<A: Allocator + Clone> FlattenedSerializer<A> {
         Ok(Self {
             serializer_name,
             serializer_version: fs.serializer_version,
-            fields: Vec::with_capacity_in(fs.fields_index.len(), alloc.clone()),
+            fields: Vec::with_capacity(fs.fields_index.len()),
             serializer_name_hash,
         })
     }
 
     #[inline(always)]
-    pub fn get_child(&self, index: usize) -> &FlattenedSerializerField<A> {
+    pub fn get_child(&self, index: usize) -> &FlattenedSerializerField {
         self.fields.get(index).unwrap_or_else(|| {
             panic!(
                 "expected field to be at index {} in {}",
@@ -198,28 +194,15 @@ impl<A: Allocator + Clone> FlattenedSerializer<A> {
     }
 }
 
-type FieldMap<A> = HashMap<i32, Rc<FlattenedSerializerField<A>>, I32HashBuilder, A>;
-type SerializerMap<A> = HashMap<u64, Rc<FlattenedSerializer<A>>, U64HashBuiler, A>;
+type FieldMap = HashMap<i32, Rc<FlattenedSerializerField>, I32HashBuilder>;
+type SerializerMap = HashMap<u64, Rc<FlattenedSerializer>, U64HashBuiler>;
 
-pub struct FlattenedSerializers<A: Allocator + Clone = Global> {
-    serializers: Option<SerializerMap<A>>,
-    alloc: A,
+#[derive(Default)]
+pub struct FlattenedSerializers {
+    serializers: Option<SerializerMap>,
 }
 
-impl Default for FlattenedSerializers<Global> {
-    fn default() -> Self {
-        Self::new_in(Global)
-    }
-}
-
-impl<A: Allocator + Clone> FlattenedSerializers<A> {
-    pub fn new_in(alloc: A) -> Self {
-        Self {
-            serializers: None,
-            alloc,
-        }
-    }
-
+impl FlattenedSerializers {
     pub fn parse(&mut self, cmd: protos::CDemoSendTables) -> Result<()> {
         debug_assert!(
             self.serializers.is_none(),
@@ -233,17 +216,14 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
             protos::CsvcMsgFlattenedSerializer::decode(&data[offset..offset + size])?
         };
 
-        let mut fields: FieldMap<A> =
-            FieldMap::with_hasher_in(I32HashBuilder::default(), self.alloc.clone());
-        let mut serializers: SerializerMap<A> = SerializerMap::with_capacity_and_hasher_in(
+        let mut fields: FieldMap = FieldMap::with_hasher(I32HashBuilder::default());
+        let mut serializers: SerializerMap = SerializerMap::with_capacity_and_hasher(
             svcmsg.serializers.len(),
             U64HashBuiler::default(),
-            self.alloc.clone(),
         );
 
         for serializer in svcmsg.serializers.iter() {
-            let mut flattened_serializer =
-                FlattenedSerializer::new_in(&svcmsg, serializer, self.alloc.clone())?;
+            let mut flattened_serializer = FlattenedSerializer::new(&svcmsg, serializer)?;
 
             for field_index in serializer.fields_index.iter() {
                 if !fields.contains_key(field_index) {
@@ -266,7 +246,7 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
                     match field.metadata.as_ref() {
                         Some(field_metadata) => match field_metadata.special_type {
                             Some(FieldSpecialType::Array { length }) => {
-                                let mut fields = Vec::with_capacity_in(length, self.alloc.clone());
+                                let mut fields = Vec::with_capacity(length);
                                 fields.resize(length, Rc::new(field.clone()));
 
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
@@ -278,7 +258,7 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
                             }
                             Some(FieldSpecialType::VariableLengthArray) => {
                                 const LENGTH: usize = 256;
-                                let mut fields = Vec::with_capacity_in(LENGTH, self.alloc.clone());
+                                let mut fields = Vec::with_capacity(LENGTH);
                                 fields.resize(LENGTH, Rc::new(field.clone()));
 
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
@@ -296,8 +276,7 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
                                     serializers.get(&element_serializer_name_hash).cloned();
 
                                 const SIZE: usize = 256;
-                                let mut sub_fields =
-                                    Vec::with_capacity_in(SIZE, self.alloc.clone());
+                                let mut sub_fields = Vec::with_capacity(SIZE);
                                 sub_fields.resize(SIZE, Rc::new(sub_field));
 
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
@@ -337,14 +316,14 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
     }
 
     #[inline(always)]
-    fn serializers(&self) -> &SerializerMap<A> {
+    fn serializers(&self) -> &SerializerMap {
         self.serializers.as_ref().expect("serializers to be parsed")
     }
 
     pub fn get_by_serializer_name_hash(
         &self,
         serializer_name_hash: u64,
-    ) -> Option<&FlattenedSerializer<A>> {
+    ) -> Option<&FlattenedSerializer> {
         self.serializers()
             .get(&serializer_name_hash)
             .map(|v| v.as_ref())

@@ -1,5 +1,4 @@
 use crate::bitbuf::{self, BitReader};
-use std::alloc::Allocator;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -17,16 +16,18 @@ pub struct FieldPath {
     pub finished: bool,
 }
 
-impl FieldPath {
+impl Default for FieldPath {
     #[inline(always)]
-    fn new() -> Self {
+    fn default() -> Self {
         Self {
             data: [-1, 0, 0, 0, 0, 0, 0],
             position: 0,
             finished: false,
         }
     }
+}
 
+impl FieldPath {
     #[inline(always)]
     fn push_back(&mut self, value: i32) {
         self.position += 1;
@@ -453,17 +454,14 @@ fn lookup_exec_op(id: u32, fp: &mut FieldPath, br: &mut BitReader) -> Result<boo
     Ok(true)
 }
 
-pub fn read_field_paths_in<A: Allocator>(
-    br: &mut BitReader,
-    alloc: A,
-) -> Result<Vec<FieldPath, A>> {
-    let mut fp = FieldPath::new();
+pub fn read_field_paths(br: &mut BitReader) -> Result<Vec<FieldPath>> {
+    let mut fp = FieldPath::default();
     // NOTE: 10 is just an arbitrary value that performs better then not
     // specifying capacity or specifying larger capacity (eg. 20); it's based on
     // frequency of fps.len();
     //
     // sort out.txt | uniq -c | sort -nr
-    let mut fps = Vec::with_capacity_in(10, alloc);
+    let mut fps = Vec::with_capacity(10);
     'epic_loop: loop {
         // stolen from butterfly
         let mut id = 0;

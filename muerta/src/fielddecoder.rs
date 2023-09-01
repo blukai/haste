@@ -1,5 +1,3 @@
-use dyn_clone::DynClone;
-
 use crate::{
     bitbuf::{self, BitReader},
     fieldvalue::FieldValue,
@@ -7,7 +5,8 @@ use crate::{
     fnv1a::hash,
     quantizedfloat::{self, QuantizedFloat},
 };
-use std::{alloc::Allocator, mem::MaybeUninit};
+use dyn_clone::DynClone;
+use std::mem::MaybeUninit;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -71,7 +70,7 @@ pub struct U64Decoder {
 }
 
 impl U64Decoder {
-    pub fn new<A: Allocator + Clone>(field: &FlattenedSerializerField<A>) -> Self {
+    pub fn new(field: &FlattenedSerializerField) -> Self {
         if field.is_var_encoder_hash_eq(hash(b"fixed64")) {
             Self {
                 decoder: Box::<InternalU64Fixed64Decoder>::default(),
@@ -202,7 +201,7 @@ pub struct QAngleDecoder {
 }
 
 impl QAngleDecoder {
-    pub fn new<A: Allocator + Clone>(field: &FlattenedSerializerField<A>) -> Self {
+    pub fn new(field: &FlattenedSerializerField) -> Self {
         let bit_count = field.bit_count.unwrap_or_default() as usize;
 
         if field.is_var_encoder_hash_eq(hash(b"qangle_pitch_yaw")) {
@@ -246,7 +245,7 @@ struct InternalQuantizedFloatDecoder {
 }
 
 impl InternalQuantizedFloatDecoder {
-    pub fn new<A: Allocator + Clone>(field: &FlattenedSerializerField<A>) -> Result<Self> {
+    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
             quantized_float: QuantizedFloat::new(
                 field.bit_count.unwrap_or_default(),
@@ -271,7 +270,7 @@ pub struct QuantizedFloatDecoder {
 }
 
 impl QuantizedFloatDecoder {
-    pub fn new<A: Allocator + Clone>(field: &FlattenedSerializerField<A>) -> Result<Self> {
+    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
             decoder: Box::new(InternalQuantizedFloatDecoder::new(field)?),
         })
@@ -326,7 +325,7 @@ pub struct InternalF32Decoder {
 }
 
 impl InternalF32Decoder {
-    pub fn new<A: Allocator + Clone>(field: &FlattenedSerializerField<A>) -> Result<Self> {
+    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         if field.var_name_hash == hash(b"m_flSimulationTime")
             || field.var_name_hash == hash(b"m_flAnimTime")
         {
@@ -368,7 +367,7 @@ pub struct F32Decoder {
 }
 
 impl F32Decoder {
-    pub fn new<A: Allocator + Clone>(field: &FlattenedSerializerField<A>) -> Result<Self> {
+    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
             decoder: Box::new(InternalF32Decoder::new(field)?),
         })
@@ -390,7 +389,7 @@ pub struct Vec2Decoder {
 }
 
 impl Vec2Decoder {
-    pub fn new<A: Allocator + Clone>(field: &FlattenedSerializerField<A>) -> Result<Self> {
+    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
             decoder: Box::new(InternalF32Decoder::new(field)?),
         })
@@ -413,7 +412,7 @@ pub struct Vec3Decoder {
 }
 
 impl Vec3Decoder {
-    pub fn new<A: Allocator + Clone>(field: &FlattenedSerializerField<A>) -> Result<Self> {
+    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
             decoder: Box::new(InternalF32Decoder::new(field)?),
         })
@@ -440,7 +439,7 @@ pub struct Vec4Decoder {
 }
 
 impl Vec4Decoder {
-    pub fn new<A: Allocator + Clone>(field: &FlattenedSerializerField<A>) -> Result<Self> {
+    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
             decoder: Box::new(InternalF32Decoder::new(field)?),
         })
