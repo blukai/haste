@@ -1,4 +1,4 @@
-use crate::{allocstring::AllocString, hashers::I32HashBuilder, stringtables::StringTable};
+use crate::{hashers::I32HashBuilder, stringtables::StringTable};
 use hashbrown::HashMap;
 use std::alloc::{Allocator, Global};
 
@@ -11,10 +11,10 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub const INSTANCE_BASELINE_TABLE_NAME: &[u8] = b"instancebaseline";
+pub const INSTANCE_BASELINE_TABLE_NAME: &str = "instancebaseline";
 
 pub struct InstanceBaseline<A: Allocator + Clone = Global> {
-    map: HashMap<i32, AllocString<A>, I32HashBuilder, A>,
+    map: HashMap<i32, String, I32HashBuilder, A>,
 }
 
 impl Default for InstanceBaseline<Global> {
@@ -51,7 +51,7 @@ impl<A: Allocator + Clone> InstanceBaseline<A> {
         Ok(())
     }
 
-    pub fn get_data(&self, class_id: i32) -> Option<&AllocString<A>> {
+    pub fn get_data(&self, class_id: i32) -> Option<&String> {
         self.map.get(&class_id)
     }
 }

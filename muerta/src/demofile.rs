@@ -118,8 +118,6 @@ impl<R: Read + Seek> DemoFile<R> {
             left
         };
 
-        // TODO: prost does not suppoer allocator_api -> find a way to decode
-        // protos with custom allocator
         M::decode(data).map_err(Error::Prost)
     }
 

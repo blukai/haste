@@ -1,5 +1,4 @@
 use crate::{
-    allocstring::{AllocString, AllocStringFromIn},
     bitbuf::{self, BitReader},
     hashers::I32HashBuilder,
 };
@@ -43,20 +42,19 @@ impl StringHistoryEntry {
 const MAX_USERDATA_BITS: usize = 17;
 const MAX_USERDATA_SIZE: usize = 1 << MAX_USERDATA_BITS;
 
-pub struct StringTableItem<A: Allocator + Clone> {
-    pub string: Option<AllocString<A>>,
-    pub user_data: Option<AllocString<A>>,
+pub struct StringTableItem {
+    pub string: Option<String>,
+    pub user_data: Option<String>,
 }
 
 pub struct StringTable<A: Allocator + Clone> {
-    pub name: AllocString<A>,
+    pub name: String,
     user_data_fixed_size: bool,
     user_data_size: i32,
     user_data_size_bits: i32,
     flags: i32,
     using_varint_bitcounts: bool,
-    items: HashMap<i32, StringTableItem<A>, I32HashBuilder, A>,
-    alloc: A,
+    items: HashMap<i32, StringTableItem, I32HashBuilder, A>,
 }
 
 impl<A: Allocator + Clone> StringTable<A> {
@@ -70,14 +68,13 @@ impl<A: Allocator + Clone> StringTable<A> {
         alloc: A,
     ) -> Self {
         Self {
-            name: AllocString::from_in(name, alloc.clone()),
+            name: name.to_string(),
             user_data_fixed_size,
             user_data_size,
             user_data_size_bits,
             flags,
             using_varint_bitcounts,
-            items: HashMap::with_hasher_in(I32HashBuilder::default(), alloc.clone()),
-            alloc,
+            items: HashMap::with_hasher_in(I32HashBuilder::default(), alloc),
         }
     }
 
@@ -100,6 +97,9 @@ impl<A: Allocator + Clone> StringTable<A> {
         let mut history = [unsafe { StringHistoryEntry::new_uninit() }; 32];
         let mut history_delta_index: usize = 0;
 
+        // TODO: maybe create vecs instead of arrays because those are being
+        // converted to strings later on, and string's underlying data type is
+        // vec
         #[allow(invalid_value)]
         let mut string_buf: [u8; 1024] = unsafe { MaybeUninit::uninit().assume_init() };
         #[allow(invalid_value)]
@@ -215,8 +215,9 @@ impl<A: Allocator + Clone> StringTable<A> {
             self.items.insert(
                 entry_index,
                 StringTableItem {
-                    string: string.map(|v| AllocString::from_in(v, self.alloc.clone())),
-                    user_data: user_data.map(|v| AllocString::from_in(v, self.alloc.clone())),
+                    string: string.map(|v| unsafe { String::from_utf8_unchecked(v.to_vec()) }),
+                    user_data: user_data
+                        .map(|v| unsafe { String::from_utf8_unchecked(v.to_vec()) }),
                 },
             );
         }
@@ -229,7 +230,7 @@ impl<A: Allocator + Clone> StringTable<A> {
     // void EnableRollback();
     // void RestoreTick(int tick);
 
-    pub fn iter(&self) -> Iter<'_, i32, StringTableItem<A>> {
+    pub fn iter(&self) -> Iter<'_, i32, StringTableItem> {
         self.items.iter()
     }
 }

@@ -1,5 +1,4 @@
 use crate::{
-    allocstring::{AllocString, AllocStringFromIn},
     fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialType},
     fnv1a,
     hashers::{I32HashBuilder, U64HashBuiler},
@@ -32,10 +31,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone)]
 pub struct FlattenedSerializerField<A: Allocator + Clone> {
-    pub var_type: AllocString<A>,
+    pub var_type: String,
     pub var_type_hash: u64,
 
-    pub var_name: AllocString<A>,
+    pub var_name: String,
     pub var_name_hash: u64,
 
     // TODO: figure out which fields should, and which should not be optional
@@ -44,31 +43,25 @@ pub struct FlattenedSerializerField<A: Allocator + Clone> {
     pub high_value: Option<f32>,
     pub encode_flags: Option<i32>,
 
-    pub field_serializer_name: Option<AllocString<A>>,
+    pub field_serializer_name: Option<String>,
     pub field_serializer_name_hash: Option<u64>,
     pub field_serializer: Option<Rc<FlattenedSerializer<A>>>,
 
     pub field_serializer_version: Option<i32>,
-    pub send_node: Option<AllocString<A>>,
+    pub send_node: Option<String>,
 
-    pub var_encoder: Option<AllocString<A>>,
+    pub var_encoder: Option<String>,
     pub var_encoder_hash: Option<u64>,
 
     pub metadata: Option<FieldMetadata>,
 }
 
 impl<A: Allocator + Clone> FlattenedSerializerField<A> {
-    fn new_in(
+    fn new(
         svcmsg: &protos::CsvcMsgFlattenedSerializer,
         field: &protos::ProtoFlattenedSerializerFieldT,
-        alloc: A,
     ) -> Self {
-        let resolve_sym = |v: i32| {
-            Some(AllocString::from_in(
-                &svcmsg.symbols[v as usize],
-                alloc.clone(),
-            ))
-        };
+        let resolve_sym = |v: i32| Some(svcmsg.symbols[v as usize].clone());
 
         let var_type = field.var_type_sym.and_then(resolve_sym).expect("var type");
         let var_type_hash = fnv1a::hash(var_type.as_bytes());
@@ -132,12 +125,12 @@ impl<A: Allocator + Clone> FlattenedSerializerField<A> {
     }
 
     #[inline]
-    fn default_in(alloc: A) -> Self {
+    fn default() -> Self {
         Self {
-            var_type: AllocString::new_in(alloc.clone()),
+            var_type: String::default(),
             var_type_hash: 0,
 
-            var_name: AllocString::new_in(alloc),
+            var_name: String::default(),
             var_name_hash: 0,
 
             // TODO: figure out which fields should, and which should not be optional
@@ -165,7 +158,7 @@ impl<A: Allocator + Clone> FlattenedSerializerField<A> {
 // clonable which means that all members of it also should be clonable.
 #[derive(Clone)]
 pub struct FlattenedSerializer<A: Allocator + Clone> {
-    pub serializer_name: AllocString<A>,
+    pub serializer_name: String,
     pub serializer_version: Option<i32>,
     pub fields: Vec<Rc<FlattenedSerializerField<A>>, A>,
 
@@ -178,12 +171,7 @@ impl<A: Allocator + Clone> FlattenedSerializer<A> {
         fs: &protos::ProtoFlattenedSerializerT,
         alloc: A,
     ) -> Result<Self> {
-        let resolve_sym = |v: i32| {
-            Some(AllocString::from_in(
-                &svcmsg.symbols[v as usize],
-                alloc.clone(),
-            ))
-        };
+        let resolve_sym = |v: i32| Some(svcmsg.symbols[v as usize].clone());
 
         let serializer_name = fs
             .serializer_name_sym
@@ -259,10 +247,9 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
 
             for field_index in serializer.fields_index.iter() {
                 if !fields.contains_key(field_index) {
-                    let mut field = FlattenedSerializerField::new_in(
+                    let mut field = FlattenedSerializerField::new(
                         &svcmsg,
                         &svcmsg.fields[*field_index as usize],
-                        self.alloc.clone(),
                     );
 
                     if let Some(field_serializer_name_hash) =
@@ -275,6 +262,7 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
                     }
 
                     field.metadata = get_field_metadata(&field)?;
+                    // TODO: maybe extract arms into separate functions
                     match field.metadata.as_ref() {
                         Some(field_metadata) => match field_metadata.special_type {
                             Some(FieldSpecialType::Array { length }) => {
@@ -282,7 +270,7 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
                                 fields.resize(length, Rc::new(field.clone()));
 
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                    serializer_name: AllocString::new_in(self.alloc.clone()),
+                                    serializer_name: String::default(),
                                     serializer_version: None,
                                     fields,
                                     serializer_name_hash: 0,
@@ -294,7 +282,7 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
                                 fields.resize(LENGTH, Rc::new(field.clone()));
 
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                    serializer_name: AllocString::new_in(self.alloc.clone()),
+                                    serializer_name: String::default(),
                                     serializer_version: None,
                                     fields,
                                     serializer_name_hash: 0,
@@ -303,8 +291,7 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
                             Some(FieldSpecialType::VariableLengthSerializerArray {
                                 element_serializer_name_hash,
                             }) => {
-                                let mut sub_field =
-                                    FlattenedSerializerField::default_in(self.alloc.clone());
+                                let mut sub_field = FlattenedSerializerField::default();
                                 sub_field.field_serializer =
                                     serializers.get(&element_serializer_name_hash).cloned();
 
@@ -314,7 +301,7 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
                                 sub_fields.resize(SIZE, Rc::new(sub_field));
 
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                    serializer_name: AllocString::new_in(self.alloc.clone()),
+                                    serializer_name: String::default(),
                                     serializer_version: None,
                                     fields: sub_fields,
                                     serializer_name_hash: 0,
