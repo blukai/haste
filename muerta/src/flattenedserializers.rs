@@ -31,10 +31,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone)]
 pub struct FlattenedSerializerField<A: Allocator + Clone> {
-    pub var_type: String,
+    pub var_type: Box<str>,
     pub var_type_hash: u64,
 
-    pub var_name: String,
+    pub var_name: Box<str>,
     pub var_name_hash: u64,
 
     // TODO: figure out which fields should, and which should not be optional
@@ -43,14 +43,14 @@ pub struct FlattenedSerializerField<A: Allocator + Clone> {
     pub high_value: Option<f32>,
     pub encode_flags: Option<i32>,
 
-    pub field_serializer_name: Option<String>,
+    pub field_serializer_name: Option<Box<str>>,
     pub field_serializer_name_hash: Option<u64>,
     pub field_serializer: Option<Rc<FlattenedSerializer<A>>>,
 
     pub field_serializer_version: Option<i32>,
-    pub send_node: Option<String>,
+    pub send_node: Option<Box<str>>,
 
-    pub var_encoder: Option<String>,
+    pub var_encoder: Option<Box<str>>,
     pub var_encoder_hash: Option<u64>,
 
     pub metadata: Option<FieldMetadata>,
@@ -61,7 +61,7 @@ impl<A: Allocator + Clone> FlattenedSerializerField<A> {
         svcmsg: &protos::CsvcMsgFlattenedSerializer,
         field: &protos::ProtoFlattenedSerializerFieldT,
     ) -> Self {
-        let resolve_sym = |v: i32| Some(svcmsg.symbols[v as usize].clone());
+        let resolve_sym = |v: i32| Some(svcmsg.symbols[v as usize].clone().into_boxed_str());
 
         let var_type = field.var_type_sym.and_then(resolve_sym).expect("var type");
         let var_type_hash = fnv1a::hash(var_type.as_bytes());
@@ -127,10 +127,10 @@ impl<A: Allocator + Clone> FlattenedSerializerField<A> {
     #[inline]
     fn default() -> Self {
         Self {
-            var_type: String::default(),
+            var_type: Box::default(),
             var_type_hash: 0,
 
-            var_name: String::default(),
+            var_name: Box::default(),
             var_name_hash: 0,
 
             // TODO: figure out which fields should, and which should not be optional
@@ -158,7 +158,7 @@ impl<A: Allocator + Clone> FlattenedSerializerField<A> {
 // clonable which means that all members of it also should be clonable.
 #[derive(Clone)]
 pub struct FlattenedSerializer<A: Allocator + Clone> {
-    pub serializer_name: String,
+    pub serializer_name: Box<str>,
     pub serializer_version: Option<i32>,
     pub fields: Vec<Rc<FlattenedSerializerField<A>>, A>,
 
@@ -171,7 +171,7 @@ impl<A: Allocator + Clone> FlattenedSerializer<A> {
         fs: &protos::ProtoFlattenedSerializerT,
         alloc: A,
     ) -> Result<Self> {
-        let resolve_sym = |v: i32| Some(svcmsg.symbols[v as usize].clone());
+        let resolve_sym = |v: i32| Some(svcmsg.symbols[v as usize].clone().into_boxed_str());
 
         let serializer_name = fs
             .serializer_name_sym
@@ -270,7 +270,7 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
                                 fields.resize(length, Rc::new(field.clone()));
 
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                    serializer_name: String::default(),
+                                    serializer_name: Box::default(),
                                     serializer_version: None,
                                     fields,
                                     serializer_name_hash: 0,
@@ -282,7 +282,7 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
                                 fields.resize(LENGTH, Rc::new(field.clone()));
 
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                    serializer_name: String::default(),
+                                    serializer_name: Box::default(),
                                     serializer_version: None,
                                     fields,
                                     serializer_name_hash: 0,
@@ -301,7 +301,7 @@ impl<A: Allocator + Clone> FlattenedSerializers<A> {
                                 sub_fields.resize(SIZE, Rc::new(sub_field));
 
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                    serializer_name: String::default(),
+                                    serializer_name: Box::default(),
                                     serializer_version: None,
                                     fields: sub_fields,
                                     serializer_name_hash: 0,

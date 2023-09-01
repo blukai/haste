@@ -7,11 +7,3 @@ edition = "2021"
 prost = "0.11"
 snap = "1.1"
 muerta = { path = "../../muerta" }
-
-[features]
-bumpalo = ["dep:bumpalo"]
-
-[dependencies.bumpalo]
-version = "3.9"
-features = ["allocator_api"]
-optional = true

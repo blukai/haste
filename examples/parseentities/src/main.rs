@@ -1,5 +1,3 @@
-#![feature(allocator_api)]
-
 use muerta::{
     bitbuf::BitReader,
     demofile::{CmdHeader, DemoFile},
@@ -12,25 +10,25 @@ use muerta::{
 };
 use prost::Message;
 use std::{
-    alloc::Allocator,
     fs::File,
     io::{BufReader, Read, Seek, SeekFrom},
+    time::Instant,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-struct Parser<R: Read + Seek, A: Allocator + Clone> {
+struct Parser<R: Read + Seek> {
     demo_file: DemoFile<R>,
     buf: Vec<u8>,
-    string_tables: StringTables<A>,
-    instance_baseline: InstanceBaseline<A>,
-    flattened_serializers: FlattenedSerializers<A>,
-    entity_classes: EntityClasses<A>,
-    entities: Entities<A>,
+    string_tables: StringTables,
+    instance_baseline: InstanceBaseline,
+    flattened_serializers: FlattenedSerializers,
+    entity_classes: EntityClasses,
+    entities: Entities,
 }
 
-impl<R: Read + Seek, A: Allocator + Clone> Parser<R, A> {
-    fn from_reader_in(r: R, alloc: A) -> Result<Self> {
+impl<R: Read + Seek> Parser<R> {
+    fn from_reader(r: R) -> Result<Self> {
         let mut demo_file = DemoFile::from_reader(r);
         // TODO: validate demo header
         let _demo_header = demo_file.read_demo_header()?;
@@ -39,11 +37,11 @@ impl<R: Read + Seek, A: Allocator + Clone> Parser<R, A> {
             demo_file,
             // 2mb
             buf: vec![0; 1024 * 1024 * 2],
-            string_tables: StringTables::new_in(alloc.clone()),
-            instance_baseline: InstanceBaseline::new_in(alloc.clone()),
-            flattened_serializers: FlattenedSerializers::new_in(alloc.clone()),
-            entity_classes: EntityClasses::new_in(alloc.clone()),
-            entities: Entities::new_in(alloc),
+            string_tables: StringTables::default(),
+            instance_baseline: InstanceBaseline::default(),
+            flattened_serializers: FlattenedSerializers::default(),
+            entity_classes: EntityClasses::default(),
+            entities: Entities::default(),
         })
     }
 
@@ -72,6 +70,7 @@ impl<R: Read + Seek, A: Allocator + Clone> Parser<R, A> {
                     .demo_file
                     .read_cmd::<protos::CDemoSendTables>(&cmd_header, &mut self.buf)?;
                 self.flattened_serializers.parse(cmd)?;
+                // panic!("EXIT");
             }
 
             EDemoCommands::DemClassInfo => {
@@ -138,6 +137,10 @@ impl<R: Read + Seek, A: Allocator + Clone> Parser<R, A> {
             svcmsg.using_varint_bitcounts(),
         )?;
 
+        // if !string_table.name.eq(INSTANCE_BASELINE_TABLE_NAME) {
+        //     return Ok(());
+        // }
+
         let string_data = if svcmsg.data_compressed() {
             let sd = svcmsg.string_data();
             let decompress_len = snap::raw::decompress_len(sd)?;
@@ -148,7 +151,7 @@ impl<R: Read + Seek, A: Allocator + Clone> Parser<R, A> {
         };
         string_table.parse_update(&mut BitReader::new(string_data), svcmsg.num_entries())?;
 
-        if string_table.name.eq(INSTANCE_BASELINE_TABLE_NAME) {
+        if string_table.name.as_ref().eq(INSTANCE_BASELINE_TABLE_NAME) {
             self.instance_baseline.update(string_table)?;
         }
 
@@ -164,12 +167,16 @@ impl<R: Read + Seek, A: Allocator + Clone> Parser<R, A> {
             .get_table_mut(svcmsg.table_id.expect("table id") as usize)
             .expect("table");
 
+        // if !string_table.name.eq(INSTANCE_BASELINE_TABLE_NAME) {
+        //     return Ok(());
+        // }
+
         string_table.parse_update(
             &mut BitReader::new(svcmsg.string_data()),
             svcmsg.num_changed_entries(),
         )?;
 
-        if string_table.name.eq(INSTANCE_BASELINE_TABLE_NAME) {
+        if string_table.name.as_ref().eq(INSTANCE_BASELINE_TABLE_NAME) {
             self.instance_baseline.update(string_table)?;
         }
 
@@ -198,19 +205,16 @@ fn main() -> Result<()> {
         std::process::exit(42);
     }
 
-    #[cfg(feature = "bumpalo")]
-    let bump = bumpalo::Bump::with_capacity(1024 * 1024 * 1024 * 2);
-    #[cfg(feature = "bumpalo")]
-    let alloc = &bump;
+    for _ in 0..10 {
+        let file = File::open(filepath.unwrap())?;
+        let file = BufReader::new(file);
 
-    #[cfg(not(feature = "bumpalo"))]
-    let alloc = std::alloc::Global;
-
-    let file = File::open(filepath.unwrap())?;
-    let file = BufReader::new(file);
-    let mut parser = Parser::from_reader_in(file, alloc)?;
-    parser.run()?;
-    println!("done!");
+        let start = Instant::now();
+        let mut parser = Parser::from_reader(file)?;
+        parser.run()?;
+        let duration = start.elapsed();
+        println!("time elapsed: {:?}", duration);
+    }
 
     Ok(())
 }

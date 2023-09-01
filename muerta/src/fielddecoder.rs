@@ -138,9 +138,7 @@ impl FieldDecode for StringDecoder {
         #[allow(invalid_value)]
         let mut buf: [u8; 1024] = unsafe { MaybeUninit::uninit().assume_init() };
         let n = br.read_string(&mut buf, false)?;
-        Ok(unsafe { std::str::from_utf8_unchecked(&buf[..n]) }
-            .to_string()
-            .into())
+        Ok(Box::<str>::from(unsafe { std::str::from_utf8_unchecked(&buf[..n]) }).into())
     }
 }
 

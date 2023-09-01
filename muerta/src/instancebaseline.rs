@@ -14,7 +14,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub const INSTANCE_BASELINE_TABLE_NAME: &str = "instancebaseline";
 
 pub struct InstanceBaseline<A: Allocator + Clone = Global> {
-    map: HashMap<i32, String, I32HashBuilder, A>,
+    map: HashMap<i32, Box<str>, I32HashBuilder, A>,
 }
 
 impl Default for InstanceBaseline<Global> {
@@ -42,7 +42,7 @@ impl<A: Allocator + Clone> InstanceBaseline<A> {
                 string.len()
             );
 
-            let class_id = string.as_str().parse::<i32>()?;
+            let class_id = string.parse::<i32>()?;
             self.map.insert(
                 class_id,
                 item.user_data.clone().expect("instance baseline data"),
@@ -51,7 +51,7 @@ impl<A: Allocator + Clone> InstanceBaseline<A> {
         Ok(())
     }
 
-    pub fn get_data(&self, class_id: i32) -> Option<&String> {
+    pub fn get_data(&self, class_id: i32) -> Option<&Box<str>> {
         self.map.get(&class_id)
     }
 }

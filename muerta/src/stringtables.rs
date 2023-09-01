@@ -43,12 +43,12 @@ const MAX_USERDATA_BITS: usize = 17;
 const MAX_USERDATA_SIZE: usize = 1 << MAX_USERDATA_BITS;
 
 pub struct StringTableItem {
-    pub string: Option<String>,
-    pub user_data: Option<String>,
+    pub string: Option<Box<str>>,
+    pub user_data: Option<Box<str>>,
 }
 
 pub struct StringTable<A: Allocator + Clone> {
-    pub name: String,
+    pub name: Box<str>,
     user_data_fixed_size: bool,
     user_data_size: i32,
     user_data_size_bits: i32,
@@ -68,7 +68,7 @@ impl<A: Allocator + Clone> StringTable<A> {
         alloc: A,
     ) -> Self {
         Self {
-            name: name.to_string(),
+            name: name.into(),
             user_data_fixed_size,
             user_data_size,
             user_data_size_bits,
@@ -215,9 +215,9 @@ impl<A: Allocator + Clone> StringTable<A> {
             self.items.insert(
                 entry_index,
                 StringTableItem {
-                    string: string.map(|v| unsafe { String::from_utf8_unchecked(v.to_vec()) }),
+                    string: string.map(|v| unsafe { std::str::from_utf8_unchecked(v) }.into()),
                     user_data: user_data
-                        .map(|v| unsafe { String::from_utf8_unchecked(v.to_vec()) }),
+                        .map(|v| unsafe { std::str::from_utf8_unchecked(v) }.into()),
                 },
             );
         }
@@ -286,7 +286,9 @@ impl<A: Allocator + Clone> StringTables<A> {
 
     // INetworkStringTable *FindTable( const char *tableName ) const ;
     pub fn find_table(&self, name: &str) -> Option<&StringTable<A>> {
-        self.tables.iter().find(|&table| table.name.eq(name))
+        self.tables
+            .iter()
+            .find(|&table| table.name.as_ref().eq(name))
     }
 
     // INetworkStringTable	*GetTable( TABLEID stringTable ) const;

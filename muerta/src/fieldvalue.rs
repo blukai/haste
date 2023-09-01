@@ -9,7 +9,7 @@ pub enum FieldValue {
     F32(f32),
     Bool(bool),
     // TODO: array backed string
-    String(String),
+    String(Box<str>),
     Vec3([f32; 3]),
     Vec2([f32; 2]),
     Vec4([f32; 4]),
@@ -51,8 +51,8 @@ impl From<bool> for FieldValue {
     }
 }
 
-impl From<String> for FieldValue {
-    fn from(value: String) -> Self {
+impl From<Box<str>> for FieldValue {
+    fn from(value: Box<str>) -> Self {
         FieldValue::String(value)
     }
 }
