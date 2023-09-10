@@ -3,7 +3,7 @@ use crate::{
     hashers::I32HashBuilder,
 };
 use hashbrown::{hash_map::Iter, HashMap};
-use std::mem::MaybeUninit;
+use std::{mem::MaybeUninit, rc::Rc};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -41,7 +41,12 @@ const MAX_USERDATA_SIZE: usize = 1 << MAX_USERDATA_BITS;
 
 pub struct StringTableItem {
     pub string: Option<Box<str>>,
-    pub user_data: Option<Box<str>>,
+    // NOTE: current idea for using Rc instead of Box for user_data is that
+    // user_data is being accessed a ton (by instancebaseline.get_data calls)
+    // and it sounds like it would be more efficient to deal with cloned Rc, in
+    // which case underlying data is one pointer jump away insteadn of &Box
+    // which is 2 jumps away.
+    pub user_data: Option<Rc<str>>,
 }
 
 pub struct StringTable {

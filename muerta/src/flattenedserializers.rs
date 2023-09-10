@@ -323,9 +323,7 @@ impl FlattenedSerializers {
     pub fn get_by_serializer_name_hash(
         &self,
         serializer_name_hash: u64,
-    ) -> Option<&FlattenedSerializer> {
-        self.serializers()
-            .get(&serializer_name_hash)
-            .map(|v| v.as_ref())
+    ) -> Option<&Rc<FlattenedSerializer>> {
+        self.serializers().get(&serializer_name_hash)
     }
 }

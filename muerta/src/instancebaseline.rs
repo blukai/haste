@@ -1,5 +1,6 @@
 use crate::{hashers::I32HashBuilder, stringtables::StringTable};
 use hashbrown::HashMap;
+use std::rc::Rc;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -14,7 +15,7 @@ pub const INSTANCE_BASELINE_TABLE_NAME: &str = "instancebaseline";
 
 #[derive(Default)]
 pub struct InstanceBaseline {
-    map: HashMap<i32, Box<str>, I32HashBuilder>,
+    map: HashMap<i32, Rc<str>, I32HashBuilder>,
 }
 
 impl InstanceBaseline {
@@ -39,7 +40,7 @@ impl InstanceBaseline {
         Ok(())
     }
 
-    pub fn get_data(&self, class_id: i32) -> Option<&Box<str>> {
-        self.map.get(&class_id)
+    pub fn get_data(&self, class_id: i32) -> Option<Rc<str>> {
+        self.map.get(&class_id).cloned()
     }
 }

@@ -10,6 +10,7 @@ use crate::{
     protos,
 };
 use hashbrown::HashMap;
+use std::rc::Rc;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -75,7 +76,7 @@ fn determine_update_type(update_flags: usize) -> UpdateType {
 
 #[derive(Clone)]
 pub struct Entity {
-    flattened_serializer: FlattenedSerializer,
+    flattened_serializer: Rc<FlattenedSerializer>,
     field_values: HashMap<u64, FieldValue, U64HashBuiler>,
 }
 
@@ -237,12 +238,8 @@ impl Entities {
             field_values,
         };
 
-        let mut baseline_br = BitReader::new(
-            instance_baseline
-                .get_data(class_id)
-                .expect("baseline data")
-                .as_bytes(),
-        );
+        let baseline_data = instance_baseline.get_data(class_id).expect("baseline data");
+        let mut baseline_br = BitReader::new(baseline_data.as_bytes());
         entity.parse(&mut baseline_br)?;
         entity.parse(br)?;
 
