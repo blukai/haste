@@ -139,10 +139,11 @@ impl Entity {
                 //     field.var_type
                 // );
 
-                // SAFETY: metadata is being generated for the field in
+                // SAFETY: metadata for the field is generated in
                 // flattenedserializers.rs; if metadata cannot be generated -
-                // FlattenedSerializers::parse will error thus we'll never get here.
-                // it is safe to assume that this cannot be None.
+                // FlattenedSerializers::parse will fail thus we'll never get
+                // here. it is safe to assume that field metadata cannot be
+                // None.
                 let field_metadata = unsafe { field.metadata.as_ref().unwrap_unchecked() };
                 let field_value = field_metadata.decoder.decode(br)?;
 

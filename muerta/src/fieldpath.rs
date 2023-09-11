@@ -1,5 +1,5 @@
 use crate::bitbuf::{self, BitReader};
-use std::cell::{RefCell, RefMut};
+use std::cell::RefCell;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -455,20 +455,20 @@ fn lookup_exec_op(id: u32, fp: &mut FieldPath, br: &mut BitReader) -> Result<boo
     Ok(true)
 }
 
-fn init_field_paths_vec() -> Vec<FieldPath> {
-    const CAP: usize = 4096;
-    let mut ret = Vec::with_capacity(CAP);
-    unsafe { ret.set_len(CAP) };
-    ret
-}
-
 thread_local! {
-    pub(crate) static FIELD_PATHS: RefCell<Vec<FieldPath>> = RefCell::new(init_field_paths_vec());
+    // NOTE: 4096 is an arbitrary value that is large enough that that came out
+    // of printing out count of fps collected per "run". (sort -nr can be handy)
+    pub(crate) static FIELD_PATHS: RefCell<Vec<FieldPath>> = {
+        const SIZE: usize = 4096;
+        let mut v = Vec::with_capacity(SIZE);
+        unsafe { v.set_len(SIZE) };
+        RefCell::new(v)
+    };
 }
 
 pub(crate) fn read_field_paths<'a>(
     br: &mut BitReader,
-    fps: &'a mut RefMut<'_, Vec<FieldPath>>,
+    fps: &'a mut [FieldPath],
 ) -> Result<&'a [FieldPath]> {
     let mut fp = FieldPath::default();
     let mut i: isize = -1;
