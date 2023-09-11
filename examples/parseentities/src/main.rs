@@ -12,7 +12,6 @@ use prost::Message;
 use std::{
     fs::File,
     io::{BufReader, Read, Seek, SeekFrom},
-    time::Instant,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -70,7 +69,6 @@ impl<R: Read + Seek> Parser<R> {
                     .demo_file
                     .read_cmd::<protos::CDemoSendTables>(&cmd_header, &mut self.buf)?;
                 self.flattened_serializers.parse(cmd)?;
-                // panic!("EXIT");
             }
 
             EDemoCommands::DemClassInfo => {
@@ -137,10 +135,6 @@ impl<R: Read + Seek> Parser<R> {
             svcmsg.using_varint_bitcounts(),
         )?;
 
-        // if !string_table.name.eq(INSTANCE_BASELINE_TABLE_NAME) {
-        //     return Ok(());
-        // }
-
         let string_data = if svcmsg.data_compressed() {
             let sd = svcmsg.string_data();
             let decompress_len = snap::raw::decompress_len(sd)?;
@@ -166,10 +160,6 @@ impl<R: Read + Seek> Parser<R> {
             .string_tables
             .get_table_mut(svcmsg.table_id.expect("table id") as usize)
             .expect("table");
-
-        // if !string_table.name.eq(INSTANCE_BASELINE_TABLE_NAME) {
-        //     return Ok(());
-        // }
 
         string_table.parse_update(
             &mut BitReader::new(svcmsg.string_data()),
@@ -205,16 +195,10 @@ fn main() -> Result<()> {
         std::process::exit(42);
     }
 
-    for _ in 0..10 {
-        let file = File::open(filepath.unwrap())?;
-        let file = BufReader::new(file);
-
-        let start = Instant::now();
-        let mut parser = Parser::from_reader(file)?;
-        parser.run()?;
-        let duration = start.elapsed();
-        println!("time elapsed: {:?}", duration);
-    }
-
-    Ok(())
+    let file = File::open(filepath.unwrap())?;
+    // NOTE: BufReader makes io much more efficient (see BufReader's docs for
+    // more info).
+    let file = BufReader::new(file);
+    let mut parser = Parser::from_reader(file)?;
+    parser.run()
 }

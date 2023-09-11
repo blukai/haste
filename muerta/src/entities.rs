@@ -84,72 +84,75 @@ impl Entity {
     fn parse(&mut self, br: &mut BitReader) -> Result<()> {
         // eprintln!("-- {}", self.flattened_serializer.serializer_name);
 
-        let fps = fieldpath::read_field_paths(br)?;
-        for fp in fps {
-            let field = match fp.position {
-                0 => self.flattened_serializer.get_child(fp.get(0)),
-                1 => self
-                    .flattened_serializer
-                    .get_child(fp.get(0))
-                    .get_child(fp.get(1)),
-                2 => self
-                    .flattened_serializer
-                    .get_child(fp.get(0))
-                    .get_child(fp.get(1))
-                    .get_child(fp.get(2)),
-                3 => self
-                    .flattened_serializer
-                    .get_child(fp.get(0))
-                    .get_child(fp.get(1))
-                    .get_child(fp.get(2))
-                    .get_child(fp.get(3)),
-                4 => self
-                    .flattened_serializer
-                    .get_child(fp.get(0))
-                    .get_child(fp.get(1))
-                    .get_child(fp.get(2))
-                    .get_child(fp.get(3))
-                    .get_child(fp.get(4)),
-                5 => self
-                    .flattened_serializer
-                    .get_child(fp.get(0))
-                    .get_child(fp.get(1))
-                    .get_child(fp.get(2))
-                    .get_child(fp.get(3))
-                    .get_child(fp.get(4))
-                    .get_child(fp.get(5)),
-                6 => self
-                    .flattened_serializer
-                    .get_child(fp.get(0))
-                    .get_child(fp.get(1))
-                    .get_child(fp.get(2))
-                    .get_child(fp.get(3))
-                    .get_child(fp.get(4))
-                    .get_child(fp.get(5))
-                    .get_child(fp.get(6)),
-                _ => panic!("invalid position"),
-            };
+        fieldpath::FIELD_PATHS.with(|fps| {
+            let mut fps = fps.borrow_mut();
+            let fps = fieldpath::read_field_paths(br, &mut fps)?;
+            for fp in fps {
+                let field = match fp.position {
+                    0 => self.flattened_serializer.get_child(fp.get(0)),
+                    1 => self
+                        .flattened_serializer
+                        .get_child(fp.get(0))
+                        .get_child(fp.get(1)),
+                    2 => self
+                        .flattened_serializer
+                        .get_child(fp.get(0))
+                        .get_child(fp.get(1))
+                        .get_child(fp.get(2)),
+                    3 => self
+                        .flattened_serializer
+                        .get_child(fp.get(0))
+                        .get_child(fp.get(1))
+                        .get_child(fp.get(2))
+                        .get_child(fp.get(3)),
+                    4 => self
+                        .flattened_serializer
+                        .get_child(fp.get(0))
+                        .get_child(fp.get(1))
+                        .get_child(fp.get(2))
+                        .get_child(fp.get(3))
+                        .get_child(fp.get(4)),
+                    5 => self
+                        .flattened_serializer
+                        .get_child(fp.get(0))
+                        .get_child(fp.get(1))
+                        .get_child(fp.get(2))
+                        .get_child(fp.get(3))
+                        .get_child(fp.get(4))
+                        .get_child(fp.get(5)),
+                    6 => self
+                        .flattened_serializer
+                        .get_child(fp.get(0))
+                        .get_child(fp.get(1))
+                        .get_child(fp.get(2))
+                        .get_child(fp.get(3))
+                        .get_child(fp.get(4))
+                        .get_child(fp.get(5))
+                        .get_child(fp.get(6)),
+                    _ => panic!("invalid position: {}", fp.position),
+                };
 
-            // eprint!(
-            //     "{:?} {} {} ",
-            //     &fp.data[..=fp.position],
-            //     field.var_name,
-            //     field.var_type
-            // );
+                // eprint!(
+                //     "{:?} {} {} ",
+                //     &fp.data[..=fp.position],
+                //     field.var_name,
+                //     field.var_type
+                // );
 
-            // SAFETY: metadata is being generated for the field in
-            // flattenedserializers.rs; if metadata cannot be generated -
-            // FlattenedSerializers::parse will error thus we'll never get here.
-            // it is safe to assume that this cannot be None.
-            let field_metadata = unsafe { field.metadata.as_ref().unwrap_unchecked() };
-            let field_value = field_metadata.decoder.decode(br)?;
+                // SAFETY: metadata is being generated for the field in
+                // flattenedserializers.rs; if metadata cannot be generated -
+                // FlattenedSerializers::parse will error thus we'll never get here.
+                // it is safe to assume that this cannot be None.
+                let field_metadata = unsafe { field.metadata.as_ref().unwrap_unchecked() };
+                let field_value = field_metadata.decoder.decode(br)?;
 
-            // eprintln!(" -> {:?}", field_value);
+                // eprintln!(" -> {:?}", field_value);
 
-            self.field_values.insert(field.var_name_hash, field_value);
-        }
+                self.field_values.insert(field.var_name_hash, field_value);
+            }
 
-        Ok(())
+            Ok(())
+        })
     }
 }
 

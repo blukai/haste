@@ -104,15 +104,18 @@ impl FlattenedSerializerField {
 
     #[inline(always)]
     pub fn get_child(&self, index: usize) -> &Self {
-        self.field_serializer
-            .as_ref()
-            .unwrap_or_else(|| {
-                panic!(
-                    "expected field serialized to be present in field of type {}",
-                    self.var_type
-                )
-            })
-            .get_child(index)
+        unsafe {
+            self.field_serializer
+                .as_ref()
+                // .unwrap_or_else(|| {
+                //     panic!(
+                //         "expected field serialized to be present in field of type {}",
+                //         self.var_type
+                //     )
+                // })
+                .unwrap_unchecked()
+                .get_child(index)
+        }
     }
 
     pub fn is_var_encoder_hash_eq(&self, var_encoder_hash: u64) -> bool {
@@ -185,12 +188,17 @@ impl FlattenedSerializer {
 
     #[inline(always)]
     pub fn get_child(&self, index: usize) -> &FlattenedSerializerField {
-        self.fields.get(index).unwrap_or_else(|| {
-            panic!(
-                "expected field to be at index {} in {}",
-                index, self.serializer_name
-            )
-        })
+        unsafe {
+            self.fields
+                .get(index)
+                // .unwrap_or_else(|| {
+                //     panic!(
+                //         "expected field to be at index {} in {}",
+                //         index, self.serializer_name
+                //     )
+                // })
+                .unwrap_unchecked()
+        }
     }
 }
 
@@ -300,7 +308,8 @@ impl FlattenedSerializers {
                     fields.insert(*field_index, Rc::new(field));
                 };
 
-                let field = fields.get(field_index).unwrap();
+                // SAFETY: field was inserted right before, see above ^
+                let field = unsafe { fields.get(field_index).unwrap_unchecked() };
                 flattened_serializer.fields.push(field.clone());
             }
 

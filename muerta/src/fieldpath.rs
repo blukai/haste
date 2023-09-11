@@ -1,4 +1,5 @@
 use crate::bitbuf::{self, BitReader};
+use std::cell::{RefCell, RefMut};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -44,7 +45,7 @@ impl FieldPath {
 
     #[inline(always)]
     pub fn get(&self, index: usize) -> usize {
-        self.data[index] as usize
+        unsafe { *self.data.get_unchecked(index) as usize }
     }
 }
 
@@ -454,15 +455,25 @@ fn lookup_exec_op(id: u32, fp: &mut FieldPath, br: &mut BitReader) -> Result<boo
     Ok(true)
 }
 
-pub fn read_field_paths(br: &mut BitReader) -> Result<Vec<FieldPath>> {
+fn init_field_paths_vec() -> Vec<FieldPath> {
+    const CAP: usize = 4096;
+    let mut ret = Vec::with_capacity(CAP);
+    unsafe { ret.set_len(CAP) };
+    ret
+}
+
+thread_local! {
+    pub(crate) static FIELD_PATHS: RefCell<Vec<FieldPath>> = RefCell::new(init_field_paths_vec());
+}
+
+pub(crate) fn read_field_paths<'a>(
+    br: &mut BitReader,
+    fps: &'a mut RefMut<'_, Vec<FieldPath>>,
+) -> Result<&'a [FieldPath]> {
     let mut fp = FieldPath::default();
-    // NOTE: 10 is just an arbitrary value that performs better then not
-    // specifying capacity or specifying larger capacity (eg. 20); it's based on
-    // frequency of fps.len();
-    //
-    // sort out.txt | uniq -c | sort -nr
-    let mut fps = Vec::with_capacity(10);
+    let mut i: isize = -1;
     'epic_loop: loop {
+        i += 1;
         // stolen from butterfly
         let mut id = 0;
         // 17 is max depth of huffman tree I assume (didn't check)
@@ -472,9 +483,9 @@ pub fn read_field_paths(br: &mut BitReader) -> Result<Vec<FieldPath>> {
                 continue;
             }
             if fp.finished {
-                return Ok(fps);
+                return Ok(&fps[0..i as usize]);
             }
-            fps.push(fp.clone());
+            fps[i as usize] = fp.clone();
             continue 'epic_loop;
         }
 

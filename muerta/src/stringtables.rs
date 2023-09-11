@@ -101,6 +101,9 @@ impl StringTable {
         // TODO: maybe create vecs instead of arrays because those are being
         // converted to strings later on, and string's underlying data type is
         // vec
+        //
+        // TODO: create a struct within thread_local thing and make those buffs
+        // static.
         #[allow(invalid_value)]
         let mut string_buf: [u8; 1024] = unsafe { MaybeUninit::uninit().assume_init() };
         #[allow(invalid_value)]
@@ -201,6 +204,7 @@ impl StringTable {
                     br.read_bytes(&mut user_data_buf[..size])?;
 
                     if is_compressed {
+                        // TODO: do not clone, reserve another buf
                         let user_data_buf_clone = user_data_buf.clone();
                         snap::raw::Decoder::new()
                             .decompress(&user_data_buf_clone[..size], &mut user_data_buf)?;
