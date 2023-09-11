@@ -118,12 +118,15 @@ impl FlattenedSerializerField {
         }
     }
 
+    #[inline(always)]
     pub fn is_var_encoder_hash_eq(&self, var_encoder_hash: u64) -> bool {
         self.var_encoder_hash
             .map(|veh| veh == var_encoder_hash)
             .unwrap_or(false)
     }
+}
 
+impl Default for FlattenedSerializerField {
     #[inline]
     fn default() -> Self {
         Self {
@@ -133,7 +136,6 @@ impl FlattenedSerializerField {
             var_name: Box::default(),
             var_name_hash: 0,
 
-            // TODO: figure out which fields should, and which should not be optional
             bit_count: None,
             low_value: None,
             high_value: None,
@@ -234,7 +236,15 @@ impl FlattenedSerializers {
             let mut flattened_serializer = FlattenedSerializer::new(&svcmsg, serializer)?;
 
             for field_index in serializer.fields_index.iter() {
-                if !fields.contains_key(field_index) {
+                let field = if fields.contains_key(field_index) {
+                    // SAFETY: we already know that hashmap has the key!
+                    let field = unsafe { fields.get(field_index).unwrap_unchecked() };
+                    // NOTE: it is more efficient to clone outself instead of
+                    // using .clonned() because we're doing unsafe unwrap which
+                    // removes the branch, but .clonned() used match under the
+                    // hood which adds a branch!
+                    field.clone()
+                } else {
                     let mut field = FlattenedSerializerField::new(
                         &svcmsg,
                         &svcmsg.fields[*field_index as usize],
@@ -243,10 +253,8 @@ impl FlattenedSerializers {
                     if let Some(field_serializer_name_hash) =
                         field.field_serializer_name_hash.as_ref()
                     {
-                        if let Some(field_serializer) = serializers.get(field_serializer_name_hash)
-                        {
-                            field.field_serializer = Some(field_serializer.clone());
-                        }
+                        field.field_serializer =
+                            serializers.get(field_serializer_name_hash).cloned();
                     }
 
                     field.metadata = get_field_metadata(&field)?;
@@ -254,43 +262,46 @@ impl FlattenedSerializers {
                     match field.metadata.as_ref() {
                         Some(field_metadata) => match field_metadata.special_type {
                             Some(FieldSpecialType::Array { length }) => {
-                                let mut fields = Vec::with_capacity(length);
-                                fields.resize(length, Rc::new(field.clone()));
-
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
                                     serializer_name: Box::default(),
                                     serializer_version: None,
-                                    fields,
+                                    fields: {
+                                        let mut fields = Vec::with_capacity(length);
+                                        fields.resize(length, Rc::new(field.clone()));
+                                        fields
+                                    },
                                     serializer_name_hash: 0,
                                 }));
                             }
                             Some(FieldSpecialType::VariableLengthArray) => {
-                                const LENGTH: usize = 256;
-                                let mut fields = Vec::with_capacity(LENGTH);
-                                fields.resize(LENGTH, Rc::new(field.clone()));
-
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
                                     serializer_name: Box::default(),
                                     serializer_version: None,
-                                    fields,
+                                    fields: {
+                                        const SIZE: usize = 256;
+                                        let mut fields = Vec::with_capacity(SIZE);
+                                        fields.resize(SIZE, Rc::new(field.clone()));
+                                        fields
+                                    },
                                     serializer_name_hash: 0,
                                 }));
                             }
                             Some(FieldSpecialType::VariableLengthSerializerArray {
                                 element_serializer_name_hash,
                             }) => {
-                                let mut sub_field = FlattenedSerializerField::default();
-                                sub_field.field_serializer =
-                                    serializers.get(&element_serializer_name_hash).cloned();
-
-                                const SIZE: usize = 256;
-                                let mut sub_fields = Vec::with_capacity(SIZE);
-                                sub_fields.resize(SIZE, Rc::new(sub_field));
-
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
                                     serializer_name: Box::default(),
                                     serializer_version: None,
-                                    fields: sub_fields,
+                                    fields: {
+                                        let mut sub_field = FlattenedSerializerField::default();
+                                        sub_field.field_serializer =
+                                            serializers.get(&element_serializer_name_hash).cloned();
+
+                                        const SIZE: usize = 256;
+                                        let mut sub_fields = Vec::with_capacity(SIZE);
+                                        sub_fields.resize(SIZE, Rc::new(sub_field));
+                                        sub_fields
+                                    },
                                     serializer_name_hash: 0,
                                 }));
                             }
@@ -305,12 +316,13 @@ impl FlattenedSerializers {
                         }
                     }
 
-                    fields.insert(*field_index, Rc::new(field));
+                    let field = Rc::new(field);
+                    // NOTE: not field is being clonned, but rc!
+                    let ret = field.clone();
+                    fields.insert(*field_index, field);
+                    ret
                 };
-
-                // SAFETY: field was inserted right before, see above ^
-                let field = unsafe { fields.get(field_index).unwrap_unchecked() };
-                flattened_serializer.fields.push(field.clone());
+                flattened_serializer.fields.push(field);
             }
 
             serializers.insert(
@@ -329,6 +341,7 @@ impl FlattenedSerializers {
         self.serializers.as_ref().expect("serializers to be parsed")
     }
 
+    #[inline(always)]
     pub fn get_by_serializer_name_hash(
         &self,
         serializer_name_hash: u64,
