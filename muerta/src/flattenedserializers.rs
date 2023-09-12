@@ -209,13 +209,13 @@ type SerializerMap = HashMap<u64, Rc<FlattenedSerializer>, U64HashBuiler>;
 
 #[derive(Default)]
 pub struct FlattenedSerializers {
-    serializers: Option<SerializerMap>,
+    serializers: SerializerMap,
 }
 
 impl FlattenedSerializers {
     pub fn parse(&mut self, cmd: protos::CDemoSendTables) -> Result<()> {
         debug_assert!(
-            self.serializers.is_none(),
+            self.serializers.is_empty(),
             "serializer map is expected to not be created yet"
         );
 
@@ -331,14 +331,9 @@ impl FlattenedSerializers {
             );
         }
 
-        self.serializers = Some(serializers);
+        self.serializers = serializers;
 
         Ok(())
-    }
-
-    #[inline(always)]
-    fn serializers(&self) -> &SerializerMap {
-        self.serializers.as_ref().expect("serializers to be parsed")
     }
 
     #[inline(always)]
@@ -346,6 +341,6 @@ impl FlattenedSerializers {
         &self,
         serializer_name_hash: u64,
     ) -> Option<&Rc<FlattenedSerializer>> {
-        self.serializers().get(&serializer_name_hash)
+        self.serializers.get(&serializer_name_hash)
     }
 }

@@ -2,7 +2,7 @@ use crate::{
     bitbuf::{self, BitReader},
     hashers::I32HashBuilder,
 };
-use hashbrown::{hash_map::Iter, HashMap};
+use hashbrown::HashMap;
 use std::{mem::MaybeUninit, rc::Rc};
 
 #[derive(thiserror::Error, Debug)]
@@ -39,6 +39,7 @@ impl StringHistoryEntry {
 const MAX_USERDATA_BITS: usize = 17;
 const MAX_USERDATA_SIZE: usize = 1 << MAX_USERDATA_BITS;
 
+#[derive(Debug)]
 pub struct StringTableItem {
     pub string: Option<Box<str>>,
     // NOTE: current idea for using Rc instead of Box for user_data is that
@@ -49,6 +50,7 @@ pub struct StringTableItem {
     pub user_data: Option<Rc<str>>,
 }
 
+#[derive(Debug)]
 pub struct StringTable {
     pub name: Box<str>,
     user_data_fixed_size: bool,
@@ -56,7 +58,7 @@ pub struct StringTable {
     user_data_size_bits: i32,
     flags: i32,
     using_varint_bitcounts: bool,
-    items: HashMap<i32, StringTableItem, I32HashBuilder>,
+    pub(crate) items: HashMap<i32, StringTableItem, I32HashBuilder>,
 }
 
 impl StringTable {
@@ -132,7 +134,7 @@ impl StringTable {
             };
 
             let has_string = br.read_bool()?;
-            let string = if has_string {
+            let string: Option<Box<str>> = if has_string {
                 let mut size: usize = 0;
 
                 // Some entries use reference a position in the key history for
@@ -172,13 +174,13 @@ impl StringTable {
                 history[history_delta_index & 31] = she;
                 history_delta_index += 1;
 
-                Some(&string_buf[..size])
+                Some(unsafe { std::str::from_utf8_unchecked(&string_buf[..size]) }.into())
             } else {
                 None
             };
 
             let has_user_data = br.read_bool()?;
-            let user_data = if has_user_data {
+            let user_data: Option<Rc<str>> = if has_user_data {
                 let mut size: usize;
 
                 if self.user_data_fixed_size {
@@ -212,19 +214,13 @@ impl StringTable {
                     }
                 }
 
-                Some(&user_data_buf[..size])
+                Some(unsafe { std::str::from_utf8_unchecked(&user_data_buf[..size]) }.into())
             } else {
                 None
             };
 
-            self.items.insert(
-                entry_index,
-                StringTableItem {
-                    string: string.map(|v| unsafe { std::str::from_utf8_unchecked(v) }.into()),
-                    user_data: user_data
-                        .map(|v| unsafe { std::str::from_utf8_unchecked(v) }.into()),
-                },
-            );
+            self.items
+                .insert(entry_index, StringTableItem { string, user_data });
         }
 
         Ok(())
@@ -234,10 +230,6 @@ impl StringTable {
     // // HLTV change history & rollback
     // void EnableRollback();
     // void RestoreTick(int tick);
-
-    pub fn iter(&self) -> Iter<'_, i32, StringTableItem> {
-        self.items.iter()
-    }
 }
 
 #[derive(Default)]

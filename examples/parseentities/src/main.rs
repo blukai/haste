@@ -22,7 +22,7 @@ struct Parser<R: Read + Seek> {
     string_tables: StringTables,
     instance_baseline: InstanceBaseline,
     flattened_serializers: FlattenedSerializers,
-    entity_classes: EntityClasses,
+    entity_classes: Option<EntityClasses>,
     entities: Entities,
 }
 
@@ -36,10 +36,12 @@ impl<R: Read + Seek> Parser<R> {
             demo_file,
             // 2mb
             buf: vec![0; 1024 * 1024 * 2],
+            // TODO: do not create default instances of memmbers below. create
+            // them only when data becomes available.
             string_tables: StringTables::default(),
             instance_baseline: InstanceBaseline::default(),
             flattened_serializers: FlattenedSerializers::default(),
-            entity_classes: EntityClasses::default(),
+            entity_classes: None,
             entities: Entities::default(),
         })
     }
@@ -75,7 +77,21 @@ impl<R: Read + Seek> Parser<R> {
                 let cmd = self
                     .demo_file
                     .read_cmd::<protos::CDemoClassInfo>(&cmd_header, &mut self.buf)?;
-                self.entity_classes.parse(cmd);
+                self.entity_classes = Some(EntityClasses::parse(cmd));
+
+                // NOTE: DemClassInfo message becomes available after
+                // SvcCreateStringTable(which has instancebaselines). to know
+                // how long vec that will contain instancebaseline values needs
+                // to be (to allocate precicely how much we need) we need to
+                // wait for DemClassInfos.
+                if let Some(string_table) =
+                    self.string_tables.find_table(INSTANCE_BASELINE_TABLE_NAME)
+                {
+                    // SAFETY: entity_classes value was assigned right above ^.
+                    let entity_classes = unsafe { self.entity_classes.as_ref().unwrap_unchecked() };
+                    self.instance_baseline
+                        .update(string_table, entity_classes.classes)?;
+                }
             }
 
             _ => {
@@ -146,7 +162,10 @@ impl<R: Read + Seek> Parser<R> {
         string_table.parse_update(&mut BitReader::new(string_data), svcmsg.num_entries())?;
 
         if string_table.name.as_ref().eq(INSTANCE_BASELINE_TABLE_NAME) {
-            self.instance_baseline.update(string_table)?;
+            if let Some(entity_classes) = self.entity_classes.as_ref() {
+                self.instance_baseline
+                    .update(string_table, entity_classes.classes)?;
+            }
         }
 
         Ok(())
@@ -167,7 +186,10 @@ impl<R: Read + Seek> Parser<R> {
         )?;
 
         if string_table.name.as_ref().eq(INSTANCE_BASELINE_TABLE_NAME) {
-            self.instance_baseline.update(string_table)?;
+            if let Some(entity_classes) = self.entity_classes.as_ref() {
+                self.instance_baseline
+                    .update(string_table, entity_classes.classes)?;
+            }
         }
 
         Ok(())
@@ -177,9 +199,12 @@ impl<R: Read + Seek> Parser<R> {
         &mut self,
         svcmsg: protos::CsvcMsgPacketEntities,
     ) -> Result<()> {
+        // SAFETY: safety here can only be guaranteed by the fact that entity
+        // classes become available BEFORE packet entities.
+        let entity_classes = unsafe { self.entity_classes.as_ref().unwrap_unchecked() };
         self.entities.read_packet_entities(
             svcmsg,
-            &self.entity_classes,
+            entity_classes,
             &self.instance_baseline,
             &self.flattened_serializers,
         )?;

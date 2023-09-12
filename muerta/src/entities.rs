@@ -222,11 +222,11 @@ impl Entities {
         instance_baseline: &InstanceBaseline,
         flattened_serializers: &FlattenedSerializers,
     ) -> Result<()> {
-        let class_id = br.read_ubitlong(entity_classes.bits() as usize)? as i32;
+        let class_id = br.read_ubitlong(entity_classes.bits)? as i32;
         let _serial = br.read_ubitlong(17)?;
         let _unknown = br.read_uvarint32()?;
 
-        let class_info = entity_classes.get_by_id(&class_id).expect("class info");
+        let class_info = entity_classes.get_by_id(class_id).expect("class info");
         let flattened_serializer = flattened_serializers
             .get_by_serializer_name_hash(class_info.network_name_hash)
             .expect("flattened serializer")

@@ -103,6 +103,8 @@ impl<R: Read + Seek> DemoFile<R> {
     pub fn read_cmd<M: prost::Message + Default>(
         &mut self,
         cmd_header: &CmdHeader,
+        // TODO: change type of buf from &[u8] to Bytes to maybe avoid some
+        // copying. see https://github.com/tokio-rs/prost/issues/571
         buf: &mut [u8],
     ) -> Result<M> {
         let (left, right) = buf.split_at_mut(cmd_header.size as usize);

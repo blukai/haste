@@ -1,5 +1,4 @@
-use crate::{hashers::I32HashBuilder, stringtables::StringTable};
-use hashbrown::HashMap;
+use crate::stringtables::StringTable;
 use std::rc::Rc;
 
 #[derive(thiserror::Error, Debug)]
@@ -15,12 +14,16 @@ pub const INSTANCE_BASELINE_TABLE_NAME: &str = "instancebaseline";
 
 #[derive(Default)]
 pub struct InstanceBaseline {
-    map: HashMap<i32, Rc<str>, I32HashBuilder>,
+    strs: Vec<Option<Rc<str>>>,
 }
 
 impl InstanceBaseline {
-    pub fn update(&mut self, string_table: &StringTable) -> Result<()> {
-        for (_entity_index, item) in string_table.iter() {
+    pub fn update(&mut self, string_table: &StringTable, classes: usize) -> Result<()> {
+        if self.strs.len() < classes {
+            self.strs.resize(classes, None);
+        }
+
+        for (_entity_index, item) in string_table.items.iter() {
             let string = item
                 .string
                 .as_ref()
@@ -32,15 +35,12 @@ impl InstanceBaseline {
             );
 
             let class_id = string.parse::<i32>()?;
-            self.map.insert(
-                class_id,
-                item.user_data.clone().expect("instance baseline data"),
-            );
+            self.strs[class_id as usize] = item.user_data.clone();
         }
         Ok(())
     }
 
     pub fn get_data(&self, class_id: i32) -> Option<Rc<str>> {
-        self.map.get(&class_id).cloned()
+        unsafe { self.strs.get_unchecked(class_id as usize) }.clone()
     }
 }
