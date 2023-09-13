@@ -5,7 +5,6 @@ use muerta::{
     entityclasses::EntityClasses,
     flattenedserializers::FlattenedSerializers,
     instancebaseline::{InstanceBaseline, INSTANCE_BASELINE_TABLE_NAME},
-    protos::{self, EDemoCommands, SvcMessages},
     stringtables::StringTables,
 };
 use prost::Message;
@@ -49,7 +48,7 @@ impl<R: Read + Seek> Parser<R> {
     fn run(&mut self) -> Result<()> {
         loop {
             let cmd_header = self.demo_file.read_cmd_header()?;
-            if cmd_header.command == EDemoCommands::DemStop {
+            if cmd_header.command == dota2protos::EDemoCommands::DemStop {
                 break;
             }
             self.handle_cmd(cmd_header)?;
@@ -58,25 +57,26 @@ impl<R: Read + Seek> Parser<R> {
     }
 
     fn handle_cmd(&mut self, cmd_header: CmdHeader) -> Result<()> {
+        use dota2protos::EDemoCommands;
         match cmd_header.command {
             EDemoCommands::DemPacket | EDemoCommands::DemSignonPacket => {
                 let cmd = self
                     .demo_file
-                    .read_cmd::<protos::CDemoPacket>(&cmd_header, &mut self.buf)?;
+                    .read_cmd::<dota2protos::CDemoPacket>(&cmd_header, &mut self.buf)?;
                 self.handle_cmd_packet(cmd)?;
             }
 
             EDemoCommands::DemSendTables => {
                 let cmd = self
                     .demo_file
-                    .read_cmd::<protos::CDemoSendTables>(&cmd_header, &mut self.buf)?;
+                    .read_cmd::<dota2protos::CDemoSendTables>(&cmd_header, &mut self.buf)?;
                 self.flattened_serializers.parse(cmd)?;
             }
 
             EDemoCommands::DemClassInfo => {
                 let cmd = self
                     .demo_file
-                    .read_cmd::<protos::CDemoClassInfo>(&cmd_header, &mut self.buf)?;
+                    .read_cmd::<dota2protos::CDemoClassInfo>(&cmd_header, &mut self.buf)?;
                 self.entity_classes = Some(EntityClasses::parse(cmd));
 
                 // NOTE: DemClassInfo message becomes available after
@@ -103,7 +103,7 @@ impl<R: Read + Seek> Parser<R> {
         Ok(())
     }
 
-    fn handle_cmd_packet(&mut self, proto: protos::CDemoPacket) -> Result<()> {
+    fn handle_cmd_packet(&mut self, proto: dota2protos::CDemoPacket) -> Result<()> {
         let data = proto.data.expect("demo packet data");
         let mut br = BitReader::new(&data);
 
@@ -115,19 +115,20 @@ impl<R: Read + Seek> Parser<R> {
             br.read_bytes(buf)?;
             let data: &_ = buf;
 
+            use dota2protos::SvcMessages;
             match command {
                 c if c == SvcMessages::SvcCreateStringTable as u32 => {
-                    let svcmsg = protos::CsvcMsgCreateStringTable::decode(data)?;
+                    let svcmsg = dota2protos::CsvcMsgCreateStringTable::decode(data)?;
                     self.handle_svcmsg_create_string_table(svcmsg)?;
                 }
 
                 c if c == SvcMessages::SvcUpdateStringTable as u32 => {
-                    let svcmsg = protos::CsvcMsgUpdateStringTable::decode(data)?;
+                    let svcmsg = dota2protos::CsvcMsgUpdateStringTable::decode(data)?;
                     self.handle_svcmsg_update_string_table(svcmsg)?;
                 }
 
                 c if c == SvcMessages::SvcPacketEntities as u32 => {
-                    let svcmsg = protos::CsvcMsgPacketEntities::decode(data)?;
+                    let svcmsg = dota2protos::CsvcMsgPacketEntities::decode(data)?;
                     self.handle_svcmsg_packet_entities(svcmsg)?;
                 }
 
@@ -140,7 +141,7 @@ impl<R: Read + Seek> Parser<R> {
 
     fn handle_svcmsg_create_string_table(
         &mut self,
-        svcmsg: protos::CsvcMsgCreateStringTable,
+        svcmsg: dota2protos::CsvcMsgCreateStringTable,
     ) -> Result<()> {
         let string_table = self.string_tables.create_string_table_mut(
             svcmsg.name(),
@@ -173,7 +174,7 @@ impl<R: Read + Seek> Parser<R> {
 
     fn handle_svcmsg_update_string_table(
         &mut self,
-        svcmsg: protos::CsvcMsgUpdateStringTable,
+        svcmsg: dota2protos::CsvcMsgUpdateStringTable,
     ) -> Result<()> {
         let string_table = self
             .string_tables
@@ -197,7 +198,7 @@ impl<R: Read + Seek> Parser<R> {
 
     fn handle_svcmsg_packet_entities(
         &mut self,
-        svcmsg: protos::CsvcMsgPacketEntities,
+        svcmsg: dota2protos::CsvcMsgPacketEntities,
     ) -> Result<()> {
         // SAFETY: safety here can only be guaranteed by the fact that entity
         // classes become available BEFORE packet entities.

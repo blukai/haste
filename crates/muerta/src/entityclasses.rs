@@ -1,4 +1,4 @@
-use crate::{fnv1a, protos};
+use crate::fnv1a;
 
 #[derive(Clone)]
 pub struct ClassInfo {
@@ -12,7 +12,7 @@ pub struct EntityClasses {
 }
 
 impl EntityClasses {
-    pub fn parse(proto: protos::CDemoClassInfo) -> Self {
+    pub fn parse(proto: dota2protos::CDemoClassInfo) -> Self {
         let classes = proto.classes.len();
 
         // bits is the number of bits to read for entity classes. stolen from

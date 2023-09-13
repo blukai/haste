@@ -1,10 +1,5 @@
 #![feature(const_for)]
 
-#[allow(clippy::all)]
-pub mod protos {
-    include!(concat!(env!("OUT_DIR"), "/_.rs"));
-}
-
 pub mod bitbuf;
 pub mod demofile;
 pub mod entities;

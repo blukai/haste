@@ -6,4 +6,5 @@ edition = "2021"
 [dependencies]
 prost = "0.11"
 snap = "1.1"
-muerta = { path = "../../muerta" }
+muerta = { path = "../../crates/muerta" }
+dota2protos = { path = "../../crates/dota2protos" }

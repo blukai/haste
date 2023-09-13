@@ -1,4 +1,5 @@
-use crate::{protos::EDemoCommands, varint};
+use crate::varint;
+use dota2protos::EDemoCommands;
 use std::io::{Read, Seek, SeekFrom};
 
 #[derive(thiserror::Error, Debug)]

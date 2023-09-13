@@ -2,7 +2,7 @@ use crate::{
     fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialType},
     fnv1a,
     hashers::{I32HashBuilder, U64HashBuiler},
-    protos, varint,
+    varint,
 };
 use hashbrown::HashMap;
 use prost::Message;
@@ -55,8 +55,8 @@ pub struct FlattenedSerializerField {
 
 impl FlattenedSerializerField {
     fn new(
-        svcmsg: &protos::CsvcMsgFlattenedSerializer,
-        field: &protos::ProtoFlattenedSerializerFieldT,
+        svcmsg: &dota2protos::CsvcMsgFlattenedSerializer,
+        field: &dota2protos::ProtoFlattenedSerializerFieldT,
     ) -> Self {
         let resolve_sym = |v: i32| Some(svcmsg.symbols[v as usize].clone().into_boxed_str());
 
@@ -169,8 +169,8 @@ pub struct FlattenedSerializer {
 
 impl FlattenedSerializer {
     fn new(
-        svcmsg: &protos::CsvcMsgFlattenedSerializer,
-        fs: &protos::ProtoFlattenedSerializerT,
+        svcmsg: &dota2protos::CsvcMsgFlattenedSerializer,
+        fs: &dota2protos::ProtoFlattenedSerializerT,
     ) -> Result<Self> {
         let resolve_sym = |v: i32| Some(svcmsg.symbols[v as usize].clone().into_boxed_str());
 
@@ -213,7 +213,7 @@ pub struct FlattenedSerializers {
 }
 
 impl FlattenedSerializers {
-    pub fn parse(&mut self, cmd: protos::CDemoSendTables) -> Result<()> {
+    pub fn parse(&mut self, cmd: dota2protos::CDemoSendTables) -> Result<()> {
         debug_assert!(
             self.serializers.is_empty(),
             "serializer map is expected to not be created yet"
@@ -223,7 +223,7 @@ impl FlattenedSerializers {
             let data = cmd.data.expect("send tables data");
             let (size, offset) = varint::uvarint32(&data)
                 .map(|(size, bytes_read)| (size as usize, bytes_read + 1))?;
-            protos::CsvcMsgFlattenedSerializer::decode(&data[offset..offset + size])?
+            dota2protos::CsvcMsgFlattenedSerializer::decode(&data[offset..offset + size])?
         };
 
         let mut fields: FieldMap = FieldMap::with_hasher(I32HashBuilder::default());

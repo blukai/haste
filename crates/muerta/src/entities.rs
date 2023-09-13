@@ -7,7 +7,6 @@ use crate::{
     flattenedserializers::{FlattenedSerializer, FlattenedSerializers},
     hashers::{I32HashBuilder, U64HashBuiler},
     instancebaseline::InstanceBaseline,
-    protos,
 };
 use hashbrown::HashMap;
 use std::rc::Rc;
@@ -175,7 +174,7 @@ impl Default for Entities {
 impl Entities {
     pub fn read_packet_entities(
         &mut self,
-        svcmsg: protos::CsvcMsgPacketEntities,
+        svcmsg: dota2protos::CsvcMsgPacketEntities,
         entity_classes: &EntityClasses,
         instance_baseline: &InstanceBaseline,
         flattened_serializers: &FlattenedSerializers,

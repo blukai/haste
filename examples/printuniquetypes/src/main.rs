@@ -1,8 +1,5 @@
-use muerta::{
-    demofile::DemoFile,
-    protos::{self, EDemoCommands},
-    varint,
-};
+use dota2protos::{self, EDemoCommands};
+use muerta::{demofile::DemoFile, varint};
 use prost::Message;
 use std::{
     fs::File,
@@ -31,12 +28,12 @@ fn main() -> Result<()> {
             // DemSendTables cmd is sent only once
             EDemoCommands::DemSendTables => {
                 let flattened_serializer = {
-                    let proto =
-                        demo_file.read_cmd::<protos::CDemoSendTables>(&cmd_header, &mut buf)?;
+                    let proto = demo_file
+                        .read_cmd::<dota2protos::CDemoSendTables>(&cmd_header, &mut buf)?;
                     let data = proto.data.expect("send tables data");
                     let (start, end) = varint::uvarint32(&data)
                         .map(|(size, count)| (count + 1, count + 1 + size as usize))?;
-                    protos::CsvcMsgFlattenedSerializer::decode(&data[start..end])?
+                    dota2protos::CsvcMsgFlattenedSerializer::decode(&data[start..end])?
                 };
 
                 let mut types = std::collections::HashSet::<String>::new();
