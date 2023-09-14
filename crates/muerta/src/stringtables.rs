@@ -21,10 +21,11 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 const SUBSTRING_BITS: usize = 5;
+const SUBSTRING_SIZE: usize = 1 << SUBSTRING_BITS;
 
 #[derive(Copy, Clone)]
 struct StringHistoryEntry {
-    string: [u8; 1 << SUBSTRING_BITS],
+    string: [u8; SUBSTRING_SIZE],
 }
 
 impl StringHistoryEntry {
@@ -134,7 +135,7 @@ impl StringTable {
             };
 
             let has_string = br.read_bool()?;
-            let string: Option<Box<str>> = if has_string {
+            let string = if has_string {
                 let mut size: usize = 0;
 
                 // Some entries use reference a position in the key history for
@@ -168,19 +169,18 @@ impl StringTable {
                 }
 
                 let mut she = unsafe { StringHistoryEntry::new_uninit() };
-                let she_string_len = she.string.len();
-                she.string.copy_from_slice(&string_buf[..she_string_len]);
+                she.string.copy_from_slice(&string_buf[..SUBSTRING_SIZE]);
 
                 history[history_delta_index & 31] = she;
                 history_delta_index += 1;
 
-                Some(unsafe { std::str::from_utf8_unchecked(&string_buf[..size]) }.into())
+                Some(&string_buf[..size])
             } else {
                 None
             };
 
             let has_user_data = br.read_bool()?;
-            let user_data: Option<Rc<str>> = if has_user_data {
+            let user_data = if has_user_data {
                 let mut size: usize;
 
                 if self.user_data_fixed_size {
@@ -214,13 +214,21 @@ impl StringTable {
                     }
                 }
 
-                Some(unsafe { std::str::from_utf8_unchecked(&user_data_buf[..size]) }.into())
+                Some(&user_data_buf[..size])
             } else {
                 None
             };
 
-            self.items
-                .insert(entry_index, StringTableItem { string, user_data });
+            let user_data: Option<Rc<str>> =
+                user_data.map(|v| unsafe { std::str::from_utf8_unchecked(v) }.into());
+            if let Some(entry) = self.items.get_mut(&entry_index) {
+                entry.user_data = user_data;
+            } else {
+                let string: Option<Box<str>> =
+                    string.map(|v| unsafe { std::str::from_utf8_unchecked(v) }.into());
+                self.items
+                    .insert(entry_index, StringTableItem { string, user_data });
+            }
         }
 
         Ok(())
