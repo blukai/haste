@@ -229,19 +229,17 @@ impl<'d> BitReader<'d> {
             let signbit = self.read_bool()?;
 
             // If there's an integer, read it in
-            let intval = if has_intval {
+            let mut intval = 0;
+            if has_intval {
                 // Adjust the integers from [0..MAX_COORD_VALUE-1] to [1..MAX_COORD_VALUE]
-                self.read_ubitlong(COORD_INTEGER_BITS)? + 1
-            } else {
-                0
-            };
+                intval = self.read_ubitlong(COORD_INTEGER_BITS)? + 1;
+            }
 
             // If there's a fraction, read it in
-            let fractval = if has_fractval {
-                self.read_ubitlong(COORD_FRACTIONAL_BITS)?
-            } else {
-                0
-            };
+            let mut fractval = 0;
+            if has_fractval {
+                fractval = self.read_ubitlong(COORD_FRACTIONAL_BITS)?;
+            }
 
             // Calculate the correct floating point value
             value = intval as f32 + (fractval as f32 * COORD_RESOLUTION);

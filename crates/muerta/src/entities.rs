@@ -242,7 +242,7 @@ impl Entities {
         };
 
         let baseline_data = instance_baseline.get_data(class_id).expect("baseline data");
-        let mut baseline_br = BitReader::new(baseline_data.as_bytes());
+        let mut baseline_br = BitReader::new(baseline_data);
         entity.parse(&mut baseline_br)?;
         entity.parse(br)?;
 

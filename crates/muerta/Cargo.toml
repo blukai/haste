@@ -8,8 +8,7 @@ edition = "2021"
 thiserror = "1.0"
 prost = "0.11"
 snap = "1.1"
-# TODO: get off hashbrown (it was added because std hashmap doesn't support
-# allocator_api, but we dont care about allocator_api anymore)
+# NOTE: hashbrown::HashMap is noticeably faster then std::collections::hashMap
 hashbrown = { version = "0.14", features = ["ahash", "inline-more", "nightly"] }
 dyn-clone = "1.0"
 dota2protos = { path = "../dota2protos" }

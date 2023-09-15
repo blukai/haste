@@ -3,7 +3,7 @@ use crate::{
     hashers::I32HashBuilder,
 };
 use hashbrown::HashMap;
-use std::{mem::MaybeUninit, rc::Rc};
+use std::{intrinsics::likely, mem::MaybeUninit};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -20,12 +20,16 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-const SUBSTRING_BITS: usize = 5;
-const SUBSTRING_SIZE: usize = 1 << SUBSTRING_BITS;
+const HISTORY_SIZE: usize = 32;
+const HISTORY_BITMASK: usize = HISTORY_SIZE - 1;
 
-#[derive(Copy, Clone)]
+const MAX_STRING_BITS: usize = 5;
+const MAX_STRING_SIZE: usize = 1 << MAX_STRING_BITS;
+
+// TODO: why does it need Copy and Clone?
+#[derive(Debug, Copy, Clone)]
 struct StringHistoryEntry {
-    string: [u8; SUBSTRING_SIZE],
+    string: [u8; MAX_STRING_SIZE],
 }
 
 impl StringHistoryEntry {
@@ -42,13 +46,8 @@ const MAX_USERDATA_SIZE: usize = 1 << MAX_USERDATA_BITS;
 
 #[derive(Debug)]
 pub struct StringTableItem {
-    pub string: Option<Box<str>>,
-    // NOTE: current idea for using Rc instead of Box for user_data is that
-    // user_data is being accessed a ton (by instancebaseline.get_data calls)
-    // and it sounds like it would be more efficient to deal with cloned Rc, in
-    // which case underlying data is one pointer jump away insteadn of &Box
-    // which is 2 jumps away.
-    pub user_data: Option<Rc<str>>,
+    pub string: Option<Vec<u8>>,
+    pub user_data: Option<Vec<u8>>,
 }
 
 #[derive(Debug)]
@@ -60,6 +59,11 @@ pub struct StringTable {
     flags: i32,
     using_varint_bitcounts: bool,
     pub(crate) items: HashMap<i32, StringTableItem, I32HashBuilder>,
+
+    history: Vec<StringHistoryEntry>,
+    string_buf: Vec<u8>,
+    user_data_buf: Vec<u8>,
+    user_data_uncompressed_buf: Vec<u8>,
 }
 
 impl StringTable {
@@ -71,6 +75,13 @@ impl StringTable {
         flags: i32,
         using_varint_bitcounts: bool,
     ) -> Self {
+        #[inline(always)]
+        unsafe fn make_vec<T>(size: usize) -> Vec<T> {
+            let mut vec = Vec::with_capacity(size);
+            vec.set_len(size);
+            vec
+        }
+
         Self {
             name: name.into(),
             user_data_fixed_size,
@@ -78,7 +89,12 @@ impl StringTable {
             user_data_size_bits,
             flags,
             using_varint_bitcounts,
-            items: HashMap::with_hasher(I32HashBuilder::default()),
+            items: HashMap::with_capacity_and_hasher(1024, I32HashBuilder::default()),
+
+            history: unsafe { make_vec(HISTORY_SIZE) },
+            string_buf: unsafe { make_vec(1024) },
+            user_data_buf: unsafe { make_vec(MAX_USERDATA_SIZE) },
+            user_data_uncompressed_buf: unsafe { make_vec(MAX_USERDATA_SIZE) },
         }
     }
 
@@ -98,20 +114,12 @@ impl StringTable {
         // be disproportionately high
         // https://www.reddit.com/r/rust/comments/9ozddb/comment/e7z2qi1/?utm_source=share&utm_medium=web2x&context=3
 
-        let mut history = [unsafe { StringHistoryEntry::new_uninit() }; 32];
+        let history = &mut self.history;
         let mut history_delta_index: usize = 0;
 
-        // TODO: maybe create vecs instead of arrays because those are being
-        // converted to strings later on, and string's underlying data type is
-        // vec
-        //
-        // TODO: create a struct within thread_local thing and make those buffs
-        // static.
-        #[allow(invalid_value)]
-        let mut string_buf: [u8; 1024] = unsafe { MaybeUninit::uninit().assume_init() };
-        #[allow(invalid_value)]
-        let mut user_data_buf: [u8; MAX_USERDATA_SIZE] =
-            unsafe { MaybeUninit::uninit().assume_init() };
+        let string_buf = &mut self.string_buf;
+        let user_data_buf = &mut self.user_data_buf;
+        let user_data_uncompressed_buf = &mut self.user_data_uncompressed_buf;
 
         // Loop through entries in the data structure
         //
@@ -151,27 +159,27 @@ impl StringTable {
                     // stealing following approach from butterfly, even thought
                     // rust's Vec has remove method which does exactly same
                     // thing, butterfly's way is more efficient, thanks!
-                    let history_delta_zero = if history_delta_index > 32 {
-                        history_delta_index & 31
-                    } else {
-                        0
+                    let mut history_delta_zero = 0;
+                    if history_delta_index > HISTORY_SIZE {
+                        history_delta_zero = history_delta_index & HISTORY_BITMASK;
                     };
 
-                    let index = (history_delta_zero + br.read_ubitlong(5)? as usize) & 31;
-                    let bytestocopy = br.read_ubitlong(SUBSTRING_BITS)? as usize;
+                    let index =
+                        (history_delta_zero + br.read_ubitlong(5)? as usize) & HISTORY_BITMASK;
+                    let bytestocopy = br.read_ubitlong(MAX_STRING_BITS)? as usize;
                     size += bytestocopy;
 
                     string_buf[..bytestocopy]
                         .copy_from_slice(&history[index].string[..bytestocopy]);
                     size += br.read_string(&mut string_buf[bytestocopy..], false)?;
                 } else {
-                    size += br.read_string(&mut string_buf, false)?;
+                    size += br.read_string(string_buf, false)?;
                 }
 
                 let mut she = unsafe { StringHistoryEntry::new_uninit() };
-                she.string.copy_from_slice(&string_buf[..SUBSTRING_SIZE]);
+                she.string.copy_from_slice(&string_buf[..MAX_STRING_SIZE]);
 
-                history[history_delta_index & 31] = she;
+                history[history_delta_index & HISTORY_BITMASK] = she;
                 history_delta_index += 1;
 
                 Some(&string_buf[..size])
@@ -181,53 +189,48 @@ impl StringTable {
 
             let has_user_data = br.read_bool()?;
             let user_data = if has_user_data {
-                let mut size: usize;
-
                 if self.user_data_fixed_size {
                     // Don't need to read length, it's fixed length and the length was networked down already.
-                    size = self.user_data_size as usize;
-                    br.read_bits(&mut user_data_buf, self.user_data_size_bits as usize)?;
+                    br.read_bits(user_data_buf, self.user_data_size_bits as usize)?;
+                    Some(&user_data_buf[..self.user_data_size as usize])
                 } else {
-                    let is_compressed = if (self.flags & 0x1) != 0 {
-                        br.read_bool()?
-                    } else {
-                        false
-                    };
+                    let mut is_compressed = false;
+                    if (self.flags & 0x1) != 0 {
+                        is_compressed = br.read_bool()?;
+                    }
 
                     // NOTE: using_varint_bitcounts bool was introduced in the
                     // new frontiers update on smaypril twemmieth of 2023,
                     // https://github.com/SteamDatabase/GameTracking-Dota2/commit/8851e24f0e3ef0b618e3a60d276a3b0baf88568c#diff-79c9dd229c77c85f462d6d85e29a65f5daf6bf31f199554438d42bd643e89448R405
-                    size = if self.using_varint_bitcounts {
-                        br.read_ubitvar()?
+                    let size = if likely(self.using_varint_bitcounts) {
+                        br.read_ubitvar()
                     } else {
-                        br.read_ubitlong(MAX_USERDATA_BITS)?
-                    } as usize;
+                        br.read_ubitlong(MAX_USERDATA_BITS)
+                    }? as usize;
 
                     br.read_bytes(&mut user_data_buf[..size])?;
 
                     if is_compressed {
-                        // TODO: do not clone, reserve another buf
-                        let user_data_buf_clone = user_data_buf.clone();
                         snap::raw::Decoder::new()
-                            .decompress(&user_data_buf_clone[..size], &mut user_data_buf)?;
-                        size = snap::raw::decompress_len(&user_data_buf_clone)?;
+                            .decompress(&user_data_buf[..size], user_data_uncompressed_buf)?;
+                        let size = snap::raw::decompress_len(&user_data_buf)?;
+                        Some(&user_data_uncompressed_buf[..size])
+                    } else {
+                        Some(&user_data_buf[..size])
                     }
                 }
-
-                Some(&user_data_buf[..size])
             } else {
                 None
             };
 
-            let user_data: Option<Rc<str>> =
-                user_data.map(|v| unsafe { std::str::from_utf8_unchecked(v) }.into());
             if let Some(entry) = self.items.get_mut(&entry_index) {
-                entry.user_data = user_data;
+                entry.user_data = user_data.map(|v| v.to_vec());
             } else {
-                let string: Option<Box<str>> =
-                    string.map(|v| unsafe { std::str::from_utf8_unchecked(v) }.into());
-                self.items
-                    .insert(entry_index, StringTableItem { string, user_data });
+                let sti = StringTableItem {
+                    string: string.map(|v| v.to_vec()),
+                    user_data: user_data.map(|v| v.to_vec()),
+                };
+                self.items.insert(entry_index, sti);
             }
         }
 

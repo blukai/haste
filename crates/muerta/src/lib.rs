@@ -1,4 +1,5 @@
 #![feature(const_for)]
+#![feature(core_intrinsics)]
 
 pub mod bitbuf;
 pub mod demofile;
