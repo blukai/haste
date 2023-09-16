@@ -224,10 +224,22 @@ impl StringTable {
             };
 
             if let Some(entry) = self.items.get_mut(&entry_index) {
-                entry.user_data = user_data.map(|v| v.to_vec());
+                if let Some(dst) = entry.user_data.as_mut() {
+                    if let Some(src) = user_data {
+                        dst.resize(src.len(), 0);
+                        dst.clone_from_slice(src);
+                    }
+                } else {
+                    entry.user_data = user_data.map(|v| v.to_vec());
+                }
             } else {
                 let sti = StringTableItem {
-                    string: string.map(|v| v.to_vec()),
+                    string: string.map(|src| {
+                        let mut dst = Vec::with_capacity(src.len());
+                        unsafe { dst.set_len(src.len()) };
+                        dst.clone_from_slice(src);
+                        dst
+                    }),
                     user_data: user_data.map(|v| v.to_vec()),
                 };
                 self.items.insert(entry_index, sti);
