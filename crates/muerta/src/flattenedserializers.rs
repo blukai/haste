@@ -191,15 +191,14 @@ impl FlattenedSerializer {
     #[inline(always)]
     pub fn get_child(&self, index: usize) -> &FlattenedSerializerField {
         unsafe {
-            self.fields
-                .get(index)
-                // .unwrap_or_else(|| {
-                //     panic!(
-                //         "expected field to be at index {} in {}",
-                //         index, self.serializer_name
-                //     )
-                // })
-                .unwrap_unchecked()
+            self.fields.get_unchecked(index)
+            // .unwrap_or_else(|| {
+            //     panic!(
+            //         "expected field to be at index {} in {}",
+            //         index, self.serializer_name
+            //     )
+            // })
+            // .unwrap_unchecked()
         }
     }
 }
@@ -220,6 +219,7 @@ impl FlattenedSerializers {
         );
 
         let svcmsg = {
+            // TODO: make prost work with Bytestring and turn data into Bytes
             let data = cmd.data.expect("send tables data");
             let (size, offset) = varint::uvarint32(&data)
                 .map(|(size, bytes_read)| (size as usize, bytes_read + 1))?;

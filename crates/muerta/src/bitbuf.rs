@@ -1,4 +1,5 @@
 use crate::varint;
+use std::intrinsics::unlikely;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -106,7 +107,7 @@ impl<'d> BitReader<'d> {
 
     //              bool                    Seek( int nPosition );
     pub fn seek(&mut self, bit: usize) -> Result<usize> {
-        if bit > self.data_bits {
+        if unlikely(bit > self.data_bits) {
             Err(Error::Overflow)
         } else {
             self.curr_bit = bit;
@@ -120,7 +121,7 @@ impl<'d> BitReader<'d> {
     #[inline(always)]
     pub fn seek_relative(&mut self, bit_delta: isize) -> Result<usize> {
         let bit = self.curr_bit as isize + bit_delta;
-        if bit < 0 {
+        if unlikely(bit < 0) {
             Err(Error::Underflow)
         } else {
             self.seek(bit as usize)
@@ -144,7 +145,7 @@ impl<'d> BitReader<'d> {
     pub fn read_ubitlong(&mut self, num_bits: usize) -> Result<u32> {
         debug_assert!(num_bits < 33, "trying to read more than 32 bits");
 
-        if self.get_num_bits_left() < num_bits {
+        if unlikely(self.get_num_bits_left() < num_bits) {
             return Err(Error::Underflow);
         }
 
@@ -278,7 +279,7 @@ impl<'d> BitReader<'d> {
     // FORCEINLINE  int	                    ReadOneBit( void );
     #[inline(always)]
     pub fn read_bool(&mut self) -> Result<bool> {
-        if self.get_num_bits_left() < 1 {
+        if unlikely(self.get_num_bits_left() < 1) {
             return Err(Error::Underflow);
         }
 
@@ -374,7 +375,7 @@ impl<'d> BitReader<'d> {
         debug_assert!(num_chars < buf.len());
         buf[num_chars] = 0;
 
-        if too_small {
+        if unlikely(too_small) {
             Err(Error::StringBufTooSmol)
         } else {
             Ok(num_chars)

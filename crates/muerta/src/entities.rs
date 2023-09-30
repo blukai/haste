@@ -128,7 +128,9 @@ impl Entity {
                         .get_child(fp.get(4))
                         .get_child(fp.get(5))
                         .get_child(fp.get(6)),
-                    _ => panic!("invalid position: {}", fp.position),
+                    _ => unsafe {
+                        std::hint::unreachable_unchecked();
+                    },
                 };
 
                 // eprint!(
