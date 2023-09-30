@@ -3,7 +3,7 @@ use crate::{
     hashers::I32HashBuilder,
 };
 use hashbrown::HashMap;
-use std::{intrinsics::likely, mem::MaybeUninit};
+use std::{cell::RefCell, intrinsics::likely, mem::MaybeUninit, rc::Rc};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -47,7 +47,7 @@ const MAX_USERDATA_SIZE: usize = 1 << MAX_USERDATA_BITS;
 #[derive(Debug)]
 pub struct StringTableItem {
     pub string: Option<Vec<u8>>,
-    pub user_data: Option<Vec<u8>>,
+    pub user_data: Option<Rc<RefCell<Vec<u8>>>>,
 }
 
 #[derive(Debug)]
@@ -226,11 +226,12 @@ impl StringTable {
             if let Some(entry) = self.items.get_mut(&entry_index) {
                 if let Some(dst) = entry.user_data.as_mut() {
                     if let Some(src) = user_data {
+                        let mut dst = dst.borrow_mut();
                         dst.resize(src.len(), 0);
                         dst.clone_from_slice(src);
                     }
                 } else {
-                    entry.user_data = user_data.map(|v| v.to_vec());
+                    entry.user_data = user_data.map(|v| Rc::new(RefCell::new(v.to_vec())));
                 }
             } else {
                 let sti = StringTableItem {
@@ -240,7 +241,7 @@ impl StringTable {
                         dst.clone_from_slice(src);
                         dst
                     }),
-                    user_data: user_data.map(|v| v.to_vec()),
+                    user_data: user_data.map(|v| Rc::new(RefCell::new(v.to_vec()))),
                 };
                 self.items.insert(entry_index, sti);
             }

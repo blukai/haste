@@ -1,4 +1,5 @@
 use crate::stringtables::StringTable;
+use std::{cell::RefCell, rc::Rc};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -13,13 +14,13 @@ pub const INSTANCE_BASELINE_TABLE_NAME: &str = "instancebaseline";
 
 #[derive(Default)]
 pub struct InstanceBaseline {
-    strs: Vec<Option<Vec<u8>>>,
+    data: Vec<Option<Rc<RefCell<Vec<u8>>>>>,
 }
 
 impl InstanceBaseline {
     pub fn update(&mut self, string_table: &StringTable, classes: usize) -> Result<()> {
-        if self.strs.len() < classes {
-            self.strs.resize(classes, None);
+        if self.data.len() < classes {
+            self.data.resize(classes, None);
         }
 
         for (_entity_index, item) in string_table.items.iter() {
@@ -35,12 +36,14 @@ impl InstanceBaseline {
             );
             let string = unsafe { std::str::from_utf8_unchecked(string) };
             let class_id = string.parse::<i32>()?;
-            self.strs[class_id as usize] = item.user_data.clone();
+            self.data[class_id as usize] = item.user_data.clone();
         }
         Ok(())
     }
 
-    pub fn get_data(&self, class_id: i32) -> Option<&[u8]> {
-        unsafe { self.strs.get_unchecked(class_id as usize) }.as_deref()
+    pub fn get_data(&self, class_id: i32) -> Option<Rc<RefCell<Vec<u8>>>> {
+        unsafe { self.data.get_unchecked(class_id as usize) }
+            .as_ref()
+            .cloned()
     }
 }
