@@ -5,8 +5,8 @@ use crate::{
     fieldpath::{self},
     fieldvalue::FieldValue,
     flattenedserializers::{FlattenedSerializer, FlattenedSerializers},
-    hashers::{I32HashBuilder, U64HashBuiler},
     instancebaseline::InstanceBaseline,
+    nohash::NoHashHasherBuilder,
 };
 use hashbrown::HashMap;
 use std::rc::Rc;
@@ -76,7 +76,7 @@ fn determine_update_type(update_flags: usize) -> UpdateType {
 #[derive(Clone)]
 pub struct Entity {
     flattened_serializer: Rc<FlattenedSerializer>,
-    field_values: HashMap<u64, FieldValue, U64HashBuiler>,
+    field_values: HashMap<u64, FieldValue, NoHashHasherBuilder<u64>>,
 }
 
 impl Entity {
@@ -162,13 +162,13 @@ pub struct Entities {
     // TODO: use Vec<Option<.. or Vec<MaybeUninit<.. or implement NoOpHasher
     // because keys are indexes, see
     // https://sourcegraph.com/github.com/actix/actix-web@d8df60bf4c04c3cbb99bcf19a141c202223e07ea/-/blob/actix-http/src/extensions.rs?L13
-    entities: HashMap<i32, Entity, I32HashBuilder>,
+    entities: HashMap<i32, Entity, NoHashHasherBuilder<i32>>,
 }
 
 impl Default for Entities {
     fn default() -> Self {
         Self {
-            entities: HashMap::with_capacity_and_hasher(4096, I32HashBuilder::default()),
+            entities: HashMap::with_capacity_and_hasher(4096, NoHashHasherBuilder::default()),
         }
     }
 }
@@ -235,7 +235,7 @@ impl Entities {
 
         let field_values = HashMap::with_capacity_and_hasher(
             flattened_serializer.fields.len(),
-            U64HashBuiler::default(),
+            NoHashHasherBuilder::default(),
         );
 
         let mut entity = Entity {

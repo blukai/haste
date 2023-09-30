@@ -1,7 +1,7 @@
 use crate::{
     fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialType},
     fnv1a,
-    hashers::{I32HashBuilder, U64HashBuiler},
+    nohash::NoHashHasherBuilder,
     varint,
 };
 use hashbrown::HashMap;
@@ -203,8 +203,8 @@ impl FlattenedSerializer {
     }
 }
 
-type FieldMap = HashMap<i32, Rc<FlattenedSerializerField>, I32HashBuilder>;
-type SerializerMap = HashMap<u64, Rc<FlattenedSerializer>, U64HashBuiler>;
+type FieldMap = HashMap<i32, Rc<FlattenedSerializerField>, NoHashHasherBuilder<i32>>;
+type SerializerMap = HashMap<u64, Rc<FlattenedSerializer>, NoHashHasherBuilder<u64>>;
 
 #[derive(Default)]
 pub struct FlattenedSerializers {
@@ -226,10 +226,10 @@ impl FlattenedSerializers {
             dota2protos::CsvcMsgFlattenedSerializer::decode(&data[offset..offset + size])?
         };
 
-        let mut fields: FieldMap = FieldMap::with_hasher(I32HashBuilder::default());
+        let mut fields: FieldMap = FieldMap::with_hasher(NoHashHasherBuilder::default());
         let mut serializers: SerializerMap = SerializerMap::with_capacity_and_hasher(
             svcmsg.serializers.len(),
-            U64HashBuiler::default(),
+            NoHashHasherBuilder::default(),
         );
 
         for serializer in svcmsg.serializers.iter() {

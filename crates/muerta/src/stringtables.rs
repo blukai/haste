@@ -1,6 +1,6 @@
 use crate::{
     bitbuf::{self, BitReader},
-    hashers::I32HashBuilder,
+    nohash::NoHashHasherBuilder,
 };
 use hashbrown::HashMap;
 use std::{cell::RefCell, intrinsics::likely, mem::MaybeUninit, rc::Rc};
@@ -58,7 +58,7 @@ pub struct StringTable {
     user_data_size_bits: i32,
     flags: i32,
     using_varint_bitcounts: bool,
-    pub(crate) items: HashMap<i32, StringTableItem, I32HashBuilder>,
+    pub(crate) items: HashMap<i32, StringTableItem, NoHashHasherBuilder<i32>>,
 
     history: Vec<StringHistoryEntry>,
     string_buf: Vec<u8>,
@@ -89,7 +89,7 @@ impl StringTable {
             user_data_size_bits,
             flags,
             using_varint_bitcounts,
-            items: HashMap::with_capacity_and_hasher(1024, I32HashBuilder::default()),
+            items: HashMap::with_capacity_and_hasher(1024, NoHashHasherBuilder::default()),
 
             history: unsafe { make_vec(HISTORY_SIZE) },
             string_buf: unsafe { make_vec(1024) },
