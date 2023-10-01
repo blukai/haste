@@ -219,11 +219,18 @@ impl FlattenedSerializers {
         );
 
         let svcmsg = {
-            // TODO: make prost work with Bytestring and turn data into Bytes
-            let data = cmd.data.expect("send tables data");
-            let (size, offset) = varint::uvarint32(&data)
-                .map(|(size, bytes_read)| (size as usize, bytes_read + 1))?;
-            dota2protos::CsvcMsgFlattenedSerializer::decode(&data[offset..offset + size])?
+            // TODO: make prost work with ByteString and turn data into Bytes
+            let mut data = &cmd.data.expect("send tables data")[..];
+            // NOTE: offset is useless because read_uvarint32 will "consume"
+            // bytes that it'll read from data; size is useless because data
+            // supposedly contains only one message.
+            //
+            // NOTE: there are 2 levels of indirection here, but rust's compiler
+            // may optimize them away. but if this will be affecting performance
+            // -> createa a function that will be capable of reading varint from
+            // &[u8] without multiple levels of indirection.
+            let (_size, _offset) = varint::read_uvarint32(&mut data)?;
+            dota2protos::CsvcMsgFlattenedSerializer::decode(data)?
         };
 
         let mut fields: FieldMap = FieldMap::with_hasher(NoHashHasherBuilder::default());

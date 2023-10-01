@@ -291,7 +291,13 @@ impl<'d> BitReader<'d> {
 
     // FORCEINLINE  int                     ReadLong( void );
     // FORCEINLINE  int                     ReadChar( void );
+
     // FORCEINLINE  int                     ReadByte( void );
+    #[inline(always)]
+    pub fn read_byte(&mut self) -> Result<u8> {
+        self.read_ubitlong(8).map(|result| result as u8)
+    }
+
     // FORCEINLINE  int                     ReadShort( void );
     // FORCEINLINE  int                     ReadWord( void );
     // FORCEINLINE  float                   ReadFloat( void );
@@ -358,7 +364,7 @@ impl<'d> BitReader<'d> {
         let mut too_small = false;
         let mut num_chars = 0;
         loop {
-            let val = self.read_ubitlong(8)? as u8;
+            let val = self.read_byte()?;
             if val == 0 || (line && val == b'\n') {
                 break;
             }
@@ -386,24 +392,15 @@ impl<'d> BitReader<'d> {
     //              char*                   ReadAndAllocateString( bool *pOverflow = 0 );
     //              int64                   ReadLongLong( void );
 
-    //              uint32                  ReadVarInt32();
-    pub fn read_uvarint32(&mut self) -> Result<u32> {
+    // NOTE: read_uvarint is simillar to function with the same exact name
+    // withint varint.rs, and yes, it is possible to have only one, BUT
+    // implementing a Read trait for BitReader degrades performance quite
+    // significantly.
+    #[inline(always)]
+    fn read_uvarint<const MAX_VARINT_BYTES: usize>(&mut self) -> Result<u64> {
         let mut result = 0;
-        for count in 0..=varint::MAX_VARINT32_BYTES {
-            let byte = self.read_ubitlong(8)?;
-            result |= (byte & varint::PAYLOAD_BITS) << (count * 7);
-            if (byte & varint::CONTINUE_BIT) == 0 {
-                return Ok(result);
-            }
-        }
-        Err(Error::MalformedVarint)
-    }
-
-    //              uint64                  ReadVarInt64();
-    pub fn read_uvarint64(&mut self) -> Result<u64> {
-        let mut result = 0;
-        for count in 0..=varint::MAX_VARINT64_BYTES {
-            let byte = self.read_ubitlong(8)?;
+        for count in 0..=MAX_VARINT_BYTES {
+            let byte = self.read_byte()?;
             result |= ((byte & varint::PAYLOAD_BITS) as u64) << (count * 7);
             if (byte & varint::CONTINUE_BIT) == 0 {
                 return Ok(result);
@@ -412,50 +409,25 @@ impl<'d> BitReader<'d> {
         Err(Error::MalformedVarint)
     }
 
-    // stolen from csgo public/tier1/bitbuf.h
-    // only decoders, encoders aren't here.
-    //
-    // ZigZag Transform:  Encodes signed integers so that they can be
-    // effectively used with varint encoding.
-    //
-    // varint operates on unsigned integers, encoding smaller numbers into
-    // fewer bytes.  If you try to use it on a signed integer, it will treat
-    // this number as a very large unsigned integer, which means that even
-    // small signed numbers like -1 will take the maximum number of bytes
-    // (10) to encode.  ZigZagEncode() maps signed integers to unsigned
-    // in such a way that those with a small absolute value will have smaller
-    // encoded values, making them appropriate for encoding using varint.
-    //
-    //       int32 ->     uint32
-    // -------------------------
-    //           0 ->          0
-    //          -1 ->          1
-    //           1 ->          2
-    //          -2 ->          3
-    //         ... ->        ...
-    //  2147483647 -> 4294967294
-    // -2147483648 -> 4294967295
-    //
-    //        >> encode >>
-    //        << decode <<
-    #[inline(always)]
-    fn zigzag_decode32(n: u32) -> i32 {
-        (n >> 1) as i32 ^ -((n & 1) as i32)
+    //              uint32                  ReadVarInt32();
+    pub fn read_uvarint32(&mut self) -> Result<u32> {
+        self.read_uvarint::<{ varint::MAX_VARINT32_BYTES }>()
+            .map(|result| result as u32)
     }
 
-    #[inline(always)]
-    fn zigzag_decode64(n: u64) -> i64 {
-        (n >> 1) as i64 ^ -((n & 1) as i64)
+    //              uint64                  ReadVarInt64();
+    pub fn read_uvarint64(&mut self) -> Result<u64> {
+        self.read_uvarint::<{ varint::MAX_VARINT64_BYTES }>()
     }
 
     //              int32                   ReadSignedVarInt32() { return bitbuf::ZigZagDecode32( ReadVarInt32() ); }
     pub fn read_varint32(&mut self) -> Result<i32> {
-        self.read_uvarint32().map(Self::zigzag_decode32)
+        self.read_uvarint32().map(varint::zigzag_decode32)
     }
 
     //              int64                   ReadSignedVarInt64() { return bitbuf::ZigZagDecode64( ReadVarInt64() ); }
     pub fn read_varint64(&mut self) -> Result<i64> {
-        self.read_uvarint64().map(Self::zigzag_decode64)
+        self.read_uvarint64().map(varint::zigzag_decode64)
     }
 
     pub fn read_ubitvarfp(&mut self) -> Result<u32> {
