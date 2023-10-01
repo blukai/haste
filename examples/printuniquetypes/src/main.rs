@@ -28,12 +28,11 @@ fn main() -> Result<()> {
             // DemSendTables cmd is sent only once
             EDemoCommands::DemSendTables => {
                 let flattened_serializer = {
-                    let proto = demo_file
+                    let cmd = demo_file
                         .read_cmd::<dota2protos::CDemoSendTables>(&cmd_header, &mut buf)?;
-                    let data = proto.data.expect("send tables data");
-                    let (start, end) = varint::uvarint32(&data)
-                        .map(|(size, count)| (count + 1, count + 1 + size as usize))?;
-                    dota2protos::CsvcMsgFlattenedSerializer::decode(&data[start..end])?
+                    let mut data = &cmd.data.expect("send tables data")[..];
+                    let (_size, _count) = varint::read_uvarint32(&mut data)?;
+                    dota2protos::CsvcMsgFlattenedSerializer::decode(data)?
                 };
 
                 let mut types = std::collections::HashSet::<String>::new();

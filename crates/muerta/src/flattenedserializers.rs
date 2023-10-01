@@ -221,7 +221,7 @@ impl FlattenedSerializers {
         let svcmsg = {
             // TODO: make prost work with ByteString and turn data into Bytes
             let mut data = &cmd.data.expect("send tables data")[..];
-            // NOTE: offset is useless because read_uvarint32 will "consume"
+            // NOTE: count is useless because read_uvarint32 will "consume"
             // bytes that it'll read from data; size is useless because data
             // supposedly contains only one message.
             //
@@ -229,7 +229,7 @@ impl FlattenedSerializers {
             // may optimize them away. but if this will be affecting performance
             // -> createa a function that will be capable of reading varint from
             // &[u8] without multiple levels of indirection.
-            let (_size, _offset) = varint::read_uvarint32(&mut data)?;
+            let (_size, _count) = varint::read_uvarint32(&mut data)?;
             dota2protos::CsvcMsgFlattenedSerializer::decode(data)?
         };
 

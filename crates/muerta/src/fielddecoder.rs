@@ -42,7 +42,7 @@ impl FieldDecode for U32Decoder {
 // ----
 
 #[derive(Clone, Default)]
-pub struct InternalU64Decoder {}
+struct InternalU64Decoder {}
 
 impl FieldDecode for InternalU64Decoder {
     #[inline]
@@ -52,7 +52,7 @@ impl FieldDecode for InternalU64Decoder {
 }
 
 #[derive(Clone, Default)]
-pub struct InternalU64Fixed64Decoder {}
+struct InternalU64Fixed64Decoder {}
 
 impl FieldDecode for InternalU64Fixed64Decoder {
     #[inline]
@@ -144,7 +144,7 @@ impl FieldDecode for StringDecoder {
 // ----
 
 #[derive(Clone)]
-pub struct InternalQAnglePitchYawDecoder {
+struct InternalQAnglePitchYawDecoder {
     bit_count: usize,
 }
 
@@ -161,7 +161,7 @@ impl FieldDecode for InternalQAnglePitchYawDecoder {
 }
 
 #[derive(Clone, Default)]
-pub struct InternalQAngleNoBitCountDecoder {}
+struct InternalQAngleNoBitCountDecoder {}
 
 impl FieldDecode for InternalQAngleNoBitCountDecoder {
     #[inline]
@@ -179,7 +179,7 @@ impl FieldDecode for InternalQAngleNoBitCountDecoder {
 }
 
 #[derive(Clone)]
-pub struct InternalQAngleBitCountDecoder {
+struct InternalQAngleBitCountDecoder {
     bit_count: usize,
 }
 
