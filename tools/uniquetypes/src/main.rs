@@ -1,3 +1,6 @@
+// uniquetypes tool can be used to get a list of unique types that are present
+// in the replay file.
+
 use dota2protos::{self, EDemoCommands};
 use muerta::{demofile::DemoFile, varint};
 use prost::Message;
@@ -12,7 +15,7 @@ fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let filepath = args.get(1);
     if filepath.is_none() {
-        eprintln!("usage: printuniquetypes <filepath>");
+        eprintln!("usage: uniquetypes <filepath>");
         std::process::exit(42);
     }
 

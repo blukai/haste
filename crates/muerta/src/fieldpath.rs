@@ -474,10 +474,11 @@ pub(crate) fn read_field_paths<'a>(
     let mut i: isize = -1;
     'epic_loop: loop {
         i += 1;
-        // stolen from butterfly
         let mut id = 0;
-        // 17 is max depth of huffman tree I assume (didn't check)
+        // stolen from butterfly;
+        // 17 is the depth of the huffman tree.
         for _ in 0..17 {
+            // true is right, false is left
             id = (id << 1) | (br.read_bool()? as u32);
             if !lookup_exec_op(id, &mut fp, br)? {
                 continue;
