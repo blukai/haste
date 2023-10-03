@@ -7,12 +7,7 @@
 // it is not so cool to blindly rely on someone else's undocumented findings; it
 // feels better to build a deeper understanding of what's going on.
 
-use std::{cmp::Reverse, collections::BinaryHeap, fmt::Debug, io::Write};
-
-struct Op {
-    name: &'static str,
-    weight: u32,
-}
+use std::{cmp::Ordering, collections::BinaryHeap, fmt::Debug};
 
 // NOTE: names and weights are stolen from butterfly; in ghidra it is possible
 // to find names (in string search); it is also possible to find where huffman
@@ -28,6 +23,12 @@ struct Op {
 // }
 //
 // TODO: figure out how to map op names to weights in disassembly.
+
+#[derive(Debug)]
+struct Op {
+    name: &'static str,
+    weight: usize,
+}
 
 const OPS: [Op; 40] = [
     Op {
@@ -192,158 +193,187 @@ const OPS: [Op; 40] = [
     },
 ];
 
-// based on https://github.com/Lakret/huffman-rs/blob/4e2f759e2ca384108e5c95bc9cd365fad1d48364/src/huffman.rs
-// NOTE: Tree does not have an A: Allocator generic param because it's not
-// supposed to be used in real code, but for code generation.
-#[derive(Debug, PartialEq, Eq)]
-enum HuffmanTree<V> {
+#[derive(Debug)]
+enum Huffman<Value: Debug> {
     Leaf {
-        weight: u32,
-        value: V,
+        weight: usize,
+        num: usize,
+        value: Value,
     },
     Node {
-        weight: u32,
-        left: Box<HuffmanTree<V>>,
-        right: Box<HuffmanTree<V>>,
+        weight: usize,
+        num: usize,
+        left: Box<Huffman<Value>>,
+        right: Box<Huffman<Value>>,
     },
 }
 
-impl<V: Clone> HuffmanTree<V> {
-    fn get_weight(&self) -> u32 {
+impl<Value: Debug> Huffman<Value> {
+    fn weight(&self) -> usize {
         match self {
-            Self::Leaf { weight, .. } => *weight,
             Self::Node { weight, .. } => *weight,
+            Self::Leaf { weight, .. } => *weight,
+        }
+    }
+    fn num(&self) -> usize {
+        match self {
+            Self::Node { num, .. } => *num,
+            Self::Leaf { num, .. } => *num,
         }
     }
 }
 
-impl<V: Clone + Eq> Ord for HuffmanTree<V> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.get_weight().cmp(&other.get_weight())
+impl<Value: Debug> Ord for Huffman<Value> {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if self.weight() == other.weight() {
+            self.num().cmp(&other.num())
+        } else {
+            other.weight().cmp(&self.weight())
+        }
     }
 }
 
-impl<V: Clone + Eq> PartialOrd for HuffmanTree<V> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+impl<Value: Debug> PartialOrd for Huffman<Value> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-fn make_huffman_tree() -> HuffmanTree<usize> {
-    let mut bh = BinaryHeap::with_capacity(OPS.len());
-    for (i, fop) in OPS.iter().enumerate() {
-        bh.push(Reverse(HuffmanTree::Leaf {
-            weight: fop.weight,
-            value: i,
-        }));
+impl<Value: Debug> PartialEq for Huffman<Value> {
+    fn eq(&self, other: &Self) -> bool {
+        self.weight() == other.weight() && self.num() == other.num()
+    }
+}
+
+impl<Value: Debug> Eq for Huffman<Value> {}
+
+fn make_huffman() -> Huffman<&'static Op> {
+    // Valve's Huffman-Tree uses a variation which takes the node number into
+    // account
+    let mut num = 0;
+
+    let mut bh = BinaryHeap::new();
+
+    for op in OPS.iter() {
+        let leaf = Huffman::Leaf {
+            weight: op.weight,
+            num,
+            value: op,
+        };
+        bh.push(leaf);
+        num += 1;
     }
 
     while bh.len() > 1 {
-        let left = bh.pop().unwrap().0;
-        let right = bh.pop().unwrap().0;
-        let merged_node = HuffmanTree::Node {
-            weight: left.get_weight() + right.get_weight(),
+        let left = bh.pop().unwrap();
+        let right = bh.pop().unwrap();
+        let node = Huffman::Node {
+            weight: left.weight() + right.weight(),
+            num,
             left: Box::new(left),
             right: Box::new(right),
         };
-        bh.push(Reverse(merged_node));
+        bh.push(node);
+        num += 1;
     }
 
-    bh.pop().unwrap().0
+    bh.pop().unwrap()
 }
 
-// ----
+fn print_table(huffman: &Huffman<&'static Op>) {
+    struct Leaf {
+        op: &'static Op,
+        id: usize,
+        depth: usize,
+    }
+    let mut leafs: Vec<Leaf> = Vec::new();
 
-fn walk_huffman_tree_and_write_table<W: Write>(huffman_tree: &HuffmanTree<usize>, w: &mut W) {
-    fn walk<W: Write>(huffman_tree: &HuffmanTree<usize>, w: &mut W, id: u32) {
-        match huffman_tree {
-            HuffmanTree::Leaf { weight, value: idx } => {
-                writeln!(
-                    w,
-                    "{:>38} | {:>6} | {:>6}",
-                    OPS[*idx as usize].name, weight, id
-                )
-                .unwrap();
+    fn walk(huffman: &Huffman<&'static Op>, leafs: &mut Vec<Leaf>, id: usize, depth: usize) {
+        match huffman {
+            Huffman::Leaf { value: op, .. } => {
+                leafs.push(Leaf { op, id, depth });
             }
-            HuffmanTree::Node { left, right, .. } => {
-                walk(right, w, (id << 1) | 1);
-                walk(left, w, (id << 1) | 0);
+            Huffman::Node { left, right, .. } => {
+                walk(left, leafs, (id << 1) | 0, depth + 1);
+                walk(right, leafs, (id << 1) | 1, depth + 1);
             }
         }
     }
 
-    writeln!(w, "{:>38} | weight |     id", "name").unwrap();
-    walk(huffman_tree, w, 0);
+    walk(huffman, &mut leafs, 0, 0);
+
+    println!("{:>38} | weight |     id | depth", "name");
+    leafs.sort_by(|a, b| a.id.partial_cmp(&b.id).unwrap());
+    leafs.iter().for_each(|leaf| {
+        println!(
+            "{:>38} | {:>6} | {:>6} | {:>5}",
+            leaf.op.name, leaf.op.weight, leaf.id, leaf.depth
+        );
+    });
 }
 
-fn walk_huffman_tree_and_write_digraph<W: Write>(huffman_tree: &HuffmanTree<usize>, w: &mut W) {
-    fn walk<W: Write>(huffman_tree: &HuffmanTree<usize>, w: &mut W, id: u32) {
-        match huffman_tree {
-            HuffmanTree::Leaf {
-                value: idx, weight, ..
-            } => {
-                writeln!(
-                    w,
-                    "  {} [label=\"{}\\nweight {}, id {}\"];",
-                    id, OPS[*idx as usize].name, weight, id
-                )
-                .unwrap();
+fn print_dot(huffman: &Huffman<&'static Op>) {
+    fn walk(huffman: &Huffman<&'static Op>, id: usize, depth: usize) {
+        match huffman {
+            Huffman::Leaf { value, weight, .. } => {
+                println!(
+                    "  {} [label=\"{}\\nweight {}, id {}, depth {}\"];",
+                    id, value.name, weight, id, depth
+                );
             }
-            HuffmanTree::Node { left, right, .. } => {
-                writeln!(w, "  {} [label=\"\"];", id).unwrap();
-                writeln!(w, "  {} -> {};", id, (id << 1) | 0).unwrap();
-                writeln!(w, "  {} -> {};", id, (id << 1) | 1).unwrap();
+            Huffman::Node { left, right, .. } => {
+                println!("  {} [label=\"\"];", id);
+                println!("  {} -> {};", id, (id << 1) | 0);
+                println!("  {} -> {};", id, (id << 1) | 1);
 
-                walk(right, w, (id << 1) | 1);
-                walk(left, w, (id << 1) | 0);
+                walk(right, (id << 1) | 1, depth + 1);
+                walk(left, (id << 1) | 0, depth + 1);
             }
         }
     }
 
-    writeln!(w, "digraph HuffmanTree {{").unwrap();
-    walk(huffman_tree, w, 0);
-    writeln!(w, "}}").unwrap();
+    println!("digraph Huffman {{");
+    walk(huffman, 0, 0);
+    println!("}}");
 }
 
-fn get_huffman_tree_depth<V>(huffman_tree: &HuffmanTree<V>) -> u32 {
-    fn walk<V>(node: &HuffmanTree<V>, depth: u32) -> u32 {
+fn print_depth(huffman: &Huffman<&'static Op>) {
+    fn walk(node: &Huffman<&'static Op>, depth: usize) -> usize {
         match node {
-            HuffmanTree::Leaf { .. } => depth,
-            HuffmanTree::Node { left, right, .. } => {
+            Huffman::Leaf { .. } => depth,
+            Huffman::Node { left, right, .. } => {
                 let left_depth = walk(left, depth + 1);
                 let right_depth = walk(right, depth + 1);
                 left_depth.max(right_depth)
             }
         }
     }
-    walk(huffman_tree, 0)
+    let depth = walk(huffman, 0);
+    println!("{}", depth);
 }
 
-// ----
+// // ----
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let cmd = args.get(1);
     if cmd.is_none() {
-        eprintln!("usage: huffmanfieldpath <table|digraph>");
+        eprintln!("usage: huffmanfieldpath <table|dot|depth>");
         std::process::exit(42);
     }
 
-    let huffman_tree = make_huffman_tree();
-
-    let stdout = std::io::stdout();
-    let mut w = stdout.lock();
+    let huffman = make_huffman();
 
     match cmd.unwrap().as_str() {
         // table command is useful for constructing id lookup "table" (manually;
         // see fieldpath.rs).
-        "table" => walk_huffman_tree_and_write_table(&huffman_tree, &mut w),
-        // digraph command is fun xd. to get the visualisation run (graphviz
+        "table" => print_table(&huffman),
+        // dot command is fun xd. to get the visualisation run (graphviz
         // must be installed):
-        // $ cargo run --bin huffman -- digraph | dot -Tpng | feh -
-        "digraph" => walk_huffman_tree_and_write_digraph(&huffman_tree, &mut w),
-        // depth command finds the depth of the huffman tree.
-        "depth" => println!("depth: {}", get_huffman_tree_depth(&huffman_tree)),
+        // $ cargo run --bin huffmanfieldpath -- dot | dot -Tpng | feh -
+        "dot" => print_dot(&huffman),
+        // depth command finds the depth of the huffman.
+        "depth" => print_depth(&huffman),
         cmd => eprintln!("invalid command: {}", cmd),
     }
 }

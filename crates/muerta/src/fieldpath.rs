@@ -6,6 +6,9 @@ pub enum Error {
     // crate
     #[error(transparent)]
     BitBuf(#[from] bitbuf::Error),
+    // mod
+    #[error("exhausted max operation bits")]
+    ExhaustedMaxOpBits,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -406,9 +409,12 @@ fn field_path_encode_finish(fp: &mut FieldPath, _br: &mut BitReader) -> Result<(
 
 #[inline(always)]
 fn lookup_exec_op(id: u32, fp: &mut FieldPath, br: &mut BitReader) -> Result<bool> {
-    // stolen from butterfly.
-    // those ids are result of encoding sequence of bools into numeric
-    // representation like so (in a loop): id = ( id << 1 ) | br.readBool().
+    // stolen from butterfly. those ids are result of encoding sequence of bools
+    // into numeric representation like so (in a loop): id = ( id << 1 ) |
+    // br.readBool().
+    //
+    // TODO: don't questionmark all the ops, instead combine op result with the
+    // final "true" return.
     match id {
         0 => plus_one(fp, br)?,
         2 => field_path_encode_finish(fp, br)?,
@@ -490,7 +496,6 @@ pub(crate) fn read_field_paths<'a>(
             continue 'epic_loop;
         }
 
-        // TODO: don't panic
-        panic!("exhausted max operation bits");
+        return Err(Error::ExhaustedMaxOpBits);
     }
 }
