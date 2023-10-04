@@ -35,7 +35,6 @@ struct StringHistoryEntry {
 impl StringHistoryEntry {
     unsafe fn new_uninit() -> Self {
         Self {
-            #[allow(invalid_value)]
             string: MaybeUninit::uninit().assume_init(),
         }
     }
@@ -213,7 +212,7 @@ impl StringTable {
                     if is_compressed {
                         snap::raw::Decoder::new()
                             .decompress(&user_data_buf[..size], user_data_uncompressed_buf)?;
-                        let size = snap::raw::decompress_len(&user_data_buf)?;
+                        let size = snap::raw::decompress_len(user_data_buf)?;
                         Some(&user_data_uncompressed_buf[..size])
                     } else {
                         Some(&user_data_buf[..size])

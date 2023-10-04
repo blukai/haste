@@ -294,8 +294,8 @@ fn print_table(huffman: &Huffman<&'static Op>) {
                 leafs.push(Leaf { op, id, depth });
             }
             Huffman::Node { left, right, .. } => {
-                walk(left, leafs, (id << 1) | 0, depth + 1);
                 walk(right, leafs, (id << 1) | 1, depth + 1);
+                walk(left, leafs, id << 1, depth + 1);
             }
         }
     }
@@ -323,11 +323,11 @@ fn print_dot(huffman: &Huffman<&'static Op>) {
             }
             Huffman::Node { left, right, .. } => {
                 println!("  {} [label=\"\"];", id);
-                println!("  {} -> {};", id, (id << 1) | 0);
                 println!("  {} -> {};", id, (id << 1) | 1);
+                println!("  {} -> {};", id, id << 1);
 
                 walk(right, (id << 1) | 1, depth + 1);
-                walk(left, (id << 1) | 0, depth + 1);
+                walk(left, id << 1, depth + 1);
             }
         }
     }

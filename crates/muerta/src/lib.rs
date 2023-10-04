@@ -13,6 +13,7 @@ pub mod flattenedserializers;
 pub mod fnv1a;
 pub mod instancebaseline;
 pub(crate) mod nohash;
+pub mod parser;
 pub mod quantizedfloat;
 pub mod stringtables;
 pub mod varint;

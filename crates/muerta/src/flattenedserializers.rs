@@ -26,7 +26,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 // https://developer.valvesoftware.com/wiki/Networking_Events_%26_Messages
 // https://developer.valvesoftware.com/wiki/Networking_Entities
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct FlattenedSerializerField {
     pub var_type: Box<str>,
     pub var_type_hash: u64,
@@ -126,36 +126,6 @@ impl FlattenedSerializerField {
     }
 }
 
-impl Default for FlattenedSerializerField {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            var_type: Box::default(),
-            var_type_hash: 0,
-
-            var_name: Box::default(),
-            var_name_hash: 0,
-
-            bit_count: None,
-            low_value: None,
-            high_value: None,
-            encode_flags: None,
-
-            field_serializer_name: None,
-            field_serializer_name_hash: None,
-            field_serializer: None,
-
-            field_serializer_version: None,
-            send_node: None,
-
-            var_encoder: None,
-            var_encoder_hash: None,
-
-            metadata: None,
-        }
-    }
-}
-
 // NOTE: Clone derive is needed here because Entity in entities.rs needs to be
 // clonable which means that all members of it also should be clonable.
 #[derive(Clone)]
@@ -206,18 +176,12 @@ impl FlattenedSerializer {
 type FieldMap = HashMap<i32, Rc<FlattenedSerializerField>, NoHashHasherBuilder<i32>>;
 type SerializerMap = HashMap<u64, Rc<FlattenedSerializer>, NoHashHasherBuilder<u64>>;
 
-#[derive(Default)]
 pub struct FlattenedSerializers {
     serializers: SerializerMap,
 }
 
 impl FlattenedSerializers {
-    pub fn parse(&mut self, cmd: dota2protos::CDemoSendTables) -> Result<()> {
-        debug_assert!(
-            self.serializers.is_empty(),
-            "serializer map is expected to not be created yet"
-        );
-
+    pub fn parse(cmd: dota2protos::CDemoSendTables) -> Result<Self> {
         let svcmsg = {
             // TODO: make prost work with ByteString and turn data into Bytes
             let mut data = &cmd.data.expect("send tables data")[..];
@@ -300,9 +264,12 @@ impl FlattenedSerializers {
                                     serializer_name: Box::default(),
                                     serializer_version: None,
                                     fields: {
-                                        let mut sub_field = FlattenedSerializerField::default();
-                                        sub_field.field_serializer =
-                                            serializers.get(&element_serializer_name_hash).cloned();
+                                        let sub_field = FlattenedSerializerField {
+                                            field_serializer: serializers
+                                                .get(&element_serializer_name_hash)
+                                                .cloned(),
+                                            ..Default::default()
+                                        };
 
                                         const SIZE: usize = 256;
                                         let mut sub_fields = Vec::with_capacity(SIZE);
@@ -338,9 +305,7 @@ impl FlattenedSerializers {
             );
         }
 
-        self.serializers = serializers;
-
-        Ok(())
+        Ok(Self { serializers })
     }
 
     #[inline(always)]

@@ -1024,6 +1024,11 @@ pub fn get_field_metadata(field: &FlattenedSerializerField) -> Result<Option<Fie
             special_type: Some(FieldSpecialType::Array { length: 100 }),
             decoder: Box::new(F32Decoder::new(field)?),
         }),
+        // from 7364789105
+        v if v == hash(b"float32[4]") => Some(FieldMetadata {
+            special_type: Some(FieldSpecialType::Array { length: 4 }),
+            decoder: Box::new(F32Decoder::new(field)?),
+        }),
         v if v == hash(b"int16") => Some(FieldMetadata {
             special_type: None,
             decoder: Box::<I32Decoder>::default(),

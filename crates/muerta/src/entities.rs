@@ -29,14 +29,14 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 // Flags for delta encoding header
 // csgo src: engine/ents_shared.h
-const FHDR_ZERO: usize = 0x0000;
-const FHDR_LEAVEPVS: usize = 0x0001;
-const FHDR_DELETE: usize = 0x0002;
-const FHDR_ENTERPVS: usize = 0x0004;
+pub const FHDR_ZERO: usize = 0x0000;
+pub const FHDR_LEAVEPVS: usize = 0x0001;
+pub const FHDR_DELETE: usize = 0x0002;
+pub const FHDR_ENTERPVS: usize = 0x0004;
 
 // CL_ParseDeltaHeader in engine/client.cpp
 #[inline(always)]
-fn parse_delta_header(br: &mut BitReader) -> Result<usize> {
+pub fn parse_delta_header(br: &mut BitReader) -> Result<usize> {
     let mut update_flags = FHDR_ZERO;
     // NOTE: read_bool is equivalent to ReadOneBit() == 1
     if !br.read_bool()? {
@@ -55,7 +55,8 @@ fn parse_delta_header(br: &mut BitReader) -> Result<usize> {
 
 // Used to classify entity update types in DeltaPacketEntities.
 // csgo src: engine/ents_shared.h
-enum UpdateType {
+#[derive(Debug)]
+pub enum UpdateType {
     EnterPVS = 0, // Entity came back into pvs, create new entity if one doesn't exist
     LeavePVS,     // Entity left pvs
     DeltaEnt,     // There is a delta for this entity.
@@ -63,7 +64,7 @@ enum UpdateType {
 
 // DetermineUpdateType in engine/client.cpp
 #[inline(always)]
-fn determine_update_type(update_flags: usize) -> UpdateType {
+pub fn determine_update_type(update_flags: usize) -> UpdateType {
     if update_flags & FHDR_ENTERPVS != 0 {
         UpdateType::EnterPVS
     } else if update_flags & FHDR_LEAVEPVS != 0 {
@@ -75,8 +76,8 @@ fn determine_update_type(update_flags: usize) -> UpdateType {
 
 #[derive(Clone)]
 pub struct Entity {
-    flattened_serializer: Rc<FlattenedSerializer>,
-    field_values: HashMap<u64, FieldValue, NoHashHasherBuilder<u64>>,
+    pub flattened_serializer: Rc<FlattenedSerializer>,
+    pub field_values: HashMap<u64, FieldValue, NoHashHasherBuilder<u64>>,
 }
 
 impl Entity {
@@ -150,6 +151,8 @@ impl Entity {
 
                 // eprintln!(" -> {:?}", field_value);
 
+                // TODO: fix entity storage (objects and arrays are not being handled properly)
+
                 self.field_values.insert(field.var_name_hash, field_value);
             }
 
@@ -174,55 +177,14 @@ impl Default for Entities {
 }
 
 impl Entities {
-    pub fn read_packet_entities(
-        &mut self,
-        svcmsg: dota2protos::CsvcMsgPacketEntities,
-        entity_classes: &EntityClasses,
-        instance_baseline: &InstanceBaseline,
-        flattened_serializers: &FlattenedSerializers,
-    ) -> Result<()> {
-        let entity_data = svcmsg.entity_data.expect("entity data");
-        let mut br = BitReader::new(&entity_data);
-
-        let mut entidx: i32 = -1;
-        for _ in (0..svcmsg.updated_entries.expect("updated entries")).rev() {
-            entidx += br.read_ubitvar()? as i32 + 1;
-
-            let update_flags = parse_delta_header(&mut br)?;
-            let update_type = determine_update_type(update_flags);
-
-            match update_type {
-                UpdateType::EnterPVS => {
-                    self.handle_create(
-                        entidx,
-                        &mut br,
-                        entity_classes,
-                        instance_baseline,
-                        flattened_serializers,
-                    )?;
-                }
-                UpdateType::LeavePVS => {
-                    if (update_flags & FHDR_DELETE) != 0 {
-                        self.entities.remove(&(entidx));
-                    }
-                }
-                UpdateType::DeltaEnt => {
-                    self.handle_update(entidx, &mut br)?;
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    fn handle_create(
+    pub fn handle_create(
         &mut self,
         entidx: i32,
         br: &mut BitReader,
         entity_classes: &EntityClasses,
         instance_baseline: &InstanceBaseline,
         flattened_serializers: &FlattenedSerializers,
-    ) -> Result<()> {
+    ) -> Result<&Entity> {
         let class_id = br.read_ubitlong(entity_classes.bits)? as i32;
         let _serial = br.read_ubitlong(17)?;
         let _unknown = br.read_uvarint32()?;
@@ -250,14 +212,19 @@ impl Entities {
         entity.parse(br)?;
 
         self.entities.insert(entidx, entity);
-
-        Ok(())
+        Ok(unsafe { self.entities.get(&entidx).unwrap_unchecked() })
     }
 
-    fn handle_update(&mut self, entidx: i32, br: &mut BitReader) -> Result<()> {
+    pub fn handle_delete(&mut self, entidx: i32) -> Entity {
+        // SAFETY: if it's being deleted menas that it was created, riiight?
+        unsafe { self.entities.remove(&(entidx)).unwrap_unchecked() }
+    }
+
+    pub fn handle_update(&mut self, entidx: i32, br: &mut BitReader) -> Result<&Entity> {
         // SAFETY: if entity was ever created, and not deleted, it can be
         // updated!
         let entity = unsafe { self.entities.get_mut(&entidx).unwrap_unchecked() };
-        entity.parse(br)
+        entity.parse(br)?;
+        Ok(entity)
     }
 }

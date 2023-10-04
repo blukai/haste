@@ -57,7 +57,6 @@ struct InternalU64Fixed64Decoder {}
 impl FieldDecode for InternalU64Fixed64Decoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        #[allow(invalid_value)]
         let mut buf: [u8; 8] = unsafe { MaybeUninit::uninit().assume_init() };
         br.read_bytes(&mut buf)?;
         Ok(u64::from_le_bytes(buf).into())
@@ -134,7 +133,6 @@ pub struct StringDecoder {}
 impl FieldDecode for StringDecoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        #[allow(invalid_value)]
         let mut buf: [u8; 1024] = unsafe { MaybeUninit::uninit().assume_init() };
         let n = br.read_string(&mut buf, false)?;
         Ok(Box::<str>::from(unsafe { std::str::from_utf8_unchecked(&buf[..n]) }).into())

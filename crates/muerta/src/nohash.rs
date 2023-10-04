@@ -8,7 +8,7 @@ use std::{
 // and https://docs.rs/nohash/latest/nohash/struct.NoHashHasher.html
 
 #[derive(Default)]
-pub(crate) struct NoHashHasher<T> {
+pub struct NoHashHasher<T> {
     value: u64,
     _t: PhantomData<T>,
 }
@@ -35,4 +35,4 @@ impl<T> Hasher for NoHashHasher<T> {
     }
 }
 
-pub(crate) type NoHashHasherBuilder<T> = BuildHasherDefault<NoHashHasher<T>>;
+pub type NoHashHasherBuilder<T> = BuildHasherDefault<NoHashHasher<T>>;
