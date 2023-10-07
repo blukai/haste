@@ -490,7 +490,7 @@ pub(crate) fn read_field_paths<'a>(
                 continue;
             }
             if fp.finished {
-                return Ok(&fps[0..i as usize]);
+                return Ok(&fps[..i as usize]);
             }
             fps[i as usize] = fp.clone();
             continue 'epic_loop;
