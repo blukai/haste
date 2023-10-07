@@ -28,7 +28,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 const DEMO_HEADER_ID: [u8; 8] = *b"PBDEMS2\0";
 
 // NOTE: naming is based on stuff from demofile.h of valve's demoinfo2 thing.
-#[derive(Default, Debug)]
+#[derive(Debug, Default)]
 pub struct DemoHeader {
     pub demofilestamp: [u8; 8],
     pub fileinfo_offset: i32,

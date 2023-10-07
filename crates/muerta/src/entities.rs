@@ -74,7 +74,7 @@ pub fn determine_update_type(update_flags: usize) -> UpdateType {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Entity {
     pub flattened_serializer: Rc<FlattenedSerializer>,
     pub field_values: HashMap<u64, FieldValue, NoHashHasherBuilder<u64>>,
@@ -119,6 +119,7 @@ impl Entity {
     }
 }
 
+#[derive(Debug)]
 pub struct Entities {
     // TODO: use Vec<Option<.. or Vec<MaybeUninit<.. or implement NoOpHasher
     // because keys are indexes, see

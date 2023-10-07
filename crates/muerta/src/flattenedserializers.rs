@@ -26,7 +26,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 // https://developer.valvesoftware.com/wiki/Networking_Events_%26_Messages
 // https://developer.valvesoftware.com/wiki/Networking_Entities
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct FlattenedSerializerField {
     pub var_type: Box<str>,
     pub var_type_hash: u64,
@@ -128,7 +128,7 @@ impl FlattenedSerializerField {
 
 // NOTE: Clone derive is needed here because Entity in entities.rs needs to be
 // clonable which means that all members of it also should be clonable.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct FlattenedSerializer {
     pub serializer_name: Box<str>,
     pub serializer_version: Option<i32>,

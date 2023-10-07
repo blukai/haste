@@ -18,14 +18,14 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 // NOTE: Clone is derived because FlattenedSerializerField needs to be clonable.
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub enum FieldSpecialType {
     Array { length: usize },
     VariableLengthArray,
     VariableLengthSerializerArray { element_serializer_name_hash: u64 },
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct FieldMetadata {
     pub special_type: Option<FieldSpecialType>,
     pub decoder: Box<dyn FieldDecode>,

@@ -6,7 +6,7 @@ use crate::{
     quantizedfloat::{self, QuantizedFloat},
 };
 use dyn_clone::DynClone;
-use std::mem::MaybeUninit;
+use std::{fmt::Debug, mem::MaybeUninit};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -21,7 +21,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 // ----
 
-pub trait FieldDecode: DynClone {
+pub trait FieldDecode: DynClone + Debug {
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue>;
 }
 
@@ -29,7 +29,7 @@ dyn_clone::clone_trait_object!(FieldDecode);
 
 // ----
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct U32Decoder {}
 
 impl FieldDecode for U32Decoder {
@@ -41,7 +41,7 @@ impl FieldDecode for U32Decoder {
 
 // ----
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 struct InternalU64Decoder {}
 
 impl FieldDecode for InternalU64Decoder {
@@ -51,7 +51,7 @@ impl FieldDecode for InternalU64Decoder {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 struct InternalU64Fixed64Decoder {}
 
 impl FieldDecode for InternalU64Fixed64Decoder {
@@ -63,7 +63,7 @@ impl FieldDecode for InternalU64Fixed64Decoder {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct U64Decoder {
     decoder: Box<dyn FieldDecode>,
 }
@@ -91,7 +91,7 @@ impl FieldDecode for U64Decoder {
 
 // ----
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct I32Decoder {}
 
 impl FieldDecode for I32Decoder {
@@ -103,7 +103,7 @@ impl FieldDecode for I32Decoder {
 
 // ----
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct I64Decoder {}
 
 impl FieldDecode for I64Decoder {
@@ -115,7 +115,7 @@ impl FieldDecode for I64Decoder {
 
 // ----
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct BoolDecoder {}
 
 impl FieldDecode for BoolDecoder {
@@ -127,7 +127,7 @@ impl FieldDecode for BoolDecoder {
 
 // ----
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct StringDecoder {}
 
 impl FieldDecode for StringDecoder {
@@ -141,7 +141,7 @@ impl FieldDecode for StringDecoder {
 
 // ----
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct InternalQAnglePitchYawDecoder {
     bit_count: usize,
 }
@@ -158,7 +158,7 @@ impl FieldDecode for InternalQAnglePitchYawDecoder {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 struct InternalQAngleNoBitCountDecoder {}
 
 impl FieldDecode for InternalQAngleNoBitCountDecoder {
@@ -176,7 +176,7 @@ impl FieldDecode for InternalQAngleNoBitCountDecoder {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct InternalQAngleBitCountDecoder {
     bit_count: usize,
 }
@@ -193,7 +193,7 @@ impl FieldDecode for InternalQAngleBitCountDecoder {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct QAngleDecoder {
     decoder: Box<dyn FieldDecode>,
 }
@@ -229,7 +229,7 @@ impl FieldDecode for QAngleDecoder {
 
 // ----
 
-trait InternalF32Decode: DynClone {
+trait InternalF32Decode: DynClone + Debug {
     fn decode(&self, br: &mut BitReader) -> Result<f32>;
 }
 
@@ -237,7 +237,7 @@ dyn_clone::clone_trait_object!(InternalF32Decode);
 
 // ----
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct InternalQuantizedFloatDecoder {
     quantized_float: QuantizedFloat,
 }
@@ -262,7 +262,7 @@ impl InternalF32Decode for InternalQuantizedFloatDecoder {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct QuantizedFloatDecoder {
     decoder: Box<dyn InternalF32Decode>,
 }
@@ -284,7 +284,7 @@ impl FieldDecode for QuantizedFloatDecoder {
 
 // ----
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 struct InternalF32SimulationTimeDecoder {}
 
 impl InternalF32Decode for InternalF32SimulationTimeDecoder {
@@ -297,7 +297,7 @@ impl InternalF32Decode for InternalF32SimulationTimeDecoder {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 struct InternalF32CoordDecoder {}
 
 impl InternalF32Decode for InternalF32CoordDecoder {
@@ -307,7 +307,7 @@ impl InternalF32Decode for InternalF32CoordDecoder {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 struct InternalF32NoScaleDecoder {}
 
 impl InternalF32Decode for InternalF32NoScaleDecoder {
@@ -317,7 +317,7 @@ impl InternalF32Decode for InternalF32NoScaleDecoder {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct InternalF32Decoder {
     decoder: Box<dyn InternalF32Decode>,
 }
@@ -359,7 +359,7 @@ impl InternalF32Decode for InternalF32Decoder {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct F32Decoder {
     decoder: Box<dyn InternalF32Decode>,
 }
@@ -381,7 +381,7 @@ impl FieldDecode for F32Decoder {
 
 // ----
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Vec2Decoder {
     decoder: Box<dyn InternalF32Decode>,
 }
@@ -404,7 +404,7 @@ impl FieldDecode for Vec2Decoder {
 
 // ----
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Vec3Decoder {
     decoder: Box<dyn InternalF32Decode>,
 }
@@ -431,7 +431,7 @@ impl FieldDecode for Vec3Decoder {
 
 // ----
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Vec4Decoder {
     decoder: Box<dyn InternalF32Decode>,
 }
