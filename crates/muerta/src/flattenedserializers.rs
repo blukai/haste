@@ -58,23 +58,23 @@ impl FlattenedSerializerField {
         svcmsg: &dota2protos::CsvcMsgFlattenedSerializer,
         field: &dota2protos::ProtoFlattenedSerializerFieldT,
     ) -> Self {
-        let resolve_sym = |v: i32| Some(svcmsg.symbols[v as usize].clone().into_boxed_str());
+        let resolve_sym = |v: i32| svcmsg.symbols[v as usize].clone().into_boxed_str();
 
-        let var_type = field.var_type_sym.and_then(resolve_sym).expect("var type");
-        let var_type_hash = fnv1a::hash(var_type.as_bytes());
+        let var_type = field.var_type_sym.map(resolve_sym).expect("var type");
+        let var_type_hash = fnv1a::hash_bytes(var_type.as_bytes());
 
-        let var_name = field.var_name_sym.and_then(resolve_sym).expect("var name");
-        let var_name_hash = fnv1a::hash(var_name.as_bytes());
+        let var_name = field.var_name_sym.map(resolve_sym).expect("var name");
+        let var_name_hash = fnv1a::hash_bytes(var_name.as_bytes());
 
-        let field_serializer_name = field.field_serializer_name_sym.and_then(resolve_sym);
+        let field_serializer_name = field.field_serializer_name_sym.map(resolve_sym);
         let field_serializer_name_hash = field_serializer_name
             .as_ref()
-            .map(|field_serializer_name| fnv1a::hash(field_serializer_name.as_bytes()));
+            .map(|field_serializer_name| fnv1a::hash_bytes(field_serializer_name.as_bytes()));
 
-        let var_encoder = field.var_encoder_sym.and_then(resolve_sym);
+        let var_encoder = field.var_encoder_sym.map(resolve_sym);
         let var_encoder_hash = var_encoder
             .as_ref()
-            .map(|var_encoder| fnv1a::hash(var_encoder.as_bytes()));
+            .map(|var_encoder| fnv1a::hash_bytes(var_encoder.as_bytes()));
 
         Self {
             var_type,
@@ -93,7 +93,7 @@ impl FlattenedSerializerField {
             field_serializer: None,
 
             field_serializer_version: field.field_serializer_version,
-            send_node: field.send_node_sym.and_then(resolve_sym),
+            send_node: field.send_node_sym.map(resolve_sym),
 
             var_encoder,
             var_encoder_hash,
@@ -128,7 +128,7 @@ impl FlattenedSerializerField {
 
 // NOTE: Clone derive is needed here because Entity in entities.rs needs to be
 // clonable which means that all members of it also should be clonable.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct FlattenedSerializer {
     pub serializer_name: Box<str>,
     pub serializer_version: Option<i32>,
@@ -148,7 +148,7 @@ impl FlattenedSerializer {
             .serializer_name_sym
             .and_then(resolve_sym)
             .expect("serializer name");
-        let serializer_name_hash = fnv1a::hash(serializer_name.as_bytes());
+        let serializer_name_hash = fnv1a::hash_bytes(serializer_name.as_bytes());
 
         Ok(Self {
             serializer_name,
@@ -234,35 +234,29 @@ impl FlattenedSerializers {
                         Some(field_metadata) => match field_metadata.special_type {
                             Some(FieldSpecialType::Array { length }) => {
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                    serializer_name: Box::default(),
-                                    serializer_version: None,
                                     fields: {
                                         let mut fields = Vec::with_capacity(length);
                                         fields.resize(length, Rc::new(field.clone()));
                                         fields
                                     },
-                                    serializer_name_hash: 0,
+                                    ..Default::default()
                                 }));
                             }
                             Some(FieldSpecialType::VariableLengthArray) => {
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                    serializer_name: Box::default(),
-                                    serializer_version: None,
                                     fields: {
                                         const SIZE: usize = 256;
                                         let mut fields = Vec::with_capacity(SIZE);
                                         fields.resize(SIZE, Rc::new(field.clone()));
                                         fields
                                     },
-                                    serializer_name_hash: 0,
+                                    ..Default::default()
                                 }));
                             }
                             Some(FieldSpecialType::VariableLengthSerializerArray {
                                 element_serializer_name_hash,
                             }) => {
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                    serializer_name: Box::default(),
-                                    serializer_version: None,
                                     fields: {
                                         let sub_field = FlattenedSerializerField {
                                             field_serializer: serializers
@@ -276,7 +270,7 @@ impl FlattenedSerializers {
                                         sub_fields.resize(SIZE, Rc::new(sub_field));
                                         sub_fields
                                     },
-                                    serializer_name_hash: 0,
+                                    ..Default::default()
                                 }));
                             }
                             _ => {}

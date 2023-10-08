@@ -98,14 +98,16 @@ impl From<[f32; 4]> for FieldValue {
 impl ToString for FieldValue {
     fn to_string(&self) -> String {
         match self {
-            Self::U32(value) | Self::I32(value) => format!("{:?}", value),
-            Self::U64(value) | Self::I64(value) => format!("{:?}", value),
-            Self::F32(value) => format!("{:?}", value),
-            Self::Bool(value) => format!("{:?}", value),
-            Self::String(value) => format!("{:?}", value),
-            Self::Vec3(value) => format!("{:?}", value),
-            Self::Vec2(value) => format!("{:?}", value),
-            Self::Vec4(value) => format!("{:?}", value),
+            Self::U32(value) => format!("U32({:?})", value),
+            Self::U64(value) => format!("U64({:?})", value),
+            Self::I32(value) => format!("I32({:?})", value),
+            Self::I64(value) => format!("I64({:?})", value),
+            Self::F32(value) => format!("F32({:?})", value),
+            Self::Bool(value) => format!("Bool({:?})", value),
+            Self::String(value) => format!("String({:?})", value),
+            Self::Vec3(value) => format!("Vec3({:?})", value),
+            Self::Vec2(value) => format!("Vec2({:?})", value),
+            Self::Vec4(value) => format!("Vec4({:?})", value),
         }
     }
 }

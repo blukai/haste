@@ -44,8 +44,8 @@ fn main() -> Result<()> {
                     for field_index in serializer.fields_index.into_iter() {
                         let field = &flattened_serializer.fields[field_index as usize];
                         let resolve =
-                            |v: i32| Some(String::from(&flattened_serializer.symbols[v as usize]));
-                        let var_type = field.var_type_sym.and_then(resolve).expect("var type");
+                            |v: i32| String::from(&flattened_serializer.symbols[v as usize]);
+                        let var_type = field.var_type_sym.map(resolve).expect("var type");
                         types.insert(var_type.clone());
                     }
                 }

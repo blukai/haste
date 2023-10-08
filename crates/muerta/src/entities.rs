@@ -151,17 +151,14 @@ impl Entities {
         let class_info = entity_classes.get_by_id(class_id).expect("class info");
         let flattened_serializer = flattened_serializers
             .get_by_serializer_name_hash(class_info.network_name_hash)
-            .expect("flattened serializer")
-            .clone();
-
-        let field_values = HashMap::with_capacity_and_hasher(
-            flattened_serializer.fields.len(),
-            NoHashHasherBuilder::default(),
-        );
+            .expect("flattened serializer");
 
         let mut entity = Entity {
-            flattened_serializer,
-            field_values,
+            flattened_serializer: flattened_serializer.clone(),
+            field_values: HashMap::with_capacity_and_hasher(
+                flattened_serializer.fields.len(),
+                NoHashHasherBuilder::default(),
+            ),
         };
 
         let baseline_data_rc = instance_baseline.get_data(class_id).expect("baseline data");
