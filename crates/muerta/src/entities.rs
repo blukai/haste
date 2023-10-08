@@ -106,13 +106,16 @@ impl Entity {
                 // here. it is safe to assume that field metadata cannot be
                 // None.
                 let field_metadata = unsafe { field.metadata.as_ref().unwrap_unchecked() };
-                let _field_value = field_metadata.decoder.decode(br)?;
+                let field_value = field_metadata.decoder.decode(br)?;
+                let field_key = unsafe { fp.hash_unchecked() };
 
                 // eprintln!(" -> {:?}", field_value);
 
-                // TODO: fix entity storage (objects and arrays are not being handled properly)
-                // self.field_values.insert(field.var_name_hash, field_value);
+                self.field_values.insert(field_key, field_value);
             }
+
+            // dbg!(&self.field_values);
+            // panic!();
 
             Ok(())
         })

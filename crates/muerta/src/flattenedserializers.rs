@@ -61,20 +61,20 @@ impl FlattenedSerializerField {
         let resolve_sym = |v: i32| svcmsg.symbols[v as usize].clone().into_boxed_str();
 
         let var_type = field.var_type_sym.map(resolve_sym).expect("var type");
-        let var_type_hash = fnv1a::hash_bytes(var_type.as_bytes());
+        let var_type_hash = fnv1a::hash_u8(var_type.as_bytes());
 
         let var_name = field.var_name_sym.map(resolve_sym).expect("var name");
-        let var_name_hash = fnv1a::hash_bytes(var_name.as_bytes());
+        let var_name_hash = fnv1a::hash_u8(var_name.as_bytes());
 
         let field_serializer_name = field.field_serializer_name_sym.map(resolve_sym);
         let field_serializer_name_hash = field_serializer_name
             .as_ref()
-            .map(|field_serializer_name| fnv1a::hash_bytes(field_serializer_name.as_bytes()));
+            .map(|field_serializer_name| fnv1a::hash_u8(field_serializer_name.as_bytes()));
 
         let var_encoder = field.var_encoder_sym.map(resolve_sym);
         let var_encoder_hash = var_encoder
             .as_ref()
-            .map(|var_encoder| fnv1a::hash_bytes(var_encoder.as_bytes()));
+            .map(|var_encoder| fnv1a::hash_u8(var_encoder.as_bytes()));
 
         Self {
             var_type,
@@ -148,7 +148,7 @@ impl FlattenedSerializer {
             .serializer_name_sym
             .and_then(resolve_sym)
             .expect("serializer name");
-        let serializer_name_hash = fnv1a::hash_bytes(serializer_name.as_bytes());
+        let serializer_name_hash = fnv1a::hash_u8(serializer_name.as_bytes());
 
         Ok(Self {
             serializer_name,

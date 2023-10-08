@@ -70,7 +70,7 @@ pub struct U64Decoder {
 
 impl U64Decoder {
     pub fn new(field: &FlattenedSerializerField) -> Self {
-        if field.is_var_encoder_hash_eq(fnv1a::hash_bytes(b"fixed64")) {
+        if field.is_var_encoder_hash_eq(fnv1a::hash_u8(b"fixed64")) {
             Self {
                 decoder: Box::<InternalU64Fixed64Decoder>::default(),
             }
@@ -202,7 +202,7 @@ impl QAngleDecoder {
     pub fn new(field: &FlattenedSerializerField) -> Self {
         let bit_count = field.bit_count.unwrap_or_default() as usize;
 
-        if field.is_var_encoder_hash_eq(fnv1a::hash_bytes(b"qangle_pitch_yaw")) {
+        if field.is_var_encoder_hash_eq(fnv1a::hash_u8(b"qangle_pitch_yaw")) {
             return Self {
                 decoder: Box::new(InternalQAnglePitchYawDecoder { bit_count }),
             };
@@ -324,15 +324,15 @@ pub struct InternalF32Decoder {
 
 impl InternalF32Decoder {
     pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
-        if field.var_name_hash == fnv1a::hash_bytes(b"m_flSimulationTime")
-            || field.var_name_hash == fnv1a::hash_bytes(b"m_flAnimTime")
+        if field.var_name_hash == fnv1a::hash_u8(b"m_flSimulationTime")
+            || field.var_name_hash == fnv1a::hash_u8(b"m_flAnimTime")
         {
             return Ok(Self {
                 decoder: Box::<InternalF32SimulationTimeDecoder>::default(),
             });
         }
 
-        if field.is_var_encoder_hash_eq(fnv1a::hash_bytes(b"coord")) {
+        if field.is_var_encoder_hash_eq(fnv1a::hash_u8(b"coord")) {
             return Ok(Self {
                 decoder: Box::<InternalF32CoordDecoder>::default(),
             });

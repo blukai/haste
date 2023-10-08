@@ -1,4 +1,7 @@
-use crate::bitbuf::{self, BitReader};
+use crate::{
+    bitbuf::{self, BitReader},
+    fnv1a,
+};
 use std::cell::RefCell;
 
 #[derive(thiserror::Error, Debug)]
@@ -49,6 +52,13 @@ impl FieldPath {
     #[inline(always)]
     pub fn get(&self, index: usize) -> usize {
         unsafe { *self.data.get_unchecked(index) as usize }
+    }
+
+    // SAFETY: hash_unchecked is safe if replay data is correct.
+    #[inline(always)]
+    pub unsafe fn hash_unchecked(&self) -> u64 {
+        let slice: &[u32] = std::mem::transmute(&self.data[..=self.position]);
+        fnv1a::hash_u32(slice)
     }
 }
 
