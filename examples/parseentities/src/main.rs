@@ -8,9 +8,9 @@ struct MyVisitor;
 impl Visitor for MyVisitor {
     fn visit_entity(
         &self,
-        update_flags: usize,
-        update_type: muerta::entities::UpdateType,
-        entity: &muerta::entities::Entity,
+        _update_flags: usize,
+        _update_type: muerta::entities::UpdateType,
+        _entity: &muerta::entities::Entity,
     ) {
         // dbg!(
         //     update_flags,

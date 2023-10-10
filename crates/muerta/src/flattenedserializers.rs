@@ -28,25 +28,31 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Clone, Default)]
 pub struct FlattenedSerializerField {
+    #[cfg(debug_assertions)]
     pub var_type: Box<str>,
     pub var_type_hash: u64,
 
+    #[cfg(debug_assertions)]
     pub var_name: Box<str>,
     pub var_name_hash: u64,
 
-    // TODO: figure out which fields should, and which should not be optional
     pub bit_count: Option<i32>,
     pub low_value: Option<f32>,
     pub high_value: Option<f32>,
     pub encode_flags: Option<i32>,
 
+    #[cfg(debug_assertions)]
     pub field_serializer_name: Option<Box<str>>,
     pub field_serializer_name_hash: Option<u64>,
     pub field_serializer: Option<Rc<FlattenedSerializer>>,
 
-    pub field_serializer_version: Option<i32>,
-    pub send_node: Option<Box<str>>,
-
+    // NOTE: field_serializer_version and send_node are not being used anywhere
+    // (obviously duh).
+    //
+    // pub field_serializer_version: Option<i32>, pub
+    // send_node: Option<Box<str>>,
+    //
+    #[cfg(debug_assertions)]
     pub var_encoder: Option<Box<str>>,
     pub var_encoder_hash: Option<u64>,
 
@@ -58,7 +64,10 @@ impl FlattenedSerializerField {
         svcmsg: &dota2protos::CsvcMsgFlattenedSerializer,
         field: &dota2protos::ProtoFlattenedSerializerFieldT,
     ) -> Self {
+        #[cfg(debug_assertions)]
         let resolve_sym = |v: i32| svcmsg.symbols[v as usize].clone().into_boxed_str();
+        #[cfg(not(debug_assertions))]
+        let resolve_sym = |v: i32| svcmsg.symbols[v as usize].as_str();
 
         let var_type = field.var_type_sym.map(resolve_sym).expect("var type");
         let var_type_hash = fnv1a::hash_u8(var_type.as_bytes());
@@ -77,9 +86,11 @@ impl FlattenedSerializerField {
             .map(|var_encoder| fnv1a::hash_u8(var_encoder.as_bytes()));
 
         Self {
+            #[cfg(debug_assertions)]
             var_type,
             var_type_hash,
 
+            #[cfg(debug_assertions)]
             var_name,
             var_name_hash,
 
@@ -88,13 +99,12 @@ impl FlattenedSerializerField {
             high_value: field.high_value,
             encode_flags: field.encode_flags,
 
+            #[cfg(debug_assertions)]
             field_serializer_name,
             field_serializer_name_hash,
             field_serializer: None,
 
-            field_serializer_version: field.field_serializer_version,
-            send_node: field.send_node_sym.map(resolve_sym),
-
+            #[cfg(debug_assertions)]
             var_encoder,
             var_encoder_hash,
 
@@ -130,6 +140,7 @@ impl FlattenedSerializerField {
 // clonable which means that all members of it also should be clonable.
 #[derive(Debug, Clone, Default)]
 pub struct FlattenedSerializer {
+    #[cfg(debug_assertions)]
     pub serializer_name: Box<str>,
     pub serializer_version: Option<i32>,
     pub fields: Vec<Rc<FlattenedSerializerField>>,
@@ -142,15 +153,19 @@ impl FlattenedSerializer {
         svcmsg: &dota2protos::CsvcMsgFlattenedSerializer,
         fs: &dota2protos::ProtoFlattenedSerializerT,
     ) -> Result<Self> {
-        let resolve_sym = |v: i32| Some(svcmsg.symbols[v as usize].clone().into_boxed_str());
+        #[cfg(debug_assertions)]
+        let resolve_sym = |v: i32| svcmsg.symbols[v as usize].clone().into_boxed_str();
+        #[cfg(not(debug_assertions))]
+        let resolve_sym = |v: i32| svcmsg.symbols[v as usize].as_str();
 
         let serializer_name = fs
             .serializer_name_sym
-            .and_then(resolve_sym)
+            .map(resolve_sym)
             .expect("serializer name");
         let serializer_name_hash = fnv1a::hash_u8(serializer_name.as_bytes());
 
         Ok(Self {
+            #[cfg(debug_assertions)]
             serializer_name,
             serializer_version: fs.serializer_version,
             fields: Vec::with_capacity(fs.fields_index.len()),
@@ -276,11 +291,12 @@ impl FlattenedSerializers {
                             _ => {}
                         },
                         None => {
+                            #[cfg(debug_assertions)]
+                            let var_type = &field.var_type;
+                            #[cfg(not(debug_assertions))]
+                            let var_type = "[available in debug build]";
                             // TODO: don't panic?
-                            panic!(
-                                "unhandled flattened serializer var type: {}",
-                                &field.var_type
-                            )
+                            panic!("unhandled flattened serializer var type: {}", var_type,)
                         }
                     }
 
