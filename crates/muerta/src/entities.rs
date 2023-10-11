@@ -88,6 +88,9 @@ impl Entity {
             let mut fps = fps.borrow_mut();
             let fps = fieldpath::read_field_paths(br, &mut fps)?;
             for fp in fps {
+                // NOTE: this loop performes much better then the unrolled
+                // version of it, probably because a bunch of ifs cause a bunch
+                // of branch misses and branch missles are disasterous.
                 let mut field = self.flattened_serializer.get_child(fp.get(0));
                 for i in 1..=fp.position {
                     field = field.get_child(fp.get(i));
@@ -106,12 +109,23 @@ impl Entity {
                 // here. it is safe to assume that field metadata cannot be
                 // None.
                 let field_metadata = unsafe { field.metadata.as_ref().unwrap_unchecked() };
-                let field_value = field_metadata.decoder.decode(br)?;
+                // NOTE: a shit ton of time was being spent here in a Try trait.
+                // apparently Result is quite expensive xd. here's an artice
+                // that i managed to find that talks more about the Try trait -
+                // https://agourlay.github.io/rust-performance-retrospective-part3/
+                //
+                // tried couple of things here:
+                // - unwrap_unchecked shaved off ~20 ms
+                // - and_then (that was used by the author in the article above)
+                //   did not really work here
+                // - map shaved off ~40 ms without sacrafacing error checking, i
+                //   have no idea why, but this is quite impressive at this
+                //   point.
                 let field_key = unsafe { fp.hash_unchecked() };
-
-                // eprintln!(" -> {:?}", field_value);
-
-                self.field_values.insert(field_key, field_value);
+                field_metadata.decoder.decode(br).map(|field_value| {
+                    // eprintln!(" -> {:?}", &field_value);
+                    self.field_values.insert(field_key, field_value);
+                })?;
             }
 
             // dbg!(&self.field_values);
@@ -124,9 +138,12 @@ impl Entity {
 
 #[derive(Debug)]
 pub struct Entities {
-    // TODO: use Vec<Option<.. or Vec<MaybeUninit<.. or implement NoOpHasher
-    // because keys are indexes, see
-    // https://sourcegraph.com/github.com/actix/actix-web@d8df60bf4c04c3cbb99bcf19a141c202223e07ea/-/blob/actix-http/src/extensions.rs?L13
+    // TODO: maybe use Vec<Option<.. or Vec<MaybeUninit<..
+    //
+    // but what if there will be more entities then the capacity&len that will
+    // be pre-determined? some clues about max entry count can be found in
+    // public/const.h (NUM_ENT_ENTRIES); clarity (and possibly manta) specify 1
+    // << 14 as the max count of entries; butterfly uses number 20480.
     entities: HashMap<i32, Entity, NoHashHasherBuilder<i32>>,
 }
 
@@ -164,10 +181,12 @@ impl Entities {
             ),
         };
 
+        // TODO: maybe it would make sense to cache baselines?
         let baseline_data_rc = instance_baseline.get_data(class_id).expect("baseline data");
         let baseline_data_ref = baseline_data_rc.borrow();
         let mut baseline_br = BitReader::new(baseline_data_ref.as_ref());
         entity.parse(&mut baseline_br)?;
+
         entity.parse(br)?;
 
         self.entities.insert(entidx, entity);

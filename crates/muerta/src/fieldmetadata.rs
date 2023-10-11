@@ -23,6 +23,11 @@ pub enum FieldSpecialType {
     Array { length: usize },
     VariableLengthArray,
     VariableLengthSerializerArray { element_serializer_name_hash: u64 },
+    // TODO: make use of the poiter special type (atm it's useless; but it's
+    // supposed to be used to determine whether a new "entity" must be created
+    // (and deserialized value of the pointer field (/bool) must not be
+    // stored)).
+    Pointer,
 }
 
 #[derive(Debug, Clone)]
@@ -89,23 +94,20 @@ pub fn get_field_metadata(field: &FlattenedSerializerField) -> Result<Option<Fie
                 decoder: Box::<U32Decoder>::default(),
             })
         }
-        v if v == fnv1a::hash_u8(b"CBodyComponent") => {
-            // does not end with a *, but apparently a pointer
-            Some(FieldMetadata {
-                special_type: None,
-                decoder: Box::<BoolDecoder>::default(),
-            })
-        }
+        v if v == fnv1a::hash_u8(b"CBodyComponent") => Some(FieldMetadata {
+            special_type: Some(FieldSpecialType::Pointer),
+            decoder: Box::<BoolDecoder>::default(),
+        }),
         v if v == fnv1a::hash_u8(b"CDOTAGameManager*") => Some(FieldMetadata {
-            special_type: None,
+            special_type: Some(FieldSpecialType::Pointer),
             decoder: Box::<BoolDecoder>::default(),
         }),
         v if v == fnv1a::hash_u8(b"CDOTAGameRules*") => Some(FieldMetadata {
-            special_type: None,
+            special_type: Some(FieldSpecialType::Pointer),
             decoder: Box::<BoolDecoder>::default(),
         }),
         v if v == fnv1a::hash_u8(b"CDOTASpectatorGraphManager*") => Some(FieldMetadata {
-            special_type: None,
+            special_type: Some(FieldSpecialType::Pointer),
             decoder: Box::<BoolDecoder>::default(),
         }),
         v if v
@@ -119,19 +121,19 @@ pub fn get_field_metadata(field: &FlattenedSerializerField) -> Result<Option<Fie
             })
         }
         v if v == fnv1a::hash_u8(b"CDOTA_ArcanaDataEntity_DrowRanger*") => Some(FieldMetadata {
-            special_type: None,
+            special_type: Some(FieldSpecialType::Pointer),
             decoder: Box::<BoolDecoder>::default(),
         }),
         v if v == fnv1a::hash_u8(b"CDOTA_ArcanaDataEntity_FacelessVoid*") => Some(FieldMetadata {
-            special_type: None,
+            special_type: Some(FieldSpecialType::Pointer),
             decoder: Box::<BoolDecoder>::default(),
         }),
         v if v == fnv1a::hash_u8(b"CDOTA_ArcanaDataEntity_Razor*") => Some(FieldMetadata {
-            special_type: None,
+            special_type: Some(FieldSpecialType::Pointer),
             decoder: Box::<BoolDecoder>::default(),
         }),
         v if v == fnv1a::hash_u8(b"CEntityIdentity*") => Some(FieldMetadata {
-            special_type: None,
+            special_type: Some(FieldSpecialType::Pointer),
             decoder: Box::<BoolDecoder>::default(),
         }),
         v if v == fnv1a::hash_u8(b"CEntityIndex") => Some(FieldMetadata {
@@ -230,13 +232,10 @@ pub fn get_field_metadata(field: &FlattenedSerializerField) -> Result<Option<Fie
             special_type: None,
             decoder: Box::<U32Decoder>::default(),
         }),
-        v if v == fnv1a::hash_u8(b"CLightComponent") => {
-            // does not end with a *, but apparently a pointer
-            Some(FieldMetadata {
-                special_type: None,
-                decoder: Box::<BoolDecoder>::default(),
-            })
-        }
+        v if v == fnv1a::hash_u8(b"CLightComponent") => Some(FieldMetadata {
+            special_type: Some(FieldSpecialType::Pointer),
+            decoder: Box::<BoolDecoder>::default(),
+        }),
         v if v == fnv1a::hash_u8(b"CNetworkUtlVectorBase< AbilityID_t >") => Some(FieldMetadata {
             special_type: Some(FieldSpecialType::VariableLengthArray),
             decoder: Box::<U32Decoder>::default(),
@@ -359,20 +358,17 @@ pub fn get_field_metadata(field: &FlattenedSerializerField) -> Result<Option<Fie
             decoder: Box::<U32Decoder>::default(),
         }),
         v if v == fnv1a::hash_u8(b"CPlayer_CameraServices*") => Some(FieldMetadata {
-            special_type: None,
+            special_type: Some(FieldSpecialType::Pointer),
             decoder: Box::<BoolDecoder>::default(),
         }),
         v if v == fnv1a::hash_u8(b"CPlayer_MovementServices*") => Some(FieldMetadata {
-            special_type: None,
+            special_type: Some(FieldSpecialType::Pointer),
             decoder: Box::<BoolDecoder>::default(),
         }),
-        v if v == fnv1a::hash_u8(b"CRenderComponent") => {
-            // does not end with a *, but apparently a pointer
-            Some(FieldMetadata {
-                special_type: None,
-                decoder: Box::<BoolDecoder>::default(),
-            })
-        }
+        v if v == fnv1a::hash_u8(b"CRenderComponent") => Some(FieldMetadata {
+            special_type: Some(FieldSpecialType::Pointer),
+            decoder: Box::<BoolDecoder>::default(),
+        }),
         v if v == fnv1a::hash_u8(b"CStrongHandle< InfoForResourceTypeCModel >") => {
             Some(FieldMetadata {
                 special_type: None,
@@ -768,7 +764,7 @@ pub fn get_field_metadata(field: &FlattenedSerializerField) -> Result<Option<Fie
             decoder: Box::<U32Decoder>::default(),
         }),
         v if v == fnv1a::hash_u8(b"PhysicsRagdollPose_t*") => Some(FieldMetadata {
-            special_type: None,
+            special_type: Some(FieldSpecialType::Pointer),
             decoder: Box::<BoolDecoder>::default(),
         }),
         v if v == fnv1a::hash_u8(b"PingConfirmationIconType") => {

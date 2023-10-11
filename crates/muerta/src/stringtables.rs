@@ -3,7 +3,12 @@ use crate::{
     nohash::NoHashHasherBuilder,
 };
 use hashbrown::HashMap;
-use std::{cell::RefCell, intrinsics::likely, mem::MaybeUninit, rc::Rc};
+use std::{
+    cell::RefCell,
+    intrinsics::{likely, unlikely},
+    mem::MaybeUninit,
+    rc::Rc,
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -272,7 +277,8 @@ impl StringTables {
         using_varint_bitcounts: bool,
     ) -> Result<&mut StringTable> {
         let table = self.find_table(name);
-        if table.is_some() {
+        // TODO: should this check exist?
+        if unlikely(table.is_some()) {
             return Err(Error::DuplicateStringTable(name.to_string()));
         }
 

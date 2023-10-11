@@ -167,11 +167,16 @@ impl FieldDecode for InternalQAngleNoBitCountDecoder {
         let rx = br.read_bool()?;
         let ry = br.read_bool()?;
         let rz = br.read_bool()?;
-        let vec3 = [
-            if rx { br.read_bitcoord()? } else { 0.0 },
-            if ry { br.read_bitcoord()? } else { 0.0 },
-            if rz { br.read_bitcoord()? } else { 0.0 },
-        ];
+        let mut vec3 = [0f32; 3];
+        if rx {
+            vec3[0] = br.read_bitcoord()?;
+        }
+        if ry {
+            vec3[1] = br.read_bitcoord()?;
+        }
+        if rz {
+            vec3[2] = br.read_bitcoord()?;
+        }
         Ok(vec3.into())
     }
 }
