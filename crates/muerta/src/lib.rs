@@ -17,3 +17,6 @@ pub mod parser;
 pub mod quantizedfloat;
 pub mod stringtables;
 pub mod varint;
+
+// TOOD: more optimizations, specifically look into
+// https://agourlay.github.io/rust-performance-retrospective-part2/

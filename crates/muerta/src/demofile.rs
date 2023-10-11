@@ -133,4 +133,25 @@ impl<R: Read + Seek> DemoFile<R> {
     pub fn stream_position(&mut self) -> Result<u64> {
         self.rdr.stream_position().map_err(Error::Io)
     }
+
+    // NOTE: Seek has stream_len method, but it's nigtly-only experimental
+    // thing; at this point i would like to minimize use of non-stable features
+    // (and bring then down to 0 eventually). what you see below is a copy-pasta
+    // of rust's current implementation of it.
+    //
+    // quote from rust doc: > Note that length of a stream can change over time
+    // (for example, when data is appended to a file). So calling this method
+    // multiple times does not necessarily return the same length each time.
+    pub fn stream_len(&mut self) -> Result<u64> {
+        let old_pos = self.rdr.stream_position()?;
+        let len = self.rdr.seek(SeekFrom::End(0))?;
+
+        // Avoid seeking a third time when we were already at the end of the
+        // stream. The branch is usually way cheaper than a seek operation.
+        if old_pos != len {
+            self.rdr.seek(SeekFrom::Start(old_pos))?;
+        }
+
+        Ok(len)
+    }
 }

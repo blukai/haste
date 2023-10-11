@@ -150,7 +150,7 @@ pub struct Entities {
 impl Default for Entities {
     fn default() -> Self {
         Self {
-            entities: HashMap::with_capacity_and_hasher(4096, NoHashHasherBuilder::default()),
+            entities: HashMap::with_capacity_and_hasher(20480, NoHashHasherBuilder::default()),
         }
     }
 }
