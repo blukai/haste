@@ -182,9 +182,8 @@ impl Entities {
         };
 
         // TODO: maybe it would make sense to cache baselines?
-        let baseline_data_rc = instance_baseline.get_data(class_id).expect("baseline data");
-        let baseline_data_ref = baseline_data_rc.borrow();
-        let mut baseline_br = BitReader::new(baseline_data_ref.as_ref());
+        let baseline_data = instance_baseline.get_data(class_id).expect("baseline data");
+        let mut baseline_br = BitReader::new(baseline_data.as_ref());
         entity.parse(&mut baseline_br)?;
 
         entity.parse(br)?;

@@ -322,7 +322,7 @@ impl FlattenedSerializers {
     pub fn get_by_serializer_name_hash(
         &self,
         serializer_name_hash: u64,
-    ) -> Option<&Rc<FlattenedSerializer>> {
-        self.serializers.get(&serializer_name_hash)
+    ) -> Option<Rc<FlattenedSerializer>> {
+        self.serializers.get(&serializer_name_hash).cloned()
     }
 }
