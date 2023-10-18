@@ -11,7 +11,7 @@ pub enum Error {
     #[error("malformed varint")]
     MalformedVarint,
     #[error("string buffer is too small")]
-    StringBufTooSmol,
+    StringBufTooSmall,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -382,7 +382,7 @@ impl<'d> BitReader<'d> {
         buf[num_chars] = 0;
 
         if unlikely(too_small) {
-            Err(Error::StringBufTooSmol)
+            Err(Error::StringBufTooSmall)
         } else {
             Ok(num_chars)
         }

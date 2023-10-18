@@ -1,5 +1,5 @@
 use crate::varint;
-use dota2protos::EDemoCommands;
+use dota2protos::{CDemoFileInfo, EDemoCommands};
 use std::io::{Read, Seek, SeekFrom};
 
 #[derive(thiserror::Error, Debug)]
@@ -16,10 +16,12 @@ pub enum Error {
     #[error(transparent)]
     Varint(#[from] varint::Error),
     // mod
-    #[error("invalid header id (want {want:?}, got {got:?})")]
-    InvalidHeader { want: [u8; 8], got: [u8; 8] },
-    #[error("invalid cmd {0}")]
-    InvalidCmd(u32),
+    #[error("unexpected header id (want {want:?}, got {got:?})")]
+    UnexpectedHeader { want: [u8; 8], got: [u8; 8] },
+    #[error("unknown cmd {0}")]
+    UnknownCmd(u32),
+    #[error("expected cmd (cmd {0:?}")]
+    ExpectedCmd(EDemoCommands),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -43,23 +45,31 @@ pub struct CmdHeader {
     pub size: u32,
 }
 
+#[derive(Debug)]
 pub struct DemoFile<R: Read + Seek> {
     rdr: R,
+    demo_header: Option<DemoHeader>,
+    file_info: Option<CDemoFileInfo>,
 }
 
 impl<R: Read + Seek> DemoFile<R> {
     /// you should provide a reader that implements buffering (eg BufReader)
     /// because it'll be much more efficient.
     pub fn from_reader(rdr: R) -> Self {
-        Self { rdr }
+        Self {
+            rdr,
+            demo_header: None,
+            file_info: None,
+        }
     }
 
-    pub fn read_demo_header(&mut self) -> Result<DemoHeader> {
+    // demoheader_t * 	ReadDemoHeader( CDemoPlaybackParameters_t const *pPlaybackParameters );
+    pub fn read_demo_header(&mut self) -> Result<&DemoHeader> {
         let mut demo_header = DemoHeader::default();
 
         self.rdr.read_exact(&mut demo_header.demofilestamp)?;
         if demo_header.demofilestamp != DEMO_HEADER_ID {
-            return Err(Error::InvalidHeader {
+            return Err(Error::UnexpectedHeader {
                 want: DEMO_HEADER_ID,
                 got: demo_header.demofilestamp,
             });
@@ -73,17 +83,24 @@ impl<R: Read + Seek> DemoFile<R> {
         self.rdr.read_exact(&mut buf)?;
         demo_header.spawngroups_offset = i32::from_le_bytes(buf);
 
-        Ok(demo_header)
+        self.demo_header = Some(demo_header);
+        Ok(unsafe { self.demo_header.as_ref().unwrap_unchecked() })
     }
 
+    // void ReadCmdHeader( unsigned char& cmd, int& tick, int &nPlayerSlot );
     pub fn read_cmd_header(&mut self) -> Result<CmdHeader> {
+        debug_assert!(
+            self.demo_header.is_some(),
+            "expected demo header to have been read"
+        );
+
         let (mut command, _) = varint::read_uvarint32(&mut self.rdr)?;
         const DEM_IS_COMPRESSED: u32 = EDemoCommands::DemIsCompressed as u32;
         let is_compressed = command & DEM_IS_COMPRESSED == DEM_IS_COMPRESSED;
         if is_compressed {
             command &= !DEM_IS_COMPRESSED;
         }
-        let command = EDemoCommands::from_i32(command as i32).ok_or(Error::InvalidCmd(command))?;
+        let command = EDemoCommands::from_i32(command as i32).ok_or(Error::UnknownCmd(command))?;
 
         let (tick, _) = varint::read_uvarint32(&mut self.rdr)?;
         let (size, _) = varint::read_uvarint32(&mut self.rdr)?;
@@ -108,6 +125,11 @@ impl<R: Read + Seek> DemoFile<R> {
         // copying. see https://github.com/tokio-rs/prost/issues/571
         buf: &mut [u8],
     ) -> Result<M> {
+        debug_assert!(
+            self.demo_header.is_some(),
+            "expected demo header to have been read"
+        );
+
         let (left, right) = buf.split_at_mut(cmd_header.size as usize);
         self.rdr.read_exact(left)?;
 
@@ -124,16 +146,20 @@ impl<R: Read + Seek> DemoFile<R> {
         M::decode(data).map_err(Error::Prost)
     }
 
+    // void	SeekTo( int position, bool bRead );
     #[inline(always)]
     pub fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
         self.rdr.seek(pos).map_err(Error::Io)
     }
 
+    // unsigned int GetCurPos( bool bRead );
     #[inline(always)]
     pub fn stream_position(&mut self) -> Result<u64> {
         self.rdr.stream_position().map_err(Error::Io)
     }
 
+    // int		GetSize();
+    //
     // NOTE: Seek has stream_len method, but it's nigtly-only experimental
     // thing; at this point i would like to minimize use of non-stable features
     // (and bring then down to 0 eventually). what you see below is a copy-pasta
@@ -153,5 +179,74 @@ impl<R: Read + Seek> DemoFile<R> {
         }
 
         Ok(len)
+    }
+
+    #[inline(always)]
+    pub fn is_eof(&mut self) -> Result<bool> {
+        Ok(self.stream_position()? == self.stream_len()?)
+    }
+
+    pub fn read_file_info<'buf>(
+        &mut self,
+        make_buf: impl FnOnce(&CmdHeader) -> &'buf mut [u8],
+    ) -> Result<&CDemoFileInfo> {
+        debug_assert!(
+            self.demo_header.is_some(),
+            "expected demo header to have been read"
+        );
+
+        let backup = self.stream_position()?;
+        let file_info_offset =
+            unsafe { self.demo_header.as_ref().unwrap_unchecked() }.fileinfo_offset;
+
+        self.seek(SeekFrom::Start(file_info_offset as u64))?;
+
+        let cmd_header = self.read_cmd_header()?;
+        if cmd_header.command != EDemoCommands::DemFileInfo {
+            return Err(Error::ExpectedCmd(EDemoCommands::DemFileInfo));
+        }
+
+        let file_info = self.read_cmd(&cmd_header, make_buf(&cmd_header))?;
+        self.file_info = Some(file_info);
+
+        self.seek(SeekFrom::Start(backup))?;
+
+        Ok(unsafe { self.file_info.as_ref().unwrap_unchecked() })
+    }
+
+    // TODO: do not assert.. do not assume that the user knows that it's their
+    // responsibility to call read_file_info.
+
+    // virtual float GetTicksPerSecond() OVERRIDE;
+    pub fn ticks_per_second(&self) -> f32 {
+        debug_assert!(
+            self.file_info.is_some(),
+            "expected file info to have been read"
+        );
+
+        let file_info = unsafe { self.file_info.as_ref().unwrap_unchecked() };
+        file_info.playback_ticks() as f32 / file_info.playback_time()
+    }
+
+    // virtual float GetTicksPerFrame() OVERRIDE;
+    pub fn ticks_per_frame(&self) -> f32 {
+        debug_assert!(
+            self.file_info.is_some(),
+            "expected file info to have been read"
+        );
+
+        let file_info = unsafe { self.file_info.as_ref().unwrap_unchecked() };
+        file_info.playback_ticks() as f32 / file_info.playback_frames() as f32
+    }
+
+    // virtual int	GetTotalTicks( void ) OVERRIDE;
+    pub fn total_ticks(&self) -> i32 {
+        debug_assert!(
+            self.file_info.is_some(),
+            "expected file info to have been read"
+        );
+
+        let file_info = unsafe { self.file_info.as_ref().unwrap_unchecked() };
+        file_info.playback_ticks()
     }
 }

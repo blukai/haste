@@ -35,7 +35,6 @@ pub struct Parser<R: Read + Seek, V: Visitor> {
 impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     pub fn from_reader(rdr: R, visitor: V) -> Result<Self> {
         let mut demo_file = DemoFile::from_reader(rdr);
-        // TODO: validate demo header
         let _demo_header = demo_file.read_demo_header()?;
 
         Ok(Self {
@@ -51,15 +50,24 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         })
     }
 
-    pub fn run(&mut self) -> Result<()> {
+    // TODO: implement interator that would combine read_cmd_header + handle_cmd
+
+    pub fn parse_all(&mut self) -> Result<()> {
         loop {
-            let cmd_header = self.demo_file.read_cmd_header()?;
-            if cmd_header.command == dota2protos::EDemoCommands::DemStop {
-                break;
+            match self.demo_file.read_cmd_header() {
+                Ok(cmd_header) => self.handle_cmd(cmd_header)?,
+                Err(err) => {
+                    if self.demo_file.is_eof().unwrap_or(false) {
+                        return Ok(());
+                    }
+                    return Err(Box::new(err));
+                }
             }
-            self.handle_cmd(cmd_header)?;
         }
-        Ok(())
+    }
+
+    pub fn parse_to_tick(&mut self, _tick: u32) -> Result<()> {
+        unimplemented!()
     }
 
     fn handle_cmd(&mut self, cmd_header: CmdHeader) -> Result<()> {

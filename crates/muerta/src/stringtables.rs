@@ -31,8 +31,7 @@ const HISTORY_BITMASK: usize = HISTORY_SIZE - 1;
 const MAX_STRING_BITS: usize = 5;
 const MAX_STRING_SIZE: usize = 1 << MAX_STRING_BITS;
 
-// TODO: why does it need Copy and Clone?
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug)]
 struct StringHistoryEntry {
     string: [u8; MAX_STRING_SIZE],
 }
@@ -40,6 +39,8 @@ struct StringHistoryEntry {
 impl StringHistoryEntry {
     unsafe fn new_uninit() -> Self {
         Self {
+            // NOTE: the thick is not use this correctly xd
+            #[allow(invalid_value)]
             string: MaybeUninit::uninit().assume_init(),
         }
     }

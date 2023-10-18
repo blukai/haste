@@ -34,5 +34,5 @@ fn main() -> Result<()> {
     // more info).
     let file = BufReader::new(file);
     let mut parser = Parser::from_reader(file, MyVisitor)?;
-    parser.run()
+    parser.parse_all()
 }
