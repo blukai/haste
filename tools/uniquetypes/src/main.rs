@@ -2,7 +2,7 @@
 // in the replay file.
 
 use dota2protos::{self, EDemoCommands};
-use muerta::{demofile::DemoFile, varint};
+use haste::{demofile::DemoFile, varint};
 use prost::Message;
 use std::{
     fs::File,

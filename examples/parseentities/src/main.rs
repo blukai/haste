@@ -1,4 +1,4 @@
-use muerta::parser::{Parser, Visitor};
+use haste::parser::{Parser, Visitor};
 use std::{fs::File, io::BufReader};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -9,8 +9,8 @@ impl Visitor for MyVisitor {
     fn visit_entity(
         &self,
         _update_flags: usize,
-        _update_type: muerta::entities::UpdateType,
-        _entity: &muerta::entities::Entity,
+        _update_type: haste::entities::UpdateType,
+        _entity: &haste::entities::Entity,
     ) {
         // dbg!(
         //     update_flags,
