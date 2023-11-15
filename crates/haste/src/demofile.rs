@@ -1,5 +1,8 @@
-use crate::varint;
-use dota2protos::{CDemoFileInfo, EDemoCommands};
+use crate::{
+    dota2protos::{CDemoFileInfo, EDemoCommands},
+    prost::{self, Message},
+    varint,
+};
 use std::io::{Read, Seek, SeekFrom};
 
 #[derive(thiserror::Error, Debug)]
@@ -114,17 +117,16 @@ impl<R: Read + Seek> DemoFile<R> {
     }
 
     // read_cmd reads bytes (cmd_header.size) from the reader into buf, if
-    // compressed (cmd_header.is_compresed) it'll decompress the data, and
-    // decode it into M.
+    // compressed (cmd_header.is_compresed) it'll decompress the data.
     // NOTE: buf must be large enough to fit compressed and uncompressed data
     // simultaneously.
-    pub fn read_cmd<M: prost::Message + Default>(
+    pub fn read_cmd<'b>(
         &mut self,
         cmd_header: &CmdHeader,
         // TODO: change type of buf from &[u8] to Bytes to maybe avoid some
         // copying. see https://github.com/tokio-rs/prost/issues/571
-        buf: &mut [u8],
-    ) -> Result<M> {
+        buf: &'b mut [u8],
+    ) -> Result<&'b [u8]> {
         debug_assert!(
             self.demo_header.is_some(),
             "expected demo header to have been read"
@@ -133,17 +135,15 @@ impl<R: Read + Seek> DemoFile<R> {
         let (left, right) = buf.split_at_mut(cmd_header.size as usize);
         self.rdr.read_exact(left)?;
 
-        let data = if cmd_header.is_compressed {
+        if cmd_header.is_compressed {
             let decompress_len = snap::raw::decompress_len(left)?;
             snap::raw::Decoder::new().decompress(left, right)?;
             // NOTE: we need to slice stuff up, because prost's decode can't
             // determine when to stop.
-            &right[..decompress_len]
+            Ok(&right[..decompress_len])
         } else {
-            left
-        };
-
-        M::decode(data).map_err(Error::Prost)
+            Ok(left)
+        }
     }
 
     // void	SeekTo( int position, bool bRead );
@@ -206,8 +206,9 @@ impl<R: Read + Seek> DemoFile<R> {
             return Err(Error::ExpectedCmd(EDemoCommands::DemFileInfo));
         }
 
-        let file_info = self.read_cmd(&cmd_header, make_buf(&cmd_header))?;
-        self.file_info = Some(file_info);
+        self.file_info = Some(CDemoFileInfo::decode(
+            self.read_cmd(&cmd_header, make_buf(&cmd_header))?,
+        )?);
 
         self.seek(SeekFrom::Start(backup))?;
 

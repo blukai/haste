@@ -1,4 +1,4 @@
-use crate::fnv1a;
+use crate::{dota2protos, fnv1a};
 
 #[derive(Clone)]
 pub struct ClassInfo {

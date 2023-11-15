@@ -1,11 +1,12 @@
 use crate::{
+    dota2protos,
     fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialType},
     fnv1a,
     nohash::NoHashHasherBuilder,
+    prost::Message,
     varint,
 };
 use hashbrown::HashMap;
-use prost::Message;
 use std::rc::Rc;
 
 #[derive(thiserror::Error, Debug)]
@@ -61,13 +62,13 @@ pub struct FlattenedSerializerField {
 
 impl FlattenedSerializerField {
     fn new(
-        svcmsg: &dota2protos::CsvcMsgFlattenedSerializer,
+        msg: &dota2protos::CsvcMsgFlattenedSerializer,
         field: &dota2protos::ProtoFlattenedSerializerFieldT,
     ) -> Self {
         #[cfg(debug_assertions)]
-        let resolve_sym = |v: i32| svcmsg.symbols[v as usize].clone().into_boxed_str();
+        let resolve_sym = |v: i32| msg.symbols[v as usize].clone().into_boxed_str();
         #[cfg(not(debug_assertions))]
-        let resolve_sym = |v: i32| svcmsg.symbols[v as usize].as_str();
+        let resolve_sym = |v: i32| msg.symbols[v as usize].as_str();
 
         let var_type = field.var_type_sym.map(resolve_sym).expect("var type");
         let var_type_hash = fnv1a::hash_u8(var_type.as_bytes());
@@ -112,17 +113,26 @@ impl FlattenedSerializerField {
         }
     }
 
+    #[cfg(debug_assertions)]
+    #[inline(always)]
+    pub fn get_child(&self, index: usize) -> &Self {
+        self.field_serializer
+            .as_ref()
+            .unwrap_or_else(|| {
+                panic!(
+                    "expected field serializer to be present in field of type {}",
+                    self.var_type
+                )
+            })
+            .get_child(index)
+    }
+
+    #[cfg(not(debug_assertions))]
     #[inline(always)]
     pub fn get_child(&self, index: usize) -> &Self {
         unsafe {
             self.field_serializer
                 .as_ref()
-                // .unwrap_or_else(|| {
-                //     panic!(
-                //         "expected field serialized to be present in field of type {}",
-                //         self.var_type
-                //     )
-                // })
                 .unwrap_unchecked()
                 .get_child(index)
         }
@@ -150,13 +160,13 @@ pub struct FlattenedSerializer {
 
 impl FlattenedSerializer {
     fn new(
-        svcmsg: &dota2protos::CsvcMsgFlattenedSerializer,
+        msg: &dota2protos::CsvcMsgFlattenedSerializer,
         fs: &dota2protos::ProtoFlattenedSerializerT,
     ) -> Result<Self> {
         #[cfg(debug_assertions)]
-        let resolve_sym = |v: i32| svcmsg.symbols[v as usize].clone().into_boxed_str();
+        let resolve_sym = |v: i32| msg.symbols[v as usize].clone().into_boxed_str();
         #[cfg(not(debug_assertions))]
-        let resolve_sym = |v: i32| svcmsg.symbols[v as usize].as_str();
+        let resolve_sym = |v: i32| msg.symbols[v as usize].as_str();
 
         let serializer_name = fs
             .serializer_name_sym
@@ -173,18 +183,21 @@ impl FlattenedSerializer {
         })
     }
 
+    #[cfg(debug_assertions)]
     #[inline(always)]
     pub fn get_child(&self, index: usize) -> &FlattenedSerializerField {
-        unsafe {
-            self.fields.get_unchecked(index)
-            // .unwrap_or_else(|| {
-            //     panic!(
-            //         "expected field to be at index {} in {}",
-            //         index, self.serializer_name
-            //     )
-            // })
-            // .unwrap_unchecked()
-        }
+        self.fields.get(index).unwrap_or_else(|| {
+            panic!(
+                "expected field to be at index {} in {}",
+                index, self.serializer_name
+            )
+        })
+    }
+
+    #[cfg(not(debug_assertions))]
+    #[inline(always)]
+    pub fn get_child(&self, index: usize) -> &FlattenedSerializerField {
+        unsafe { self.fields.get_unchecked(index) }
     }
 }
 
@@ -197,7 +210,7 @@ pub struct FlattenedSerializers {
 
 impl FlattenedSerializers {
     pub fn parse(cmd: dota2protos::CDemoSendTables) -> Result<Self> {
-        let svcmsg = {
+        let msg = {
             // TODO: make prost work with ByteString and turn data into Bytes
             let mut data = &cmd.data.expect("send tables data")[..];
             // NOTE: count is useless because read_uvarint32 will "consume"
@@ -212,14 +225,15 @@ impl FlattenedSerializers {
             dota2protos::CsvcMsgFlattenedSerializer::decode(data)?
         };
 
-        let mut fields: FieldMap = FieldMap::with_hasher(NoHashHasherBuilder::default());
+        let mut fields: FieldMap =
+            FieldMap::with_capacity_and_hasher(msg.fields.len(), NoHashHasherBuilder::default());
         let mut serializers: SerializerMap = SerializerMap::with_capacity_and_hasher(
-            svcmsg.serializers.len(),
+            msg.serializers.len(),
             NoHashHasherBuilder::default(),
         );
 
-        for serializer in svcmsg.serializers.iter() {
-            let mut flattened_serializer = FlattenedSerializer::new(&svcmsg, serializer)?;
+        for serializer in msg.serializers.iter() {
+            let mut flattened_serializer = FlattenedSerializer::new(&msg, serializer)?;
 
             for field_index in serializer.fields_index.iter() {
                 let field = if fields.contains_key(field_index) {
@@ -231,10 +245,8 @@ impl FlattenedSerializers {
                     // hood which adds a branch!
                     field.clone()
                 } else {
-                    let mut field = FlattenedSerializerField::new(
-                        &svcmsg,
-                        &svcmsg.fields[*field_index as usize],
-                    );
+                    let mut field =
+                        FlattenedSerializerField::new(&msg, &msg.fields[*field_index as usize]);
 
                     if let Some(field_serializer_name_hash) =
                         field.field_serializer_name_hash.as_ref()

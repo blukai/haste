@@ -88,6 +88,8 @@ impl Entity {
             let mut fps = fps.borrow_mut();
             let fps = fieldpath::read_field_paths(br, &mut fps)?;
             for fp in fps {
+                // eprint!("{:?} ", &fp.data[..=fp.position],);
+
                 // NOTE: this loop performes much better then the unrolled
                 // version of it, probably because a bunch of ifs cause a bunch
                 // of branch misses and branch missles are disasterous.
@@ -96,12 +98,7 @@ impl Entity {
                     field = field.get_child(fp.get(i));
                 }
 
-                // eprint!(
-                //     "{:?} {} {} ",
-                //     &fp.data[..=fp.position],
-                //     field.var_name,
-                //     field.var_type
-                // );
+                // eprint!("{} {} ", field.var_name, field.var_type);
 
                 // SAFETY: metadata for the field is generated in
                 // flattenedserializers.rs; if metadata cannot be generated -

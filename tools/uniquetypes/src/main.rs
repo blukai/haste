@@ -1,9 +1,12 @@
 // uniquetypes tool can be used to get a list of unique types that are present
 // in the replay file.
 
-use dota2protos::{self, EDemoCommands};
-use haste::{demofile::DemoFile, varint};
-use prost::Message;
+use haste::{
+    demofile::DemoFile,
+    dota2protos::{self, EDemoCommands},
+    prost::Message,
+    varint,
+};
 use std::{
     fs::File,
     io::{BufReader, SeekFrom},
@@ -31,8 +34,9 @@ fn main() -> Result<()> {
             // DemSendTables cmd is sent only once
             EDemoCommands::DemSendTables => {
                 let flattened_serializer = {
-                    let cmd = demo_file
-                        .read_cmd::<dota2protos::CDemoSendTables>(&cmd_header, &mut buf)?;
+                    let cmd = dota2protos::CDemoSendTables::decode(
+                        demo_file.read_cmd(&cmd_header, &mut buf)?,
+                    )?;
                     let mut data = &cmd.data.expect("send tables data")[..];
                     let (_size, _count) = varint::read_uvarint32(&mut data)?;
                     dota2protos::CsvcMsgFlattenedSerializer::decode(data)?

@@ -656,7 +656,10 @@ pub fn get_field_metadata(field: &FlattenedSerializerField) -> Result<Option<Fie
             })
         }
         v if v == fnv1a::hash_u8(b"DOTA_CombatLogQueryProgress") => Some(FieldMetadata {
-            special_type: None,
+            special_type: Some(FieldSpecialType::VariableLengthSerializerArray {
+                // https://github.com/SteamDatabase/GameTracking-CS2/blob/6b3bf6ad44266e3ee4440a0b9b2fee1268812840/game/core/tools/demoinfo2/demoinfo2.txt#L155C83-L155C111
+                element_serializer_name_hash: fnv1a::hash_u8(b"CDOTA_CombatLogQueryProgress"),
+            }),
             decoder: Box::<U32Decoder>::default(),
         }),
         v if v == fnv1a::hash_u8(b"DOTA_HeroPickState") => {
