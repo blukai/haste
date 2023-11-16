@@ -16,9 +16,14 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+pub const FIELD_PATH_DATA_SIZE: usize = 7;
+
+// TODO: FieldPath should be just data with hash method; current field path
+// should become FieldPathReader or decoder or something like that..
+
 #[derive(Debug, Clone)]
 pub struct FieldPath {
-    pub data: [i32; 7],
+    pub data: [i32; FIELD_PATH_DATA_SIZE],
     pub position: usize,
     pub finished: bool,
 }

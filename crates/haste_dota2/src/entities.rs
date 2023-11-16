@@ -1,8 +1,7 @@
 use crate::{
     bitbuf::{self, BitReader},
     entityclasses::EntityClasses,
-    fielddecoder,
-    fieldpath::{self},
+    fielddecoder, fieldpath,
     fieldvalue::FieldValue,
     flattenedserializers::{FlattenedSerializer, FlattenedSerializers},
     instancebaseline::InstanceBaseline,

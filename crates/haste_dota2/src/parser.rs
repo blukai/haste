@@ -23,6 +23,7 @@ pub trait Visitor {
         &self,
         update_flags: usize,
         update_type: entities::UpdateType,
+        // TODO: include updated fields (list of field paths?)
         entity: &entities::Entity,
     ) -> Result<()> {
         Ok(())
