@@ -1,9 +1,11 @@
 use crate::{
-    dota2protos,
     fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialType},
     fnv1a,
+    haste_dota2_protos::{
+        self,
+        prost::{self, Message},
+    },
     nohash::NoHashHasherBuilder,
-    prost::Message,
     varint,
 };
 use hashbrown::HashMap;
@@ -62,8 +64,8 @@ pub struct FlattenedSerializerField {
 
 impl FlattenedSerializerField {
     fn new(
-        msg: &dota2protos::CsvcMsgFlattenedSerializer,
-        field: &dota2protos::ProtoFlattenedSerializerFieldT,
+        msg: &haste_dota2_protos::CsvcMsgFlattenedSerializer,
+        field: &haste_dota2_protos::ProtoFlattenedSerializerFieldT,
     ) -> Self {
         #[cfg(debug_assertions)]
         let resolve_sym = |v: i32| msg.symbols[v as usize].clone().into_boxed_str();
@@ -160,8 +162,8 @@ pub struct FlattenedSerializer {
 
 impl FlattenedSerializer {
     fn new(
-        msg: &dota2protos::CsvcMsgFlattenedSerializer,
-        fs: &dota2protos::ProtoFlattenedSerializerT,
+        msg: &haste_dota2_protos::CsvcMsgFlattenedSerializer,
+        fs: &haste_dota2_protos::ProtoFlattenedSerializerT,
     ) -> Result<Self> {
         #[cfg(debug_assertions)]
         let resolve_sym = |v: i32| msg.symbols[v as usize].clone().into_boxed_str();
@@ -209,7 +211,7 @@ pub struct FlattenedSerializers {
 }
 
 impl FlattenedSerializers {
-    pub fn parse(cmd: dota2protos::CDemoSendTables) -> Result<Self> {
+    pub fn parse(cmd: haste_dota2_protos::CDemoSendTables) -> Result<Self> {
         let msg = {
             // TODO: make prost work with ByteString and turn data into Bytes
             let mut data = &cmd.data.expect("send tables data")[..];
@@ -222,7 +224,7 @@ impl FlattenedSerializers {
             // -> createa a function that will be capable of reading varint from
             // &[u8] without multiple levels of indirection.
             let (_size, _count) = varint::read_uvarint32(&mut data)?;
-            dota2protos::CsvcMsgFlattenedSerializer::decode(data)?
+            haste_dota2_protos::CsvcMsgFlattenedSerializer::decode(data)?
         };
 
         let mut fields: FieldMap =

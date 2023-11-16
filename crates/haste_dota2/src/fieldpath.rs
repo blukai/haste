@@ -54,7 +54,8 @@ impl FieldPath {
         unsafe { *self.data.get_unchecked(index) as usize }
     }
 
-    // SAFETY: hash_unchecked is safe if replay data is correct.
+    // SAFETY: hash_unchecked is safe if replay data is correct. all items of
+    // data array never go below 0 or beyond 255.
     #[inline(always)]
     pub unsafe fn hash_unchecked(&self) -> u64 {
         let slice: &[u32] = std::mem::transmute(&self.data[..=self.position]);

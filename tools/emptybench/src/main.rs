@@ -1,4 +1,4 @@
-use haste::parser::{Parser, Visitor};
+use haste_dota2::parser::{Parser, Visitor};
 use std::{fs::File, io::BufReader};
 
 struct MyVisitor;

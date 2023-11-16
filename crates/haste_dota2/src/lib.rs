@@ -1,11 +1,8 @@
 #![feature(const_for)]
 #![feature(core_intrinsics)]
 
-// 3rd party crate re-exports
-pub use prost;
-
 // own crate re-exports
-pub use dota2protos;
+pub use haste_dota2_protos;
 
 // TODO: figure pub scopes for all the things
 pub mod bitbuf;

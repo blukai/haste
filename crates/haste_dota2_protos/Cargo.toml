@@ -1,5 +1,5 @@
 [package]
-name = "dota2protos"
+name = "haste_dota2_protos"
 version = "0.0.0"
 edition = "2021"
 

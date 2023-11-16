@@ -1,6 +1,8 @@
 use crate::{
-    dota2protos::{CDemoFileInfo, EDemoCommands},
-    prost::{self, Message},
+    haste_dota2_protos::{
+        prost::{self, Message},
+        CDemoFileInfo, EDemoCommands,
+    },
     varint,
 };
 use std::io::{Read, Seek, SeekFrom};

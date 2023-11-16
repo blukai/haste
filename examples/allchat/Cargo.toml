@@ -4,4 +4,4 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-haste = { path = "../../crates/haste" }
+haste_dota2 = { path = "../../crates/haste_dota2" }

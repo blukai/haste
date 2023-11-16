@@ -1,14 +1,13 @@
 [package]
-name = "haste"
+name = "haste_dota2"
 version = "0.0.0"
 edition = "2021"
 
 [dependencies]
 # TODO: move to onlyerror (to achieve faster comp times)
 thiserror = "1.0"
-prost = "0.11"
 snap = "1.1"
 # NOTE: hashbrown::HashMap is noticeably faster then std::collections::hashMap
 hashbrown = { version = "0.14", features = ["ahash", "inline-more", "nightly"] }
 dyn-clone = "1.0"
-dota2protos = { path = "../dota2protos" }
+haste_dota2_protos = { path = "../haste_dota2_protos" }
