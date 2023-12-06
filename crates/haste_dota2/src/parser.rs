@@ -1,10 +1,10 @@
 use crate::{
     bitbuf::BitReader,
     demofile::{CmdHeader, DemoFile},
+    dota2_protos::{self, prost::Message, EDemoCommands},
     entities::{self, Entities},
     entityclasses::EntityClasses,
     flattenedserializers::FlattenedSerializers,
-    haste_dota2_protos::{self, prost::Message, EDemoCommands},
     instancebaseline::{InstanceBaseline, INSTANCE_BASELINE_TABLE_NAME},
     stringtables::StringTables,
 };
@@ -174,7 +174,7 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
                     .read_cmd(&cmd_header, &mut notnotself.buf)?;
                 notnotself.visitor.visit_cmd(&cmd_header, data)?;
 
-                let cmd = haste_dota2_protos::CDemoFullPacket::decode(data)?;
+                let cmd = dota2_protos::CDemoFullPacket::decode(data)?;
                 notnotself.handle_cmd_full_packet(cmd)?;
 
                 return Ok(ControlFlow::Continue(()));
@@ -195,7 +195,7 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
 
         match cmd_header.command {
             EDemoCommands::DemPacket | EDemoCommands::DemSignonPacket => {
-                let cmd = haste_dota2_protos::CDemoPacket::decode(data)?;
+                let cmd = dota2_protos::CDemoPacket::decode(data)?;
                 self.handle_cmd_packet(cmd)?;
             }
 
@@ -206,7 +206,7 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
                     return Ok(());
                 }
 
-                let cmd = haste_dota2_protos::CDemoSendTables::decode(data)?;
+                let cmd = dota2_protos::CDemoSendTables::decode(data)?;
                 self.flattened_serializers = Some(FlattenedSerializers::parse(cmd)?);
             }
 
@@ -217,7 +217,7 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
                     return Ok(());
                 }
 
-                let cmd = haste_dota2_protos::CDemoClassInfo::decode(data)?;
+                let cmd = dota2_protos::CDemoClassInfo::decode(data)?;
                 self.entity_classes = Some(EntityClasses::parse(cmd));
 
                 // NOTE: DemClassInfo message becomes available after
@@ -243,7 +243,7 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
         Ok(())
     }
 
-    fn handle_cmd_packet(&mut self, cmd: haste_dota2_protos::CDemoPacket) -> Result<()> {
+    fn handle_cmd_packet(&mut self, cmd: dota2_protos::CDemoPacket) -> Result<()> {
         let data = cmd.data.unwrap_or_default();
         let mut br = BitReader::new(&data);
         while br.get_num_bits_left() > 8 {
@@ -256,20 +256,20 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
 
             self.visitor.visit_packet(command, buf)?;
 
-            use haste_dota2_protos::SvcMessages;
+            use dota2_protos::SvcMessages;
             match command {
                 c if c == SvcMessages::SvcCreateStringTable as u32 => {
-                    let msg = haste_dota2_protos::CsvcMsgCreateStringTable::decode(buf)?;
+                    let msg = dota2_protos::CsvcMsgCreateStringTable::decode(buf)?;
                     self.handle_svc_create_string_table(msg)?;
                 }
 
                 c if c == SvcMessages::SvcUpdateStringTable as u32 => {
-                    let msg = haste_dota2_protos::CsvcMsgUpdateStringTable::decode(buf)?;
+                    let msg = dota2_protos::CsvcMsgUpdateStringTable::decode(buf)?;
                     self.handle_svc_update_string_table(msg)?;
                 }
 
                 c if c == SvcMessages::SvcPacketEntities as u32 => {
-                    let msg = haste_dota2_protos::CsvcMsgPacketEntities::decode(buf)?;
+                    let msg = dota2_protos::CsvcMsgPacketEntities::decode(buf)?;
                     self.handle_svc_packet_entities(msg)?;
                 }
 
@@ -281,7 +281,7 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
 
     fn handle_svc_create_string_table(
         &mut self,
-        msg: haste_dota2_protos::CsvcMsgCreateStringTable,
+        msg: dota2_protos::CsvcMsgCreateStringTable,
     ) -> Result<()> {
         let string_table = self.string_tables.create_string_table_mut(
             msg.name(),
@@ -314,7 +314,7 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
 
     fn handle_svc_update_string_table(
         &mut self,
-        msg: haste_dota2_protos::CsvcMsgUpdateStringTable,
+        msg: dota2_protos::CsvcMsgUpdateStringTable,
     ) -> Result<()> {
         let string_table = self
             .string_tables
@@ -340,7 +340,7 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
     // ReadPacketEntities in engine/client.cpp
     fn handle_svc_packet_entities(
         &mut self,
-        msg: haste_dota2_protos::CsvcMsgPacketEntities,
+        msg: dota2_protos::CsvcMsgPacketEntities,
     ) -> Result<()> {
         use entities::*;
 
@@ -392,10 +392,7 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
         Ok(())
     }
 
-    fn handle_cmd_string_tables(
-        &mut self,
-        cmd: haste_dota2_protos::CDemoStringTables,
-    ) -> Result<()> {
+    fn handle_cmd_string_tables(&mut self, cmd: dota2_protos::CDemoStringTables) -> Result<()> {
         self.string_tables.do_full_update(cmd);
 
         // SAFETY: entity_classes value is expected to be already assigned
@@ -408,7 +405,7 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
         Ok(())
     }
 
-    fn handle_cmd_full_packet(&mut self, cmd: haste_dota2_protos::CDemoFullPacket) -> Result<()> {
+    fn handle_cmd_full_packet(&mut self, cmd: dota2_protos::CDemoFullPacket) -> Result<()> {
         if let Some(string_table) = cmd.string_table {
             self.handle_cmd_string_tables(string_table)?;
         }

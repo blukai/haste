@@ -1,9 +1,9 @@
 use crate::{
     bitbuf::{self, BitReader},
+    dota2_protos::{self, c_demo_string_tables},
     nohash::NoHashHasherBuilder,
 };
 use hashbrown::HashMap;
-use haste_dota2_protos::c_demo_string_tables;
 use std::{
     intrinsics::{likely, unlikely},
     mem::MaybeUninit,
@@ -324,7 +324,7 @@ impl StringTables {
         Ok(&mut self.tables[len])
     }
 
-    pub fn do_full_update(&mut self, cmd: haste_dota2_protos::CDemoStringTables) {
+    pub fn do_full_update(&mut self, cmd: dota2_protos::CDemoStringTables) {
         for incoming in &cmd.tables {
             if let Some(existing) = self.find_table_mut(incoming.table_name()) {
                 existing.do_full_update(incoming);

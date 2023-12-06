@@ -1,5 +1,5 @@
 use haste_dota2::{
-    haste_dota2_protos::{self, prost::Message},
+    dota2_protos::{self, prost::Message},
     parser::{self, Parser, Visitor},
 };
 use std::{fs::File, io::BufReader};
@@ -8,8 +8,8 @@ struct MyVisitor;
 
 impl Visitor for MyVisitor {
     fn visit_packet(&self, packet_type: u32, data: &[u8]) -> parser::Result<()> {
-        if packet_type == haste_dota2_protos::EDotaUserMessages::DotaUmChatMessage as u32 {
-            let msg = haste_dota2_protos::CdotaUserMsgChatMessage::decode(data)?;
+        if packet_type == dota2_protos::EDotaUserMessages::DotaUmChatMessage as u32 {
+            let msg = dota2_protos::CdotaUserMsgChatMessage::decode(data)?;
             println!("{:?}", msg);
         }
         Ok(())

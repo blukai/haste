@@ -2,8 +2,7 @@
 #![feature(core_intrinsics)]
 
 // own crate re-exports
-// TODO: re-export haste_dota2_protos as dota2_protos
-pub use haste_dota2_protos;
+pub use haste_dota2_protos as dota2_protos;
 
 // TODO: figure pub scopes for all the things
 pub mod bitbuf;

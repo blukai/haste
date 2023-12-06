@@ -1,5 +1,5 @@
 use crate::{
-    haste_dota2_protos::{
+    dota2_protos::{
         prost::{self, Message},
         CDemoFileInfo, EDemoCommands,
     },
