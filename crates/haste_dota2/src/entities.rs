@@ -177,7 +177,7 @@ impl Entities {
             ),
         };
 
-        // TODO: maybe it would make sense to cache baselines?
+        // TODO: maybe it would make sense to cache baseline reads?
         let baseline_data = instance_baseline.get_data(class_id).expect("baseline data");
         let mut baseline_br = BitReader::new(baseline_data.as_ref());
         entity.parse(&mut baseline_br)?;
@@ -199,5 +199,11 @@ impl Entities {
         let entity = unsafe { self.entities.get_mut(&entidx).unwrap_unchecked() };
         entity.parse(br)?;
         Ok(entity)
+    }
+
+    // clear clears underlying storage, but this has no effect on the allocated
+    // capacity.
+    pub fn clear(&mut self) {
+        self.entities.clear();
     }
 }

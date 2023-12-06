@@ -22,7 +22,7 @@ pub enum Error {
     Varint(#[from] varint::Error),
     // mod
     #[error("unexpected header id (want {want:?}, got {got:?})")]
-    UnexpectedHeader { want: [u8; 8], got: [u8; 8] },
+    UnexpectedHeaderId { want: [u8; 8], got: [u8; 8] },
     #[error("unknown cmd {0}")]
     UnknownCmd(u32),
     #[error("expected cmd (cmd {0:?}")]
@@ -46,8 +46,12 @@ pub struct DemoHeader {
 pub struct CmdHeader {
     pub command: EDemoCommands,
     pub is_compressed: bool,
-    pub tick: u32,
+    pub tick: i32,
     pub size: u32,
+    // offset is how many bytes were read. offset can be used to do a backup
+    // (/unread cmd header) - offset is cheaper then calling stream_position
+    // method before reading cmd header.
+    pub offset: usize,
 }
 
 #[derive(Debug)]
@@ -74,7 +78,7 @@ impl<R: Read + Seek> DemoFile<R> {
 
         self.rdr.read_exact(&mut demo_header.demofilestamp)?;
         if demo_header.demofilestamp != DEMO_HEADER_ID {
-            return Err(Error::UnexpectedHeader {
+            return Err(Error::UnexpectedHeaderId {
                 want: DEMO_HEADER_ID,
                 got: demo_header.demofilestamp,
             });
@@ -99,22 +103,40 @@ impl<R: Read + Seek> DemoFile<R> {
             "expected demo header to have been read"
         );
 
-        let (mut command, _) = varint::read_uvarint32(&mut self.rdr)?;
-        const DEM_IS_COMPRESSED: u32 = EDemoCommands::DemIsCompressed as u32;
-        let is_compressed = command & DEM_IS_COMPRESSED == DEM_IS_COMPRESSED;
-        if is_compressed {
-            command &= !DEM_IS_COMPRESSED;
-        }
-        let command = EDemoCommands::from_i32(command as i32).ok_or(Error::UnknownCmd(command))?;
+        let (command, command_ot, is_compressed) = {
+            let (c, ot) = varint::read_uvarint32(&mut self.rdr)?;
 
-        let (tick, _) = varint::read_uvarint32(&mut self.rdr)?;
-        let (size, _) = varint::read_uvarint32(&mut self.rdr)?;
+            const DEM_IS_COMPRESSED: u32 = EDemoCommands::DemIsCompressed as u32;
+            let is_compressed = c & DEM_IS_COMPRESSED == DEM_IS_COMPRESSED;
+
+            let command = if is_compressed {
+                c & !DEM_IS_COMPRESSED
+            } else {
+                c
+            };
+
+            (
+                EDemoCommands::from_i32(command as i32).ok_or(Error::UnknownCmd(command))?,
+                ot,
+                is_compressed,
+            )
+        };
+
+        let (tick, tick_ot) = {
+            let (t, ot) = varint::read_uvarint32(&mut self.rdr)?;
+            // before the first tick / pre-game initialization messages
+            let tick = if t == u32::MAX { -1 } else { t as i32 };
+            (tick, ot)
+        };
+
+        let (size, size_ot) = varint::read_uvarint32(&mut self.rdr)?;
 
         Ok(CmdHeader {
             command,
             is_compressed,
             tick,
             size,
+            offset: command_ot + tick_ot + size_ot,
         })
     }
 
@@ -148,7 +170,12 @@ impl<R: Read + Seek> DemoFile<R> {
         }
     }
 
-    // void	SeekTo( int position, bool bRead );
+    // void SeekTo( int position, bool bRead );
+    //
+    // copypasta from rust io::Seek (that is used under the hood):
+    // > If the seek operation completed successfully, this method returns the
+    // > new position from the start of the stream. That position can be used
+    // > later with SeekFrom::Start.
     #[inline(always)]
     pub fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
         self.rdr.seek(pos).map_err(Error::Io)
@@ -198,9 +225,9 @@ impl<R: Read + Seek> DemoFile<R> {
         );
 
         let backup = self.stream_position()?;
+
         let file_info_offset =
             unsafe { self.demo_header.as_ref().unwrap_unchecked() }.fileinfo_offset;
-
         self.seek(SeekFrom::Start(file_info_offset as u64))?;
 
         let cmd_header = self.read_cmd_header()?;
@@ -216,9 +243,6 @@ impl<R: Read + Seek> DemoFile<R> {
 
         Ok(unsafe { self.file_info.as_ref().unwrap_unchecked() })
     }
-
-    // TODO: do not assert.. do not assume that the user knows that it's their
-    // responsibility to call read_file_info.
 
     // virtual float GetTicksPerSecond() OVERRIDE;
     pub fn ticks_per_second(&self) -> f32 {
@@ -251,5 +275,17 @@ impl<R: Read + Seek> DemoFile<R> {
 
         let file_info = unsafe { self.file_info.as_ref().unwrap_unchecked() };
         file_info.playback_ticks()
+    }
+
+    pub fn skip(&mut self, cmd_header: &CmdHeader) -> Result<()> {
+        self.seek(SeekFrom::Current(cmd_header.size as i64))
+            .map(|_| ())
+            .map_err(Error::from)
+    }
+
+    pub fn backup(&mut self, cmd_header: &CmdHeader) -> Result<()> {
+        self.seek(SeekFrom::Current(-(cmd_header.offset as i64)))
+            .map(|_| ())
+            .map_err(Error::from)
     }
 }

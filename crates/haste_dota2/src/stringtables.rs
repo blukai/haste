@@ -3,10 +3,14 @@ use crate::{
     nohash::NoHashHasherBuilder,
 };
 use hashbrown::HashMap;
+use haste_dota2_protos::c_demo_string_tables;
 use std::{
     intrinsics::{likely, unlikely},
     mem::MaybeUninit,
 };
+
+// NOTE: some info about string tables is available at
+// https://developer.valvesoftware.com/wiki/Networking_Events_%26_Messages#String_Tables
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -226,6 +230,7 @@ impl StringTable {
                 None
             };
 
+            // TODO: try to use .entry + .or_inser_with
             if let Some(entry) = self.items.get_mut(&entry_index) {
                 if let Some(dst) = entry.user_data.as_mut() {
                     if let Some(src) = user_data {
@@ -252,12 +257,36 @@ impl StringTable {
         Ok(())
     }
 
+    pub fn do_full_update(&mut self, table: &c_demo_string_tables::TableT) {
+        debug_assert!(
+            self.name.as_ref().eq(table.table_name()),
+            "trying to do a full update on the wrong table"
+        );
+        // copying clarity's behaviour
+        // src/main/java/skadistats/clarity/processor/stringtables/BaseStringTableEmitter.java
+        debug_assert!(
+            table.items.len() >= self.items.len(),
+            "removing entries is not supported"
+        );
+
+        for (i, incoming) in table.items.iter().enumerate() {
+            self.items
+                .entry(i as i32)
+                .and_modify(|existing| existing.user_data = incoming.data.clone())
+                .or_insert_with(|| StringTableItem {
+                    string: incoming.str.as_ref().map(|v| v.as_bytes().to_vec()),
+                    user_data: incoming.data.clone(),
+                });
+        }
+    }
+
     // NOTE: might need those for fast seeks
     // // HLTV change history & rollback
     // void EnableRollback();
     // void RestoreTick(int tick);
 }
 
+// NOTE: this is modelled after CNetworkStringTableContainer
 #[derive(Default)]
 pub struct StringTables {
     tables: Vec<StringTable>,
@@ -289,16 +318,32 @@ impl StringTables {
             using_varint_bitcounts,
         );
 
+        // TODO: push
         let len = self.tables.len();
         self.tables.insert(len, table);
         Ok(&mut self.tables[len])
+    }
+
+    pub fn do_full_update(&mut self, cmd: haste_dota2_protos::CDemoStringTables) {
+        for incoming in &cmd.tables {
+            if let Some(existing) = self.find_table_mut(incoming.table_name()) {
+                existing.do_full_update(incoming);
+            }
+        }
     }
 
     // INetworkStringTable *FindTable( const char *tableName ) const ;
     pub fn find_table(&self, name: &str) -> Option<&StringTable> {
         self.tables
             .iter()
-            .find(|&table| table.name.as_ref().eq(name))
+            // TODO: this used to be |&table| .., does this affect performance?
+            .find(|table| table.name.as_ref().eq(name))
+    }
+
+    pub fn find_table_mut(&mut self, name: &str) -> Option<&mut StringTable> {
+        self.tables
+            .iter_mut()
+            .find(|table| table.name.as_ref().eq(name))
     }
 
     // INetworkStringTable	*GetTable( TABLEID stringTable ) const;
@@ -310,6 +355,29 @@ impl StringTables {
         self.tables.get_mut(id)
     }
 
+    // clear clears underlying storage, but this has no effect on the allocated
+    // capacity.
+    //
+    // NOTE: it seems like valve's name `RemoveAllTables` has relation to or
+    // based on name of CUtlVector's `Remove` method, which does not de-allocate
+    // memory; - rust's variant would be `clear`.
+    //
+    // void             RemoveAllTables( void );
+    pub fn clear(&mut self) {
+        self.tables.clear();
+    }
+
+    // NOTE: the goal is to check if there are any string tables,
+    // CNetworkStringTableContainer has `GetNumTables` method which would be
+    // equivalent to `len` in idiomatic rust, but doing .len() == 0 is not
+    // idiomatic xd - `is_empty` is.
+    //
+    // int                  GetNumTables( void ) const;
+    pub fn is_empty(&self) -> bool {
+        self.tables.is_empty()
+    }
+
+    // TODO: add support for change list (m_pChangeList) and rollbacks
     // NOTE: might need those for fast seeks
     // void EnableRollback( bool bState );
     // void RestoreTick( int tick );
