@@ -8,7 +8,7 @@ use crate::{
     nohash::NoHashHasherBuilder,
 };
 use hashbrown::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -75,7 +75,11 @@ pub fn determine_update_type(update_flags: usize) -> UpdateType {
 
 #[derive(Debug, Clone)]
 pub struct Entity {
-    pub flattened_serializer: Rc<FlattenedSerializer>,
+    // TODO: shouldn't entity index be usize?
+    pub index: i32,
+    // NOTE: to get rid of Arc inner fs cane be clonned by dereferencing
+    // (*flattened_serializer).clone()
+    pub flattened_serializer: Arc<FlattenedSerializer>,
     pub field_values: HashMap<u64, FieldValue, NoHashHasherBuilder<u64>>,
 }
 
@@ -170,6 +174,7 @@ impl Entities {
             .expect("flattened serializer");
 
         let mut entity = Entity {
+            index,
             flattened_serializer: flattened_serializer.clone(),
             field_values: HashMap::with_capacity_and_hasher(
                 flattened_serializer.fields.len(),

@@ -1,0 +1,366 @@
+use crate::data_source::DataSource;
+use crossbeam_channel::{unbounded, Receiver, Sender};
+use eframe::{egui, emath, epaint};
+use hashbrown::HashMap;
+use haste_dota2::{dota2_protos::CDemoFileInfo, entities::Entity};
+use std::{fs::File, io, sync::Arc};
+
+type ConstructionResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+#[derive(Debug)]
+enum ParserMessage {}
+
+#[derive(Debug)]
+enum UiMessage {
+    ConstructionOk,
+    ConstructionErr(String),
+    FileInfo(haste_dota2::parser::Result<CDemoFileInfo>),
+    Entity(Entity),
+}
+
+pub(crate) struct ReplayView {
+    file_name: String,
+
+    ui_receiver: Receiver<UiMessage>,
+    parser_sender: Sender<ParserMessage>,
+
+    file_info: Option<CDemoFileInfo>,
+    entities: HashMap<i32, Entity, haste_dota2::nohash::NoHashHasherBuilder<i32>>,
+    selected_entity_index: Option<i32>,
+
+    search_text: String,
+}
+
+impl ReplayView {
+    pub(crate) fn new(data_source: DataSource) -> Self {
+        let file_name = data_source.file_name().to_owned();
+
+        let (ui_sender, ui_receiver) = unbounded::<UiMessage>();
+        let (parser_sender, parser_receiver) = unbounded::<ParserMessage>();
+
+        std::thread::spawn(move || {
+            struct MyVisitor {
+                ui_sender: Sender<UiMessage>,
+            };
+            impl haste_dota2::parser::Visitor for MyVisitor {
+                fn visit_entity(
+                    &self,
+                    update_flags: usize,
+                    update_type: haste_dota2::entities::UpdateType,
+                    entity: &haste_dota2::entities::Entity,
+                ) -> haste_dota2::parser::Result<()> {
+                    // TODO: do not clone each entity, but rather send a batch
+                    // after completion of parser request
+                    self.ui_sender
+                        .send(UiMessage::Entity(entity.clone()))
+                        .map_err(|err| err.into())
+                }
+            }
+
+            trait ReadSeek: io::Read + io::Seek {}
+            impl<T> ReadSeek for T where T: io::Read + io::Seek {}
+            fn into_read_seek(data_source: DataSource) -> ConstructionResult<Box<dyn ReadSeek>> {
+                match data_source {
+                    DataSource::FilePath(file_path) => Ok(Box::new(File::open(file_path)?)),
+                    DataSource::FileContents { bytes, .. } => Ok(Box::new(io::Cursor::new(bytes))),
+                }
+            }
+
+            match into_read_seek(data_source)
+                .map(io::BufReader::new)
+                .and_then(|buf_reader| {
+                    haste_dota2::parser::Parser::from_reader(
+                        buf_reader,
+                        MyVisitor {
+                            ui_sender: ui_sender.clone(),
+                        },
+                    )
+                }) {
+                Err(err) => {
+                    ui_sender
+                        .send(UiMessage::ConstructionErr(err.to_string()))
+                        .ok();
+                }
+                Ok(mut parser) => {
+                    ui_sender.send(UiMessage::ConstructionOk).ok();
+                    ui_sender
+                        .send(UiMessage::FileInfo(parser.file_info().cloned()))
+                        .ok();
+                    parser.parse_to_tick(42);
+                }
+            }
+        });
+
+        Self {
+            file_name,
+
+            ui_receiver,
+            parser_sender,
+
+            file_info: None,
+            entities: Default::default(),
+            selected_entity_index: None,
+
+            search_text: Default::default(),
+        }
+    }
+
+    pub(crate) fn ui(&mut self, ui: &mut egui::Ui) {
+        // TODO: move out into a separate func
+        egui::SidePanel::left("entities")
+            .frame(egui::Frame {
+                fill: ui.visuals().panel_fill,
+                ..Default::default()
+            })
+            .min_width(300.0)
+            .resizable(true)
+            .show_inside(ui, |ui| {
+                egui::TopBottomPanel::top("search")
+                    .frame(egui::Frame {
+                        inner_margin: egui::Margin::same(8.0),
+                        ..Default::default()
+                    })
+                    .show_inside(ui, |ui| {
+                        // TODO: vscode-like "match case" toggle (with icon pls)
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.search_text)
+                                .hint_text("find entity")
+                                .desired_width(f32::INFINITY),
+                        );
+                    });
+
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.spacing_mut().item_spacing = emath::Vec2::ZERO;
+
+                    self.entities.values().for_each(|entity| {
+                        // TODO: more advanced string matching
+                        // TODO: maybe do tokenization or something?
+                        if !self.search_text.is_empty()
+                            && !entity
+                                .flattened_serializer
+                                .serializer_name
+                                .contains(&self.search_text)
+                        {
+                            return;
+                        }
+
+                        let list_item = ListItem::new(format!(
+                            "{:>06} {}",
+                            entity.index, &entity.flattened_serializer.serializer_name,
+                        ))
+                        .selected(
+                            self.selected_entity_index
+                                .is_some_and(|index| index == entity.index),
+                        );
+                        if list_item.show(ui).clicked() {
+                            self.selected_entity_index = Some(entity.index);
+                        }
+                    });
+                });
+            });
+
+        // TODO: move out into a separate func
+        egui::CentralPanel::default()
+            .frame(ReplayView::frame())
+            .show_inside(ui, |ui| {
+                if let Some(selected_entity_index) = self.selected_entity_index.as_ref() {
+                    if let Some(selected_entity) = self.entities.get(selected_entity_index) {
+                        egui_extras::TableBuilder::new(ui)
+                            // NOTE: holly shit, it wasn't easy to figure out
+                            // how to make this fucking talbe take full height.
+                            // thanks to this comment:
+                            // https://github.com/emilk/egui/issues/2430#issuecomment-1608774435
+                            //
+                            // max_scroll_height makes the take full height
+                            .max_scroll_height(f32::INFINITY)
+                            // auto_shrink makes the table take full width (and
+                            // removes weird spacing ~around scroll bar)
+                            .auto_shrink([false, false])
+                            .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+                            .column(egui_extras::Column::remainder().resizable(true))
+                            .column(egui_extras::Column::remainder().resizable(true))
+                            .column(egui_extras::Column::remainder().resizable(true))
+                            .column(egui_extras::Column::remainder().resizable(true))
+                            .header(ListItem::height(), |mut header| {
+                                header.col(|ui| {
+                                    ui.add_space(8.0);
+                                    ui.strong("field_path");
+                                });
+                                header.col(|ui| {
+                                    ui.add_space(8.0);
+                                    ui.strong("var_name");
+                                });
+                                header.col(|ui| {
+                                    ui.add_space(8.0);
+                                    ui.strong("var_type");
+                                });
+                                header.col(|ui| {
+                                    ui.add_space(8.0);
+                                    ui.strong("value");
+                                });
+                            })
+                            .body(|mut body| {
+                                fn show_row(
+                                    body: &mut egui_extras::TableBody<'_>,
+                                    fields: &Vec<Arc<haste_dota2::flattenedserializers::FlattenedSerializerField>>,
+                                    field_values: &HashMap<u64, haste_dota2::fieldvalue::FieldValue, haste_dota2::nohash::NoHashHasherBuilder<u64>>,
+                                    field_path: haste_dota2::fieldpath::FieldPath,
+                                ) {
+                                    let mut field_path = field_path;
+                                    fields.iter().enumerate().for_each(|(i, field)| {
+                                        field_path.data[field_path.position] = i as i32;
+                                        if let Some(field_value) = field_values.get(&unsafe { field_path.hash_unchecked() }) {
+                                            body.row(ListItem::height(), |mut row| {
+                                                row.col(|ui| {
+                                                    ui.add_space(8.0);
+                                                    ui.label(format!("{:?}", &field_path.data[..=field_path.position]));
+                                                });
+                                                row.col(|ui| {
+                                                    ui.add_space(8.0 + 16.0 * field_path.position as f32);
+                                                    ui.label(field.var_name.to_string());
+                                                });
+                                                row.col(|ui| {
+                                                    ui.add_space(8.0);
+                                                    ui.label(field.var_type.to_string());
+                                                });
+                                                row.col(|ui| {
+                                                    ui.add_space(8.0);
+                                                    ui.label(format!("{:?}", field_value));
+                                                });
+                                            });
+
+                                            if let Some(field_serializer) = field.field_serializer.as_ref() {
+                                                let mut field_path = field_path.clone();
+                                                field_path.position += 1;
+                                                show_row(body, &field_serializer.fields, field_values, field_path);
+                                            }
+                                        }
+                                    });
+                                }
+
+                                show_row(
+                                    &mut body,
+                                    &selected_entity.flattened_serializer.fields,
+                                    &selected_entity.field_values,
+                                    haste_dota2::fieldpath::FieldPath::default(),
+                                );
+                            });
+                    }
+                }
+            });
+    }
+
+    pub(crate) fn update(&mut self) {
+        while let Some(message) = self.ui_receiver.try_recv().ok() {
+            match message {
+                UiMessage::FileInfo(file_info) => match file_info {
+                    Ok(file_info) => {
+                        self.file_info = Some(file_info);
+                    }
+                    Err(err) => {
+                        eprintln!("unhandled file info err: {:?}", err);
+                    }
+                },
+                UiMessage::Entity(entity) => {
+                    self.entities.insert(entity.index, entity);
+                }
+                _ => {
+                    eprintln!("unhandled ui message: {:?}", message);
+                }
+            }
+        }
+    }
+
+    // design tokens
+
+    fn background() -> epaint::Color32 {
+        // TODO: get from visuals.panel_fill
+        epaint::Color32::from_rgb(13, 16, 17)
+    }
+
+    fn frame() -> egui::Frame {
+        egui::Frame {
+            fill: Self::background(),
+            ..Default::default()
+        }
+    }
+}
+
+// ----
+
+struct ListItem {
+    text: egui::WidgetText,
+    selected: bool,
+}
+
+impl ListItem {
+    fn new(text: impl Into<egui::WidgetText>) -> Self {
+        Self {
+            text: text.into(),
+            selected: false,
+        }
+    }
+
+    fn selected(mut self, selected: bool) -> Self {
+        self.selected = selected;
+        self
+    }
+
+    fn show(self, ui: &mut egui::Ui) -> egui::Response {
+        let desired_size = emath::vec2(ui.available_width(), Self::height());
+        let (rect, mut response) = ui.allocate_at_least(desired_size, egui::Sense::click());
+
+        if !ui.is_rect_visible(rect) {
+            return response;
+        }
+
+        // NOTE: following line sets inactive bg color of a list item from
+        // default grey to none
+        ui.visuals_mut().widgets.inactive.bg_fill = Default::default();
+        let visuals = ui.style().interact_selectable(&response, self.selected);
+
+        let text_wrap_width = ui.available_width() - Self::inner_margin_x() * 2.0;
+        let mut text_job =
+            self.text
+                .into_text_job(ui.style(), egui::FontSelection::Default, egui::Align::LEFT);
+        text_job.job.wrap = egui::text::TextWrapping::truncate_at_width(text_wrap_width);
+
+        let text_galley = ui.fonts(|f| text_job.into_galley(f));
+        let text_pos = egui::Align2::LEFT_CENTER
+            .align_size_within_rect(
+                text_galley.size(),
+                rect.shrink2(emath::vec2(Self::inner_margin_x(), 0.0)),
+            )
+            .min;
+
+        // NOTE: i'm not actually sure what this does, prob allows to do
+        // keyboard navigation?
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::WidgetType::SelectableLabel, text_galley.text())
+        });
+
+        // NOTE: elided is ~= truncated :shrug:
+        if text_galley.galley.elided {
+            response = response.on_hover_ui(|ui| {
+                ui.label(text_galley.text());
+            });
+        }
+
+        ui.painter()
+            .rect_filled(rect, egui::Rounding::ZERO, visuals.bg_fill);
+        text_galley.paint_with_visuals(ui.painter(), text_pos, &visuals);
+
+        response
+    }
+
+    // design tokens
+
+    fn height() -> f32 {
+        24.0
+    }
+
+    fn inner_margin_x() -> f32 {
+        // TODO: spacing design tokens
+        8.0
+    }
+}

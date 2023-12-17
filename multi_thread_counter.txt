@@ -1,0 +1,75 @@
+use std::{
+    sync::{
+        mpsc::{self, Receiver, Sender},
+        Arc, RwLock,
+    },
+    thread,
+};
+
+enum Message {
+    Inc,
+    Dec,
+}
+
+#[derive(Default)]
+struct State {
+    count: i128,
+}
+
+struct App {
+    state: Arc<RwLock<State>>,
+    sender: Sender<Message>,
+}
+
+impl App {
+    fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+        let state = Arc::new(RwLock::new(State::default()));
+        let (sender, receiver) = mpsc::channel();
+
+        let thread_state = Arc::clone(&state);
+        thread::spawn(move || {
+            while let Ok(message) = receiver.recv() {
+                match message {
+                    Message::Inc => {
+                        let mut state = thread_state.write().expect("write lock");
+                        state.count += 1;
+                    }
+                    Message::Dec => {
+                        let mut state = thread_state.write().expect("write lock");
+                        state.count -= 1;
+                    }
+                    _ => unimplemented!(),
+                }
+            }
+        });
+
+        Self { state, sender }
+    }
+}
+
+impl eframe::App for App {
+    fn update(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.vertical(|ui| {
+                ui.label(self.state.read().expect("read lock").count.to_string());
+
+                ui.horizontal(|ui| {
+                    if ui.button("+").clicked() {
+                        self.sender.send(Message::Inc).expect("send inc");
+                    }
+                    if ui.button("-").clicked() {
+                        self.sender.send(Message::Dec).expect("send dec");
+                    }
+                });
+            });
+        });
+    }
+}
+
+fn main() -> eframe::Result<()> {
+    eframe::run_native(
+        "viewer",
+        eframe::NativeOptions::default(),
+        Box::new(|cc| Box::new(App::new(cc))),
+    )
+}

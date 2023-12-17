@@ -1,0 +1,128 @@
+use super::ReplayParser;
+use eframe::{egui, emath, epaint};
+
+pub(super) struct TimePanel;
+
+impl TimePanel {
+    pub(super) fn ui(ui: &mut egui::Ui, replay_parser: &mut ReplayParser) {
+        egui::TopBottomPanel::bottom("time_panel")
+            .frame(Self::frame())
+            .exact_height(Self::height())
+            .show_inside(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.set_height(Self::height());
+                    ui.spacing_mut().item_spacing = emath::Vec2::ZERO;
+
+                    Self::controls_ui(ui, replay_parser);
+                    ui.add(egui::Separator::default().spacing(0.0));
+                    Self::ticks_ui(ui, replay_parser);
+                });
+            });
+    }
+
+    // ----
+
+    fn controls_ui(ui: &mut egui::Ui, replay_parser: &mut ReplayParser) {
+        Self::play_pause_button_ui(ui, replay_parser);
+    }
+
+    fn play_pause_button_ui(ui: &mut egui::Ui, replay_parser: &mut ReplayParser) {
+        // TODO: play/pause button (toggle)
+    }
+
+    // ----
+
+    // NOTE: inspired by https://dribbble.com/shots/10113718-Timeline-Scrubber
+    // and https://dribbble.com/shots/15806087-Playback-component-for-a-tracking-software
+    fn ticks_ui(ui: &mut egui::Ui, replay_parser: &mut ReplayParser) {
+        // ui.scope(|ui| {
+        //     ui.spacing_mut().interact_size.y = Self::height();
+        //     ui.horizontal(|ui| {
+        //         if let Some(hover_pos) = ui.input(|i| i.pointer.hover_pos()) {
+        //             let max_rect = ui.max_rect();
+        //             if max_rect.contains(hover_pos) {
+        //                 dbg!(hover_pos.x, max_rect.y_range());
+        //                 ui.painter().vline(
+        //                     hover_pos.x,
+        //                     max_rect.y_range(),
+        //                     ui.visuals().widgets.noninteractive.bg_stroke,
+        //                 );
+        //             }
+        //         }
+        //         // let width = ui.available_width();
+
+        //         // let total_ticks = replay_parser.total_ticks().unwrap_or_default();
+        //         // for x in (0..total_ticks).step_by(1000) {
+
+        //         // }
+        //     });
+        // });
+
+        let total_ticks = replay_parser.total_ticks().unwrap_or_default();
+        let total_ticks_text = format!("{total_ticks}");
+
+        let tick = replay_parser.tick();
+        let tick_text = format!("{tick:0pad$}", pad = total_ticks_text.len());
+
+        ui.label(format!("{tick_text} / {total_ticks_text}"));
+    }
+
+    // design tokens
+
+    fn height() -> f32 {
+        40.0
+    }
+
+    fn inner_margin() -> egui::Margin {
+        // let mut m = egui::Margin::ZERO;
+        // // NOTE: 1 point of top margin because of stoke that is being drawn
+        // // inside of a pannel, see
+        // // https://github.com/emilk/egui/blob/8d4de866d4da1835b31e85f9068a5257e6ccbccb/crates/egui/src/containers/panel.rs#L782
+        // m.top = 1.0;
+        // m
+        egui::Margin::ZERO
+    }
+
+    fn background() -> epaint::Color32 {
+        // NOTE: this color is stolen from figma
+        epaint::Color32::from_gray(20)
+    }
+
+    fn frame() -> egui::Frame {
+        egui::Frame {
+            inner_margin: Self::inner_margin(),
+            fill: Self::background(),
+            ..Default::default()
+        }
+    }
+
+    // widgets
+
+    // fn icon_button<'a>(ui: &mut egui::Ui, icon: impl Into<egui::Image<'a>>) -> egui::Response {
+    //     let button_size =
+    //         emath::Vec2::new(Self::height(), Self::height() - Self::inner_margin().top);
+    //     let (button_rect, button_resp) = ui.allocate_exact_size(button_size, egui::Sense::click());
+    //     button_resp.widget_info(|| egui::WidgetInfo::new(egui::WidgetType::ImageButton));
+    //     if !ui.is_rect_visible(button_rect) {
+    //         return button_resp;
+    //     }
+
+    //     // NOTE: logic for is_active and is_hovered is stolen from Widgets.style
+    //     // (see egui's style.rs)
+    //     let is_active = button_resp.is_pointer_button_down_on() || button_resp.has_focus();
+    //     let is_hovered = button_resp.hovered() || button_resp.highlighted();
+    //     let fill = if is_active || is_hovered {
+    //         ui.style().interact(&button_resp).bg_fill
+    //     } else {
+    //         egui::Color32::TRANSPARENT
+    //     };
+    //     ui.painter()
+    //         .rect_filled(button_rect, egui::Rounding::ZERO, fill);
+
+    //     let icon_size = emath::Vec2::splat(Self::height() / 2.0);
+    //     let icon_rect = ui.layout().align_size_within_rect(icon_size, button_rect);
+    //     icon.into().paint_at(ui, icon_rect);
+
+    //     button_resp
+    // }
+}

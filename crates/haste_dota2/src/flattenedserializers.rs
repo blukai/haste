@@ -9,7 +9,7 @@ use crate::{
     varint,
 };
 use hashbrown::HashMap;
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -47,7 +47,7 @@ pub struct FlattenedSerializerField {
     #[cfg(debug_assertions)]
     pub field_serializer_name: Option<Box<str>>,
     pub field_serializer_name_hash: Option<u64>,
-    pub field_serializer: Option<Rc<FlattenedSerializer>>,
+    pub field_serializer: Option<Arc<FlattenedSerializer>>,
 
     // NOTE: field_serializer_version and send_node are not being used anywhere
     // (obviously duh).
@@ -155,7 +155,7 @@ pub struct FlattenedSerializer {
     #[cfg(debug_assertions)]
     pub serializer_name: Box<str>,
     pub serializer_version: Option<i32>,
-    pub fields: Vec<Rc<FlattenedSerializerField>>,
+    pub fields: Vec<Arc<FlattenedSerializerField>>,
 
     pub serializer_name_hash: u64,
 }
@@ -203,8 +203,8 @@ impl FlattenedSerializer {
     }
 }
 
-type FieldMap = HashMap<i32, Rc<FlattenedSerializerField>, NoHashHasherBuilder<i32>>;
-type SerializerMap = HashMap<u64, Rc<FlattenedSerializer>, NoHashHasherBuilder<u64>>;
+type FieldMap = HashMap<i32, Arc<FlattenedSerializerField>, NoHashHasherBuilder<i32>>;
+type SerializerMap = HashMap<u64, Arc<FlattenedSerializer>, NoHashHasherBuilder<u64>>;
 
 pub struct FlattenedSerializers {
     serializers: SerializerMap,
@@ -262,21 +262,21 @@ impl FlattenedSerializers {
                     match field.metadata.as_ref() {
                         Some(field_metadata) => match field_metadata.special_type {
                             Some(FieldSpecialType::Array { length }) => {
-                                field.field_serializer = Some(Rc::new(FlattenedSerializer {
+                                field.field_serializer = Some(Arc::new(FlattenedSerializer {
                                     fields: {
                                         let mut fields = Vec::with_capacity(length);
-                                        fields.resize(length, Rc::new(field.clone()));
+                                        fields.resize(length, Arc::new(field.clone()));
                                         fields
                                     },
                                     ..Default::default()
                                 }));
                             }
                             Some(FieldSpecialType::VariableLengthArray) => {
-                                field.field_serializer = Some(Rc::new(FlattenedSerializer {
+                                field.field_serializer = Some(Arc::new(FlattenedSerializer {
                                     fields: {
                                         const SIZE: usize = 256;
                                         let mut fields = Vec::with_capacity(SIZE);
-                                        fields.resize(SIZE, Rc::new(field.clone()));
+                                        fields.resize(SIZE, Arc::new(field.clone()));
                                         fields
                                     },
                                     ..Default::default()
@@ -285,7 +285,7 @@ impl FlattenedSerializers {
                             Some(FieldSpecialType::VariableLengthSerializerArray {
                                 element_serializer_name_hash,
                             }) => {
-                                field.field_serializer = Some(Rc::new(FlattenedSerializer {
+                                field.field_serializer = Some(Arc::new(FlattenedSerializer {
                                     fields: {
                                         let sub_field = FlattenedSerializerField {
                                             field_serializer: serializers
@@ -296,7 +296,7 @@ impl FlattenedSerializers {
 
                                         const SIZE: usize = 256;
                                         let mut sub_fields = Vec::with_capacity(SIZE);
-                                        sub_fields.resize(SIZE, Rc::new(sub_field));
+                                        sub_fields.resize(SIZE, Arc::new(sub_field));
                                         sub_fields
                                     },
                                     ..Default::default()
@@ -314,7 +314,7 @@ impl FlattenedSerializers {
                         }
                     }
 
-                    let field = Rc::new(field);
+                    let field = Arc::new(field);
                     // NOTE: not field is being clonned, but rc!
                     let ret = field.clone();
                     fields.insert(*field_index, field);
@@ -325,7 +325,7 @@ impl FlattenedSerializers {
 
             serializers.insert(
                 flattened_serializer.serializer_name_hash,
-                Rc::new(flattened_serializer),
+                Arc::new(flattened_serializer),
             );
         }
 
@@ -336,7 +336,7 @@ impl FlattenedSerializers {
     pub fn get_by_serializer_name_hash(
         &self,
         serializer_name_hash: u64,
-    ) -> Option<Rc<FlattenedSerializer>> {
+    ) -> Option<Arc<FlattenedSerializer>> {
         self.serializers.get(&serializer_name_hash).cloned()
     }
 }

@@ -1,0 +1,22 @@
+[package]
+name = "viewer"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "viewer"
+path = "src/lib.rs"
+
+[[bin]]
+name = "viewer"
+path = "src/main.rs"
+
+[dependencies]
+eframe = "0.24.1"
+rfd = "0.12.1"
+pollster = "0.3.0"
+haste_dota2 = { path = "../../crates/haste_dota2" }
+egui_extras = { version = "0.24.2", features = ["svg"] }
+crossbeam-channel = "0.5.8"
+hashbrown = "0.14.3"
+# rayon = "1.8.0"

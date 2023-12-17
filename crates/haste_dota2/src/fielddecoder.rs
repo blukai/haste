@@ -21,7 +21,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 // ----
 
-pub trait FieldDecode: DynClone + Debug {
+pub trait FieldDecode: DynClone + Debug + Sync + Send {
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue>;
 }
 
@@ -236,7 +236,7 @@ impl FieldDecode for QAngleDecoder {
 
 // ----
 
-trait InternalF32Decode: DynClone + Debug {
+trait InternalF32Decode: DynClone + Debug + Sync + Send {
     fn decode(&self, br: &mut BitReader) -> Result<f32>;
 }
 
