@@ -154,7 +154,7 @@ impl Default for Entities {
 impl Entities {
     pub fn handle_create(
         &mut self,
-        entidx: i32,
+        index: i32,
         br: &mut BitReader,
         entity_classes: &EntityClasses,
         instance_baseline: &InstanceBaseline,
@@ -184,19 +184,19 @@ impl Entities {
 
         entity.parse(br)?;
 
-        self.entities.insert(entidx, entity);
-        Ok(unsafe { self.entities.get(&entidx).unwrap_unchecked() })
+        self.entities.insert(index, entity);
+        Ok(unsafe { self.entities.get(&index).unwrap_unchecked() })
     }
 
-    pub fn handle_delete(&mut self, entidx: i32) -> Entity {
+    pub fn handle_delete(&mut self, index: i32) -> Entity {
         // SAFETY: if it's being deleted menas that it was created, riiight?
-        unsafe { self.entities.remove(&(entidx)).unwrap_unchecked() }
+        unsafe { self.entities.remove(&(index)).unwrap_unchecked() }
     }
 
-    pub fn handle_update(&mut self, entidx: i32, br: &mut BitReader) -> Result<&Entity> {
+    pub fn handle_update(&mut self, index: i32, br: &mut BitReader) -> Result<&Entity> {
         // SAFETY: if entity was ever created, and not deleted, it can be
         // updated!
-        let entity = unsafe { self.entities.get_mut(&entidx).unwrap_unchecked() };
+        let entity = unsafe { self.entities.get_mut(&index).unwrap_unchecked() };
         entity.parse(br)?;
         Ok(entity)
     }

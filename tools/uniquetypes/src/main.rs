@@ -22,8 +22,9 @@ fn main() -> Result<()> {
     }
 
     let file = File::open(filepath.unwrap())?;
-    let file = BufReader::new(file);
-    let mut demo_file = DemoFile::from_reader(BufReader::new(file));
+    let buf_reader = BufReader::new(file);
+
+    let mut demo_file = DemoFile::from_reader(BufReader::new(buf_reader));
     let _demo_header = demo_file.read_demo_header()?;
 
     let mut buf = vec![0u8; 2 * 1024 * 1024];
@@ -33,9 +34,8 @@ fn main() -> Result<()> {
             // DemSendTables cmd is sent only once
             EDemoCommands::DemSendTables => {
                 let flattened_serializer = {
-                    let cmd = dota2_protos::CDemoSendTables::decode(
-                        demo_file.read_cmd(&cmd_header, &mut buf)?,
-                    )?;
+                    let cmd =
+                        dota2_protos::CDemoSendTables::decode(demo_file.read_cmd(&cmd_header)?)?;
                     let mut data = &cmd.data.expect("send tables data")[..];
                     let (_size, _count) = varint::read_uvarint32(&mut data)?;
                     dota2_protos::CsvcMsgFlattenedSerializer::decode(data)?

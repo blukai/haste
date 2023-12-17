@@ -31,7 +31,16 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-// strings in c/cpp are null terminated.
+// #define DEMO_RECORD_BUFFER_SIZE 2*1024*1024
+//
+// NOTE: read_cmd reads bytes (cmd_header.size) from the rdr into buf, if cmd is
+// compressed (cmd_header.is_compresed) it'll decompress the data. buf must be
+// large enough to fit compressed and uncompressed data simultaneously.
+pub const DEMO_BUFFER_SIZE: usize = 2 * 1024 * 1024;
+
+// #define DEMO_HEADER_ID "HL2DEMO"
+//
+// NOTE: strings in c/cpp are null terminated.
 const DEMO_HEADER_ID: [u8; 8] = *b"PBDEMS2\0";
 
 // NOTE: naming is based on stuff from demofile.h of valve's demoinfo2 thing.
@@ -54,26 +63,39 @@ pub struct CmdHeader {
     pub offset: usize,
 }
 
+// NOTE: you should provide a reader that implements buffering (eg BufReader)
+// because it'll be much more efficient.
+
 #[derive(Debug)]
 pub struct DemoFile<R: Read + Seek> {
     rdr: R,
+    buf: Vec<u8>,
     demo_header: Option<DemoHeader>,
     file_info: Option<CDemoFileInfo>,
 }
 
 impl<R: Read + Seek> DemoFile<R> {
-    /// you should provide a reader that implements buffering (eg BufReader)
-    /// because it'll be much more efficient.
+    // TODO: maybe read demo header in constructor and return a result. or maybe
+    // document and make it clear somehow that it is required to call
+    // read_demo_header upon doing anything else.
     pub fn from_reader(rdr: R) -> Self {
         Self {
             rdr,
+            buf: vec![0u8; DEMO_BUFFER_SIZE],
             demo_header: None,
             file_info: None,
         }
     }
 
-    // demoheader_t * 	ReadDemoHeader( CDemoPlaybackParameters_t const *pPlaybackParameters );
+    // ----
+
+    // demoheader_t* ReadDemoHeader( CDemoPlaybackParameters_t const *pPlaybackParameters );
     pub fn read_demo_header(&mut self) -> Result<&DemoHeader> {
+        debug_assert!(
+            self.demo_header.is_none(),
+            "expected demo header not to have been read"
+        );
+
         let mut demo_header = DemoHeader::default();
 
         self.rdr.read_exact(&mut demo_header.demofilestamp)?;
@@ -93,8 +115,26 @@ impl<R: Read + Seek> DemoFile<R> {
         demo_header.spawngroups_offset = i32::from_le_bytes(buf);
 
         self.demo_header = Some(demo_header);
-        Ok(unsafe { self.demo_header.as_ref().unwrap_unchecked() })
+        Ok(unsafe { self.demo_header_unchecked() })
     }
+
+    // NOTE: demo_header will call read_demo_header if demo header have not been
+    // read
+    pub fn demo_header(&mut self) -> Result<&DemoHeader> {
+        if self.demo_header.is_none() {
+            self.read_demo_header()
+        } else {
+            Ok(unsafe { self.demo_header_unchecked() })
+        }
+    }
+
+    // NOTE: demo_header_unchecked can be useful when you're sure that
+    // read_demo_header was called
+    pub unsafe fn demo_header_unchecked(&self) -> &DemoHeader {
+        self.demo_header.as_ref().unwrap_unchecked()
+    }
+
+    // ----
 
     // void ReadCmdHeader( unsigned char& cmd, int& tick, int &nPlayerSlot );
     pub fn read_cmd_header(&mut self) -> Result<CmdHeader> {
@@ -140,23 +180,19 @@ impl<R: Read + Seek> DemoFile<R> {
         })
     }
 
-    // read_cmd reads bytes (cmd_header.size) from the reader into buf, if
-    // compressed (cmd_header.is_compresed) it'll decompress the data.
-    // NOTE: buf must be large enough to fit compressed and uncompressed data
-    // simultaneously.
-    pub fn read_cmd<'b>(
-        &mut self,
-        cmd_header: &CmdHeader,
-        // TODO: change type of buf from &[u8] to Bytes to maybe avoid some
-        // copying. see https://github.com/tokio-rs/prost/issues/571
-        buf: &'b mut [u8],
-    ) -> Result<&'b [u8]> {
+    pub fn unread_cmd_header(&mut self, cmd_header: &CmdHeader) -> Result<()> {
+        self.seek(SeekFrom::Current(-(cmd_header.offset as i64)))
+            .map(|_| ())
+            .map_err(Error::from)
+    }
+
+    pub fn read_cmd(&mut self, cmd_header: &CmdHeader) -> Result<&[u8]> {
         debug_assert!(
             self.demo_header.is_some(),
             "expected demo header to have been read"
         );
 
-        let (left, right) = buf.split_at_mut(cmd_header.size as usize);
+        let (left, right) = self.buf.split_at_mut(cmd_header.size as usize);
         self.rdr.read_exact(left)?;
 
         if cmd_header.is_compressed {
@@ -169,6 +205,14 @@ impl<R: Read + Seek> DemoFile<R> {
             Ok(left)
         }
     }
+
+    pub fn skip_cmd(&mut self, cmd_header: &CmdHeader) -> Result<()> {
+        self.seek(SeekFrom::Current(cmd_header.size as i64))
+            .map(|_| ())
+            .map_err(Error::from)
+    }
+
+    // ----
 
     // void SeekTo( int position, bool bRead );
     //
@@ -187,7 +231,7 @@ impl<R: Read + Seek> DemoFile<R> {
         self.rdr.stream_position().map_err(Error::Io)
     }
 
-    // int		GetSize();
+    // int GetSize();
     //
     // NOTE: Seek has stream_len method, but it's nigtly-only experimental
     // thing; at this point i would like to minimize use of non-stable features
@@ -215,77 +259,71 @@ impl<R: Read + Seek> DemoFile<R> {
         Ok(self.stream_position()? == self.stream_len()?)
     }
 
-    pub fn read_file_info<'buf>(
-        &mut self,
-        make_buf: impl FnOnce(&CmdHeader) -> &'buf mut [u8],
-    ) -> Result<&CDemoFileInfo> {
+    // ----
+
+    // NOTE: if for some reason performance for file info stuff is critically
+    // important - make sure to call read_file_info instead of relying on
+    // file_info method and probably introduce _unchecked variants of
+    // ticks_per_second, and others to avoid couple of branches... it is very
+    // unlikely that this will we worth it though.
+
+    pub fn read_file_info(&mut self) -> Result<&CDemoFileInfo> {
         debug_assert!(
             self.demo_header.is_some(),
             "expected demo header to have been read"
         );
+        debug_assert!(
+            self.file_info.is_none(),
+            "expected file info not to have been read"
+        );
 
         let backup = self.stream_position()?;
 
-        let file_info_offset =
-            unsafe { self.demo_header.as_ref().unwrap_unchecked() }.fileinfo_offset;
-        self.seek(SeekFrom::Start(file_info_offset as u64))?;
+        let demo_header = unsafe { self.demo_header_unchecked() };
+        self.seek(SeekFrom::Start(demo_header.fileinfo_offset as u64))?;
 
         let cmd_header = self.read_cmd_header()?;
         if cmd_header.command != EDemoCommands::DemFileInfo {
             return Err(Error::ExpectedCmd(EDemoCommands::DemFileInfo));
         }
 
-        self.file_info = Some(CDemoFileInfo::decode(
-            self.read_cmd(&cmd_header, make_buf(&cmd_header))?,
-        )?);
+        self.file_info = Some(CDemoFileInfo::decode(self.read_cmd(&cmd_header)?)?);
 
         self.seek(SeekFrom::Start(backup))?;
 
         Ok(unsafe { self.file_info.as_ref().unwrap_unchecked() })
     }
 
-    // virtual float GetTicksPerSecond() OVERRIDE;
-    pub fn ticks_per_second(&self) -> f32 {
-        debug_assert!(
-            self.file_info.is_some(),
-            "expected file info to have been read"
-        );
+    // NOTE: file_info will call read_file_info if file info have not been read
+    pub fn file_info(&mut self) -> Result<&CDemoFileInfo> {
+        if self.file_info.is_none() {
+            self.read_file_info()
+        } else {
+            Ok(unsafe { self.file_info_unchecked() })
+        }
+    }
 
-        let file_info = unsafe { self.file_info.as_ref().unwrap_unchecked() };
-        file_info.playback_ticks() as f32 / file_info.playback_time()
+    // NOTE: file_info_unchecked can be useful when you're sure that
+    // read_file_info was called
+    pub unsafe fn file_info_unchecked(&self) -> &CDemoFileInfo {
+        self.file_info.as_ref().unwrap_unchecked()
+    }
+
+    // virtual float GetTicksPerSecond() OVERRIDE;
+    pub fn ticks_per_second(&mut self) -> Result<f32> {
+        let file_info = self.file_info()?;
+        Ok(file_info.playback_ticks() as f32 / file_info.playback_time())
     }
 
     // virtual float GetTicksPerFrame() OVERRIDE;
-    pub fn ticks_per_frame(&self) -> f32 {
-        debug_assert!(
-            self.file_info.is_some(),
-            "expected file info to have been read"
-        );
-
-        let file_info = unsafe { self.file_info.as_ref().unwrap_unchecked() };
-        file_info.playback_ticks() as f32 / file_info.playback_frames() as f32
+    pub fn ticks_per_frame(&mut self) -> Result<f32> {
+        let file_info = self.file_info()?;
+        Ok(file_info.playback_ticks() as f32 / file_info.playback_frames() as f32)
     }
 
     // virtual int	GetTotalTicks( void ) OVERRIDE;
-    pub fn total_ticks(&self) -> i32 {
-        debug_assert!(
-            self.file_info.is_some(),
-            "expected file info to have been read"
-        );
-
-        let file_info = unsafe { self.file_info.as_ref().unwrap_unchecked() };
-        file_info.playback_ticks()
-    }
-
-    pub fn skip(&mut self, cmd_header: &CmdHeader) -> Result<()> {
-        self.seek(SeekFrom::Current(cmd_header.size as i64))
-            .map(|_| ())
-            .map_err(Error::from)
-    }
-
-    pub fn backup(&mut self, cmd_header: &CmdHeader) -> Result<()> {
-        self.seek(SeekFrom::Current(-(cmd_header.offset as i64)))
-            .map(|_| ())
-            .map_err(Error::from)
+    pub fn total_ticks(&mut self) -> Result<i32> {
+        let file_info = self.file_info()?;
+        Ok(file_info.playback_ticks())
     }
 }

@@ -20,6 +20,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 // NOTE: Clone is derived because FlattenedSerializerField needs to be clonable.
 #[derive(Debug, Clone)]
 pub enum FieldSpecialType {
+    // TODO: add  element_serializer_name_hash field into Array (to be more correct)
     Array { length: usize },
     VariableLengthArray,
     VariableLengthSerializerArray { element_serializer_name_hash: u64 },

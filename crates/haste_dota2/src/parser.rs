@@ -1,7 +1,7 @@
 use crate::{
     bitbuf::BitReader,
-    demofile::{CmdHeader, DemoFile},
-    dota2_protos::{self, prost::Message, EDemoCommands},
+    demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_BUFFER_SIZE},
+    dota2_protos::{self, prost::Message, CDemoFileInfo, EDemoCommands},
     entities::{self, Entities},
     entityclasses::EntityClasses,
     flattenedserializers::FlattenedSerializers,
@@ -10,7 +10,6 @@ use crate::{
 };
 use std::{
     io::{Read, Seek, SeekFrom},
-    marker::PhantomData,
     ops::ControlFlow,
 };
 
@@ -46,7 +45,8 @@ pub trait Visitor {
     }
 }
 
-pub struct Parser<'p, R: Read + Seek, V: Visitor + 'p> {
+// TODO: maybe rename to DemoPlayer (or DemoRunner?)
+pub struct Parser<R: Read + Seek, V: Visitor> {
     starting_position: u64,
     demo_file: DemoFile<R>,
     buf: Vec<u8>,
@@ -57,10 +57,9 @@ pub struct Parser<'p, R: Read + Seek, V: Visitor + 'p> {
     entities: Entities,
     tick: i32,
     visitor: V,
-    _p: PhantomData<&'p ()>,
 }
 
-impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
+impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     pub fn from_reader(rdr: R, visitor: V) -> Result<Self> {
         let mut demo_file = DemoFile::from_reader(rdr);
         let _demo_header = demo_file.read_demo_header()?;
@@ -68,7 +67,7 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
         Ok(Self {
             starting_position: demo_file.stream_position()?,
             demo_file,
-            buf: vec![0; 1024 * 1024 * 2], // 2mb
+            buf: vec![0; DEMO_BUFFER_SIZE],
             string_tables: StringTables::default(),
             instance_baseline: InstanceBaseline::default(),
             flattened_serializers: None,
@@ -76,9 +75,10 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
             entities: Entities::default(),
             tick: -1,
             visitor,
-            _p: PhantomData,
         })
     }
+
+    // ----
 
     fn run<F>(&mut self, mut handler: F) -> Result<()>
     where
@@ -136,7 +136,7 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
         self.run(|notnotself| {
             let cmd_header = notnotself.demo_file.read_cmd_header()?;
             if cmd_header.tick > target_tick {
-                notnotself.demo_file.backup(&cmd_header)?;
+                notnotself.demo_file.unread_cmd_header(&cmd_header)?;
                 return Ok(ControlFlow::Break(()));
             }
 
@@ -156,22 +156,20 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
                 // corrupted or something
                 let is_last_full_packet_close = target_tick_distance < FULL_PACKET_INTERVAL + 100;
                 if !is_last_full_packet_close {
-                    notnotself.demo_file.skip(&cmd_header)?;
+                    notnotself.demo_file.skip_cmd(&cmd_header)?;
                     return Ok(ControlFlow::Continue(()));
                 }
 
                 let is_full_packet = cmd_header.command == EDemoCommands::DemFullPacket;
                 if !is_full_packet {
-                    notnotself.demo_file.skip(&cmd_header)?;
+                    notnotself.demo_file.skip_cmd(&cmd_header)?;
                     return Ok(ControlFlow::Continue(()));
                 }
 
                 debug_assert!(is_full_packet);
                 did_reach_last_full_packet = true;
 
-                let data = notnotself
-                    .demo_file
-                    .read_cmd(&cmd_header, &mut notnotself.buf)?;
+                let data = notnotself.demo_file.read_cmd(&cmd_header)?;
                 notnotself.visitor.visit_cmd(&cmd_header, data)?;
 
                 let cmd = dota2_protos::CDemoFullPacket::decode(data)?;
@@ -190,7 +188,7 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
     // 2. DemSendTables (flattened serializers; never update)
     // 3. DemClassInfo (never update)
     fn handle_cmd(&mut self, cmd_header: CmdHeader) -> Result<()> {
-        let data = self.demo_file.read_cmd(&cmd_header, &mut self.buf)?;
+        let data = self.demo_file.read_cmd(&cmd_header)?;
         self.visitor.visit_cmd(&cmd_header, data)?;
 
         match cmd_header.command {
@@ -355,9 +353,9 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
         let entity_data = msg.entity_data.expect("entity data");
         let mut br = BitReader::new(&entity_data);
 
-        let mut entidx: i32 = -1;
+        let mut entity_index: i32 = -1;
         for _ in (0..msg.updated_entries.expect("updated entries")).rev() {
-            entidx += br.read_ubitvar()? as i32 + 1;
+            entity_index += br.read_ubitvar()? as i32 + 1;
 
             let update_flags = parse_delta_header(&mut br)?;
             let update_type = determine_update_type(update_flags);
@@ -365,7 +363,7 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
             match update_type {
                 UpdateType::EnterPVS => {
                     let entity = self.entities.handle_create(
-                        entidx,
+                        entity_index,
                         &mut br,
                         entity_classes,
                         instance_baseline,
@@ -376,13 +374,13 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
                 }
                 UpdateType::LeavePVS => {
                     if (update_flags & FHDR_DELETE) != 0 {
-                        let entity = self.entities.handle_delete(entidx);
+                        let entity = self.entities.handle_delete(entity_index);
                         self.visitor
                             .visit_entity(update_flags, update_type, &entity)?;
                     }
                 }
                 UpdateType::DeltaEnt => {
-                    let entity = self.entities.handle_update(entidx, &mut br)?;
+                    let entity = self.entities.handle_update(entity_index, &mut br)?;
                     self.visitor
                         .visit_entity(update_flags, update_type, entity)?;
                 }
@@ -415,5 +413,46 @@ impl<'p, R: Read + Seek, V: Visitor> Parser<'p, R, V> {
         }
 
         Ok(())
+    }
+
+    // ----
+
+    // NOTE: it wouldn't be very nice to expose DemoFile that is owned by Parser
+    // because it'll violate encapsulation; parser will lack control over the
+    // DemoFile's internal state which may lead to to unintended consequences.
+
+    #[inline]
+    pub fn demo_header(&self) -> &DemoHeader {
+        // SAFETY: it is safe to call unchecked method here becuase Self's
+        // constructor will return an error if demo header check (that is
+        // executed during the construction) fails.
+        unsafe { self.demo_file.demo_header_unchecked() }
+    }
+
+    #[inline]
+    pub fn file_info(&mut self) -> Result<&CDemoFileInfo> {
+        self.demo_file.file_info().map_err(Error::from)
+    }
+
+    #[inline]
+    pub fn ticks_per_second(&mut self) -> Result<f32> {
+        self.demo_file.ticks_per_second().map_err(Error::from)
+    }
+
+    #[inline]
+    pub fn ticks_per_frame(&mut self) -> Result<f32> {
+        self.demo_file.ticks_per_frame().map_err(Error::from)
+    }
+
+    #[inline]
+    pub fn total_ticks(&mut self) -> Result<i32> {
+        self.demo_file.total_ticks().map_err(Error::from)
+    }
+
+    // ----
+
+    #[inline]
+    pub fn tick(&self) -> i32 {
+        self.tick
     }
 }
