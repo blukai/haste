@@ -28,3 +28,25 @@ pub mod varint;
 // TODO: change type of buf from &[u8] to Bytes to maybe avoid some copying; see
 // https://github.com/tokio-rs/prost/issues/571. or maybe look into zerycopy
 // thingie https://github.com/google/zerocopy
+
+// TODO: compose performance comparisons (manta and clarity); use ticks per
+// second as metric (inspired by
+// https://github.com/markus-wa/demoinfocs-golang?tab=readme-ov-file#performance--benchmarks).
+
+// TODO: don't ignore length of vectors (dynamic length arrays) because they may
+// contain garbage; see
+// https://github.com/markus-wa/demoinfocs-golang/issues/450 for details.
+
+// TODO: generate list of entities (/flattened serializers) where it'll be
+// possible to get "the thing" by name hash and construct it.
+// probably use RecvTable and RecvProp "terms".
+// refs?
+// - https://developer.valvesoftware.com/wiki/Networking_Entities
+// - public/dt_recv.h
+// - engine/dt_recv_eng.h
+
+// TODO: abilities, items, heroes, modifiers, etc.. are represented as strings
+// in replays, for example "dota_npc_hero_zuus" (according to Ken); string
+// comparisons are expensive. valve mostly uses CUtlStringToken which computes a
+// hash and uses it for comparisons, it discards the string - this is nice. see
+// public/tier1/utlstringtoken.h

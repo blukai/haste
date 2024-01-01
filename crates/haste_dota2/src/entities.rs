@@ -75,8 +75,8 @@ pub fn determine_update_type(update_flags: usize) -> UpdateType {
 
 #[derive(Debug, Clone)]
 pub struct Entity {
-    pub flattened_serializer: Rc<FlattenedSerializer>,
     pub field_values: HashMap<u64, FieldValue, NoHashHasherBuilder<u64>>,
+    pub flattened_serializer: Rc<FlattenedSerializer>,
 }
 
 impl Entity {
@@ -165,16 +165,15 @@ impl Entities {
         let _unknown = br.read_uvarint32()?;
 
         let class_info = entity_classes.get_by_id(class_id).expect("class info");
-        let flattened_serializer = flattened_serializers
-            .get_by_serializer_name_hash(class_info.network_name_hash)
-            .expect("flattened serializer");
+        let flattened_serializer =
+            unsafe { flattened_serializers.by_name_hash_unckecked(class_info.network_name_hash) };
 
         let mut entity = Entity {
-            flattened_serializer: flattened_serializer.clone(),
             field_values: HashMap::with_capacity_and_hasher(
                 flattened_serializer.fields.len(),
                 NoHashHasherBuilder::default(),
             ),
+            flattened_serializer,
         };
 
         // TODO: maybe it would make sense to cache baseline reads?

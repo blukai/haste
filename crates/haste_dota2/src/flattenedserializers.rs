@@ -3,12 +3,12 @@ use crate::{
         self,
         prost::{self, Message},
     },
-    fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialType},
+    fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialDescriptor},
     fnv1a,
     nohash::NoHashHasherBuilder,
     varint,
 };
-use hashbrown::HashMap;
+use hashbrown::{hash_map::Values, HashMap};
 use std::rc::Rc;
 
 #[derive(thiserror::Error, Debug)]
@@ -141,7 +141,7 @@ impl FlattenedSerializerField {
     }
 
     #[inline(always)]
-    pub fn is_var_encoder_hash_eq(&self, var_encoder_hash: u64) -> bool {
+    pub fn var_encoder_hash_eq(&self, var_encoder_hash: u64) -> bool {
         self.var_encoder_hash
             .map(|veh| veh == var_encoder_hash)
             .unwrap_or(false)
@@ -154,10 +154,10 @@ impl FlattenedSerializerField {
 pub struct FlattenedSerializer {
     #[cfg(debug_assertions)]
     pub serializer_name: Box<str>,
+    pub serializer_name_hash: u64,
+
     pub serializer_version: Option<i32>,
     pub fields: Vec<Rc<FlattenedSerializerField>>,
-
-    pub serializer_name_hash: u64,
 }
 
 impl FlattenedSerializer {
@@ -179,9 +179,10 @@ impl FlattenedSerializer {
         Ok(Self {
             #[cfg(debug_assertions)]
             serializer_name,
+            serializer_name_hash,
+
             serializer_version: fs.serializer_version,
             fields: Vec::with_capacity(fs.fields_index.len()),
-            serializer_name_hash,
         })
     }
 
@@ -207,7 +208,7 @@ type FieldMap = HashMap<i32, Rc<FlattenedSerializerField>, NoHashHasherBuilder<i
 type SerializerMap = HashMap<u64, Rc<FlattenedSerializer>, NoHashHasherBuilder<u64>>;
 
 pub struct FlattenedSerializers {
-    serializers: SerializerMap,
+    serializer_map: SerializerMap,
 }
 
 impl FlattenedSerializers {
@@ -229,7 +230,7 @@ impl FlattenedSerializers {
 
         let mut fields: FieldMap =
             FieldMap::with_capacity_and_hasher(msg.fields.len(), NoHashHasherBuilder::default());
-        let mut serializers: SerializerMap = SerializerMap::with_capacity_and_hasher(
+        let mut serializer_map: SerializerMap = SerializerMap::with_capacity_and_hasher(
             msg.serializers.len(),
             NoHashHasherBuilder::default(),
         );
@@ -254,14 +255,14 @@ impl FlattenedSerializers {
                         field.field_serializer_name_hash.as_ref()
                     {
                         field.field_serializer =
-                            serializers.get(field_serializer_name_hash).cloned();
+                            serializer_map.get(field_serializer_name_hash).cloned();
                     }
 
                     field.metadata = get_field_metadata(&field)?;
                     // TODO: maybe extract arms into separate functions
                     match field.metadata.as_ref() {
-                        Some(field_metadata) => match field_metadata.special_type {
-                            Some(FieldSpecialType::Array { length }) => {
+                        Some(field_metadata) => match field_metadata.special_descriptor {
+                            Some(FieldSpecialDescriptor::Array { length }) => {
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
                                     fields: {
                                         let mut fields = Vec::with_capacity(length);
@@ -271,7 +272,7 @@ impl FlattenedSerializers {
                                     ..Default::default()
                                 }));
                             }
-                            Some(FieldSpecialType::VariableLengthArray) => {
+                            Some(FieldSpecialDescriptor::VariableLengthArray) => {
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
                                     fields: {
                                         const SIZE: usize = 256;
@@ -282,13 +283,13 @@ impl FlattenedSerializers {
                                     ..Default::default()
                                 }));
                             }
-                            Some(FieldSpecialType::VariableLengthSerializerArray {
+                            Some(FieldSpecialDescriptor::VariableLengthSerializerArray {
                                 element_serializer_name_hash,
                             }) => {
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
                                     fields: {
                                         let sub_field = FlattenedSerializerField {
-                                            field_serializer: serializers
+                                            field_serializer: serializer_map
                                                 .get(&element_serializer_name_hash)
                                                 .cloned(),
                                             ..Default::default()
@@ -323,20 +324,34 @@ impl FlattenedSerializers {
                 flattened_serializer.fields.push(field);
             }
 
-            serializers.insert(
+            serializer_map.insert(
                 flattened_serializer.serializer_name_hash,
                 Rc::new(flattened_serializer),
             );
         }
 
-        Ok(Self { serializers })
+        Ok(Self { serializer_map })
+    }
+
+    // TODO: think about exposing the whole serializer map
+
+    #[inline(always)]
+    pub fn by_name_hash(&self, serializer_name_hash: u64) -> Option<Rc<FlattenedSerializer>> {
+        self.serializer_map.get(&serializer_name_hash).cloned()
     }
 
     #[inline(always)]
-    pub fn get_by_serializer_name_hash(
+    pub unsafe fn by_name_hash_unckecked(
         &self,
         serializer_name_hash: u64,
-    ) -> Option<Rc<FlattenedSerializer>> {
-        self.serializers.get(&serializer_name_hash).cloned()
+    ) -> Rc<FlattenedSerializer> {
+        self.serializer_map
+            .get(&serializer_name_hash)
+            .cloned()
+            .unwrap_unchecked()
+    }
+
+    pub fn values(&self) -> Values<'_, u64, Rc<FlattenedSerializer>> {
+        self.serializer_map.values()
     }
 }

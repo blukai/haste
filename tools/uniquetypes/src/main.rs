@@ -27,7 +27,6 @@ fn main() -> Result<()> {
     let mut demo_file = DemoFile::from_reader(BufReader::new(buf_reader));
     let _demo_header = demo_file.read_demo_header()?;
 
-    let mut buf = vec![0u8; 2 * 1024 * 1024];
     loop {
         let cmd_header = demo_file.read_cmd_header()?;
         match cmd_header.command {

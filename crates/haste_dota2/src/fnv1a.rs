@@ -20,3 +20,6 @@ macro_rules! generate_hash_fn {
 
 generate_hash_fn!(u8, hash_u8);
 generate_hash_fn!(u32, hash_u32);
+
+// TODO: try fxhash / firefox hash; it seems to be faster then fnv, see
+// https://github.com/cbreeden/fxhash/tree/master?tab=readme-ov-file#benchmarks
