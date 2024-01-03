@@ -1,14 +1,16 @@
 use crate::{
-    dota2_protos::{
-        self,
-        prost::{self, Message},
-    },
     fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialDescriptor},
     fnv1a,
     nohash::NoHashHasherBuilder,
-    varint,
 };
 use hashbrown::{hash_map::Values, HashMap};
+use haste_common::varint;
+use haste_dota2_deflat::var_type::TypeDecl;
+use haste_dota2_protos::{
+    prost::{self, Message},
+    CDemoSendTables, CsvcMsgFlattenedSerializer, ProtoFlattenedSerializerFieldT,
+    ProtoFlattenedSerializerT,
+};
 use std::rc::Rc;
 
 #[derive(thiserror::Error, Debug)]
@@ -31,9 +33,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Clone, Default)]
 pub struct FlattenedSerializerField {
-    #[cfg(debug_assertions)]
-    pub var_type: Box<str>,
-    pub var_type_hash: u64,
+    pub type_decl: TypeDecl,
 
     #[cfg(debug_assertions)]
     pub var_name: Box<str>,
@@ -63,17 +63,14 @@ pub struct FlattenedSerializerField {
 }
 
 impl FlattenedSerializerField {
-    fn new(
-        msg: &dota2_protos::CsvcMsgFlattenedSerializer,
-        field: &dota2_protos::ProtoFlattenedSerializerFieldT,
-    ) -> Self {
+    fn new(msg: &CsvcMsgFlattenedSerializer, field: &ProtoFlattenedSerializerFieldT) -> Self {
         #[cfg(debug_assertions)]
         let resolve_sym = |v: i32| msg.symbols[v as usize].clone().into_boxed_str();
         #[cfg(not(debug_assertions))]
         let resolve_sym = |v: i32| msg.symbols[v as usize].as_str();
 
         let var_type = field.var_type_sym.map(resolve_sym).expect("var type");
-        let var_type_hash = fnv1a::hash_u8(var_type.as_bytes());
+        let type_decl = haste_dota2_deflat::var_type::parse(&var_type);
 
         let var_name = field.var_name_sym.map(resolve_sym).expect("var name");
         let var_name_hash = fnv1a::hash_u8(var_name.as_bytes());
@@ -89,9 +86,7 @@ impl FlattenedSerializerField {
             .map(|var_encoder| fnv1a::hash_u8(var_encoder.as_bytes()));
 
         Self {
-            #[cfg(debug_assertions)]
-            var_type,
-            var_type_hash,
+            type_decl,
 
             #[cfg(debug_assertions)]
             var_name,
@@ -122,8 +117,8 @@ impl FlattenedSerializerField {
             .as_ref()
             .unwrap_or_else(|| {
                 panic!(
-                    "expected field serializer to be present in field of type {}",
-                    self.var_type
+                    "expected field serializer to be present in field of type {:?}",
+                    self.type_decl
                 )
             })
             .get_child(index)
@@ -161,10 +156,7 @@ pub struct FlattenedSerializer {
 }
 
 impl FlattenedSerializer {
-    fn new(
-        msg: &dota2_protos::CsvcMsgFlattenedSerializer,
-        fs: &dota2_protos::ProtoFlattenedSerializerT,
-    ) -> Result<Self> {
+    fn new(msg: &CsvcMsgFlattenedSerializer, fs: &ProtoFlattenedSerializerT) -> Result<Self> {
         #[cfg(debug_assertions)]
         let resolve_sym = |v: i32| msg.symbols[v as usize].clone().into_boxed_str();
         #[cfg(not(debug_assertions))]
@@ -212,7 +204,7 @@ pub struct FlattenedSerializers {
 }
 
 impl FlattenedSerializers {
-    pub fn parse(cmd: dota2_protos::CDemoSendTables) -> Result<Self> {
+    pub fn parse(cmd: CDemoSendTables) -> Result<Self> {
         let msg = {
             // TODO: make prost work with ByteString and turn data into Bytes
             let mut data = &cmd.data.expect("send tables data")[..];
@@ -225,7 +217,7 @@ impl FlattenedSerializers {
             // -> createa a function that will be capable of reading varint from
             // &[u8] without multiple levels of indirection.
             let (_size, _count) = varint::read_uvarint32(&mut data)?;
-            dota2_protos::CsvcMsgFlattenedSerializer::decode(data)?
+            CsvcMsgFlattenedSerializer::decode(data)?
         };
 
         let mut fields: FieldMap =
@@ -258,7 +250,7 @@ impl FlattenedSerializers {
                             serializer_map.get(field_serializer_name_hash).cloned();
                     }
 
-                    field.metadata = get_field_metadata(&field)?;
+                    field.metadata = Some(get_field_metadata(&field)?);
                     // TODO: maybe extract arms into separate functions
                     match field.metadata.as_ref() {
                         Some(field_metadata) => match field_metadata.special_descriptor {
@@ -283,14 +275,15 @@ impl FlattenedSerializers {
                                     ..Default::default()
                                 }));
                             }
-                            Some(FieldSpecialDescriptor::VariableLengthSerializerArray {
-                                element_serializer_name_hash,
-                            }) => {
+                            Some(FieldSpecialDescriptor::VariableLengthSerializerArray) => {
                                 field.field_serializer = Some(Rc::new(FlattenedSerializer {
                                     fields: {
                                         let sub_field = FlattenedSerializerField {
-                                            field_serializer: serializer_map
-                                                .get(&element_serializer_name_hash)
+                                            field_serializer: field
+                                                .field_serializer_name_hash
+                                                .and_then(|field_serializer_name_hash| {
+                                                    serializer_map.get(&field_serializer_name_hash)
+                                                })
                                                 .cloned(),
                                             ..Default::default()
                                         };
@@ -306,12 +299,8 @@ impl FlattenedSerializers {
                             _ => {}
                         },
                         None => {
-                            #[cfg(debug_assertions)]
-                            let var_type = &field.var_type;
-                            #[cfg(not(debug_assertions))]
-                            let var_type = "[available in debug build]";
                             // TODO: don't panic?
-                            panic!("unhandled flattened serializer var type: {}", var_type,)
+                            panic!("unhandled flattened serializer: {:?}", &field.type_decl);
                         }
                     }
 

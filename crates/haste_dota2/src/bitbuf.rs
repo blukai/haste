@@ -1,4 +1,4 @@
-use crate::varint;
+use haste_common::varint;
 use std::intrinsics::unlikely;
 
 #[derive(thiserror::Error, Debug)]

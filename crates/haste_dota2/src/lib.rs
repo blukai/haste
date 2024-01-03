@@ -2,6 +2,7 @@
 #![feature(core_intrinsics)]
 
 // own crate re-exports
+pub use haste_dota2_deflat as dota2_deflat;
 pub use haste_dota2_protos as dota2_protos;
 
 // TODO: figure pub scopes for all the things
@@ -20,7 +21,6 @@ pub mod nohash;
 pub mod parser;
 pub mod quantizedfloat;
 pub mod stringtables;
-pub mod varint;
 
 // TOOD: more optimizations, specifically look into
 // https://agourlay.github.io/rust-performance-retrospective-part2/
@@ -50,3 +50,6 @@ pub mod varint;
 // comparisons are expensive. valve mostly uses CUtlStringToken which computes a
 // hash and uses it for comparisons, it discards the string - this is nice. see
 // public/tier1/utlstringtoken.h
+
+// TODO: move bitbuf and fnv1a and nohash (or maybe get rid of self-made nohash
+// thing and install a crate)

@@ -24,7 +24,7 @@ fn main() -> Result<()> {
     let file = File::open(filepath.unwrap())?;
     let buf_reader = BufReader::new(file);
 
-    let mut demo_file = DemoFile::from_reader(BufReader::new(buf_reader));
+    let mut demo_file = DemoFile::from_reader(buf_reader);
     let _demo_header = demo_file.read_demo_header()?;
 
     loop {

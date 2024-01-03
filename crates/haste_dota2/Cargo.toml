@@ -4,10 +4,12 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-# TODO: move to onlyerror (to achieve faster comp times)
+haste_common = { path = "../haste_common" }
+haste_dota2_deflat = { path = "../haste_dota2_deflat" }
+haste_dota2_protos = { path = "../haste_dota2_protos" }
+# TODO: maybe switch to onlyerror (to achieve faster comp times)
 thiserror = "1.0"
 snap = "1.1"
 # NOTE: hashbrown::HashMap is noticeably faster then std::collections::hashMap
 hashbrown = { version = "0.14", features = ["ahash", "inline-more", "nightly"] }
 dyn-clone = "1.0"
-haste_dota2_protos = { path = "../haste_dota2_protos" }
