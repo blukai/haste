@@ -5,7 +5,7 @@ use crate::{
     entityclasses::EntityClasses,
     flattenedserializers::FlattenedSerializers,
     instancebaseline::{InstanceBaseline, INSTANCE_BASELINE_TABLE_NAME},
-    stringtables::StringTables,
+    stringtables::StringTableContainer,
 };
 use haste_dota2_protos::{
     self, prost::Message, CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoPacket,
@@ -67,9 +67,12 @@ pub enum ControlFlow {
 pub struct Parser<R: Read + Seek, V: Visitor> {
     demo_file: DemoFile<R>,
     buf: Vec<u8>,
-    string_tables: StringTables,
+    string_tables: StringTableContainer,
     instance_baseline: InstanceBaseline,
     flattened_serializers: Option<FlattenedSerializers>,
+    // TODO: maybe expose (via "getter") entity classes (string tables and
+    // flattened serializers are exposed, what is the use-case for exposing
+    // entity classes though?)
     entity_classes: Option<EntityClasses>,
     entities: Entities,
     tick: i32,
@@ -84,7 +87,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         Ok(Self {
             demo_file,
             buf: vec![0; DEMO_BUFFER_SIZE],
-            string_tables: StringTables::default(),
+            string_tables: StringTableContainer::default(),
             instance_baseline: InstanceBaseline::default(),
             flattened_serializers: None,
             entity_classes: None,
@@ -311,7 +314,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         };
         string_table.parse_update(&mut BitReader::new(string_data), msg.num_entries())?;
 
-        if string_table.name.as_ref().eq(INSTANCE_BASELINE_TABLE_NAME) {
+        if string_table.name().eq(INSTANCE_BASELINE_TABLE_NAME) {
             if let Some(entity_classes) = self.entity_classes.as_ref() {
                 self.instance_baseline
                     .update(string_table, entity_classes.classes)?;
@@ -332,7 +335,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             msg.num_changed_entries(),
         )?;
 
-        if string_table.name.as_ref().eq(INSTANCE_BASELINE_TABLE_NAME) {
+        if string_table.name().eq(INSTANCE_BASELINE_TABLE_NAME) {
             if let Some(entity_classes) = self.entity_classes.as_ref() {
                 self.instance_baseline
                     .update(string_table, entity_classes.classes)?;
@@ -459,5 +462,19 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     #[inline]
     pub fn tick(&self) -> i32 {
         self.tick
+    }
+
+    #[inline]
+    pub fn string_tables(&self) -> Option<&StringTableContainer> {
+        if self.string_tables.is_empty() {
+            None
+        } else {
+            Some(&self.string_tables)
+        }
+    }
+
+    #[inline]
+    pub fn flattened_serializers(&self) -> Option<&FlattenedSerializers> {
+        self.flattened_serializers.as_ref()
     }
 }

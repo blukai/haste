@@ -22,7 +22,7 @@ impl InstanceBaseline {
             self.data.resize(classes, None);
         }
 
-        for (_entity_index, item) in string_table.items.iter() {
+        for (_entity_index, item) in string_table.items() {
             let string = item
                 .string
                 .as_ref()
@@ -40,12 +40,14 @@ impl InstanceBaseline {
         Ok(())
     }
 
+    #[inline]
     pub fn get_data(&self, class_id: i32) -> Option<&Vec<u8>> {
         unsafe { self.data.get_unchecked(class_id as usize) }.as_ref()
     }
 
     // clear clears underlying storage, but this has no effect on the allocated
     // capacity.
+    #[inline]
     pub fn clear(&mut self) {
         self.data.clear();
     }

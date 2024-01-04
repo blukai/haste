@@ -39,9 +39,10 @@ struct StringHistoryEntry {
 }
 
 impl StringHistoryEntry {
+    #[inline]
     unsafe fn new_uninit() -> Self {
         Self {
-            // NOTE: the thick is not use this correctly xd
+            // NOTE: the trick is to use this correctly xd
             #[allow(invalid_value)]
             string: MaybeUninit::uninit().assume_init(),
         }
@@ -59,13 +60,14 @@ pub struct StringTableItem {
 
 #[derive(Debug)]
 pub struct StringTable {
-    pub name: Box<str>,
+    name: Box<str>,
     user_data_fixed_size: bool,
     user_data_size: i32,
     user_data_size_bits: i32,
     flags: i32,
     using_varint_bitcounts: bool,
-    pub(crate) items: HashMap<i32, StringTableItem, NoHashHasherBuilder<i32>>,
+
+    items: HashMap<i32, StringTableItem, NoHashHasherBuilder<i32>>,
 
     history: Vec<StringHistoryEntry>,
     string_buf: Vec<u8>,
@@ -284,15 +286,25 @@ impl StringTable {
     // // HLTV change history & rollback
     // void EnableRollback();
     // void RestoreTick(int tick);
+
+    #[inline]
+    pub fn name(&self) -> &str {
+        self.name.as_ref()
+    }
+
+    #[inline]
+    pub fn items(&self) -> impl Iterator<Item = (&i32, &StringTableItem)> {
+        self.items.iter()
+    }
 }
 
 // NOTE: this is modelled after CNetworkStringTableContainer
 #[derive(Default)]
-pub struct StringTables {
+pub struct StringTableContainer {
     tables: Vec<StringTable>,
 }
 
-impl StringTables {
+impl StringTableContainer {
     // INetworkStringTable *CreateStringTable( const char *tableName, int maxentries, int userdatafixedsize = 0, int userdatanetworkbits = 0, int flags = NSF_NONE );
     pub fn create_string_table_mut(
         &mut self,
@@ -347,10 +359,12 @@ impl StringTables {
     }
 
     // INetworkStringTable	*GetTable( TABLEID stringTable ) const;
+    #[inline]
     pub fn get_table(&self, id: usize) -> Option<&StringTable> {
         self.tables.get(id)
     }
 
+    #[inline]
     pub fn get_table_mut(&mut self, id: usize) -> Option<&mut StringTable> {
         self.tables.get_mut(id)
     }
@@ -363,6 +377,7 @@ impl StringTables {
     // memory; - rust's variant would be `clear`.
     //
     // void             RemoveAllTables( void );
+    #[inline]
     pub fn clear(&mut self) {
         self.tables.clear();
     }
@@ -373,6 +388,7 @@ impl StringTables {
     // idiomatic xd - `is_empty` is.
     //
     // int                  GetNumTables( void ) const;
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.tables.is_empty()
     }
@@ -381,4 +397,9 @@ impl StringTables {
     // NOTE: might need those for fast seeks
     // void EnableRollback( bool bState );
     // void RestoreTick( int tick );
+
+    #[inline]
+    pub fn tables(&self) -> impl Iterator<Item = &StringTable> {
+        self.tables.iter()
+    }
 }
