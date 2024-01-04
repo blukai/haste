@@ -1,8 +1,5 @@
-use haste_dota2::parser::{Parser, Visitor};
+use haste_dota2::parser::Parser;
 use std::{fs::File, io::BufReader};
-
-struct MyVisitor;
-impl Visitor for MyVisitor {}
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -16,6 +13,6 @@ fn main() -> Result<()> {
 
     let file = File::open(filepath.unwrap())?;
     let buf_reader = BufReader::new(file);
-    let mut parser = Parser::from_reader(buf_reader, MyVisitor)?;
+    let mut parser = Parser::from_reader(buf_reader)?;
     parser.parse_to_end()
 }

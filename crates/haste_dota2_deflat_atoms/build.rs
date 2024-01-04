@@ -39,7 +39,7 @@ mod var_type {
     // that demo recording has started - all the content that we need here will
     // be written immediately, so it is safe to leave the game pretty much
     // immediately.
-    const DEMO_FILE_PATH: &str = "./auto-20240102-2233-start-____.dem";
+    const DEMO_FILE_PATH: &str = "../../fixtures/auto-20240102-2233-start-____.dem";
 
     fn get_flattened_serializer() -> super::Result<CsvcMsgFlattenedSerializer> {
         let file = File::open(DEMO_FILE_PATH)?;

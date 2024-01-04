@@ -20,7 +20,6 @@ use std::io::{Read, Seek, SeekFrom};
 const FULL_PACKET_INTERVAL: i32 = 1800;
 
 pub type Error = Box<dyn std::error::Error>;
-
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub trait Visitor {
@@ -80,7 +79,7 @@ pub struct Parser<R: Read + Seek, V: Visitor> {
 }
 
 impl<R: Read + Seek, V: Visitor> Parser<R, V> {
-    pub fn from_reader(rdr: R, visitor: V) -> Result<Self> {
+    pub fn from_reader_with_visitor(rdr: R, visitor: V) -> Result<Self> {
         let mut demo_file = DemoFile::from_reader(rdr);
         let _demo_header = demo_file.read_demo_header()?;
 
@@ -476,5 +475,14 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     #[inline]
     pub fn flattened_serializers(&self) -> Option<&FlattenedSerializers> {
         self.flattened_serializers.as_ref()
+    }
+}
+
+pub struct NopVisitor;
+impl Visitor for NopVisitor {}
+
+impl<R: Read + Seek> Parser<R, NopVisitor> {
+    pub fn from_reader(rdr: R) -> Result<Self> {
+        Self::from_reader_with_visitor(rdr, NopVisitor)
     }
 }

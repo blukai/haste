@@ -26,7 +26,7 @@ fn main() -> Result<()> {
 
     let file = File::open(filepath.unwrap())?;
     let buf_reader = BufReader::new(file);
-    let mut parser = Parser::from_reader(buf_reader, MyVisitor)?;
+    let mut parser = Parser::from_reader_with_visitor(buf_reader, MyVisitor)?;
 
     parser.parse_to_tick(80085)?;
     parser.parse_to_tick(42)?;
