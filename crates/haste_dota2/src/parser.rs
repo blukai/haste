@@ -1,6 +1,6 @@
 use crate::{
     bitbuf::BitReader,
-    demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_BUFFER_SIZE},
+    demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_BUFFER_SIZE, DEMO_HEADER_SIZE},
     entities::{self, Entities},
     entityclasses::EntityClasses,
     flattenedserializers::FlattenedSerializers,
@@ -51,7 +51,6 @@ pub trait Visitor {
 
 // TODO: maybe rename to DemoPlayer (or DemoRunner?)
 pub struct Parser<R: Read + Seek, V: Visitor> {
-    starting_position: u64,
     demo_file: DemoFile<R>,
     buf: Vec<u8>,
     string_tables: StringTables,
@@ -69,7 +68,6 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         let _demo_header = demo_file.read_demo_header()?;
 
         Ok(Self {
-            starting_position: demo_file.stream_position()?,
             demo_file,
             buf: vec![0; DEMO_BUFFER_SIZE],
             string_tables: StringTables::default(),
@@ -125,7 +123,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         // packet interval
 
         self.demo_file
-            .seek(SeekFrom::Start(self.starting_position))?;
+            .seek(SeekFrom::Start(DEMO_HEADER_SIZE as u64))?;
         self.string_tables.clear();
         self.instance_baseline.clear();
         self.entities.clear();

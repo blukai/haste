@@ -1,4 +1,5 @@
 mod tokenizer;
+pub use tokenizer::{Token, Tokenizer};
 
 mod parser;
 pub use parser::{ident_atom, parse, ArrayLength, IdentAtom, TypeDecl};

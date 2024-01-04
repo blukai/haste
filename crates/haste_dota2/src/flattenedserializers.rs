@@ -33,6 +33,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Clone, Default)]
 pub struct FlattenedSerializerField {
+    #[cfg(debug_assertions)]
+    pub var_type: Box<str>,
     pub type_decl: TypeDecl,
 
     #[cfg(debug_assertions)]
@@ -86,6 +88,8 @@ impl FlattenedSerializerField {
             .map(|var_encoder| fnv1a::hash_u8(var_encoder.as_bytes()));
 
         Self {
+            #[cfg(debug_assertions)]
+            var_type,
             type_decl,
 
             #[cfg(debug_assertions)]

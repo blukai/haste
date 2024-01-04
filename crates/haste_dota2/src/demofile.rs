@@ -36,15 +36,22 @@ pub type Result<T> = std::result::Result<T, Error>;
 // large enough to fit compressed and uncompressed data simultaneously.
 pub const DEMO_BUFFER_SIZE: usize = 2 * 1024 * 1024;
 
+// NOTE: DEMO_HEADER_SIZE can be used as a starting position for DemoFile. there
+// might be situations when it is necessary to find something specific and then
+// go back to the very beginning /
+// demo_file.seek(SeekFrom::Start(DEMO_HEADER_SIZE))
+pub const DEMO_HEADER_SIZE: usize = std::mem::size_of::<DemoHeader>();
+
 // #define DEMO_HEADER_ID "HL2DEMO"
 //
 // NOTE: strings in c/cpp are null terminated.
-const DEMO_HEADER_ID: [u8; 8] = *b"PBDEMS2\0";
+const DEMO_HEADER_ID_SIZE: usize = 8;
+const DEMO_HEADER_ID: [u8; DEMO_HEADER_ID_SIZE] = *b"PBDEMS2\0";
 
 // NOTE: naming is based on stuff from demofile.h of valve's demoinfo2 thing.
 #[derive(Debug, Default)]
 pub struct DemoHeader {
-    pub demofilestamp: [u8; 8],
+    pub demofilestamp: [u8; DEMO_HEADER_ID_SIZE],
     pub fileinfo_offset: i32,
     pub spawngroups_offset: i32,
 }
@@ -94,25 +101,29 @@ impl<R: Read + Seek> DemoFile<R> {
             "expected demo header not to have been read"
         );
 
-        let mut demo_header = DemoHeader::default();
-
-        self.rdr.read_exact(&mut demo_header.demofilestamp)?;
-        if demo_header.demofilestamp != DEMO_HEADER_ID {
+        let mut demofilestamp = [0u8; DEMO_HEADER_ID_SIZE];
+        self.rdr.read_exact(&mut demofilestamp)?;
+        if demofilestamp != DEMO_HEADER_ID {
             return Err(Error::UnexpectedHeaderId {
                 want: DEMO_HEADER_ID,
-                got: demo_header.demofilestamp,
+                got: demofilestamp,
             });
         }
 
         let mut buf = [0u8; 4];
 
         self.rdr.read_exact(&mut buf)?;
-        demo_header.fileinfo_offset = i32::from_le_bytes(buf);
+        let fileinfo_offset = i32::from_le_bytes(buf);
 
         self.rdr.read_exact(&mut buf)?;
-        demo_header.spawngroups_offset = i32::from_le_bytes(buf);
+        let spawngroups_offset = i32::from_le_bytes(buf);
 
-        self.demo_header = Some(demo_header);
+        self.demo_header = Some(DemoHeader {
+            demofilestamp,
+            fileinfo_offset,
+            spawngroups_offset,
+        });
+
         Ok(unsafe { self.demo_header_unchecked() })
     }
 

@@ -1,5 +1,4 @@
 [package]
-# TODO: rename to deflat, because we're not flattening stuff, but deflattening
 name = "haste_dota2_deflat_atoms"
 version = "0.0.0"
 edition = "2021"
