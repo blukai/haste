@@ -29,5 +29,5 @@ fn main() -> Result<()> {
     let file = File::open(filepath.unwrap())?;
     let buf_reader = BufReader::new(file);
     let mut parser = Parser::from_reader(buf_reader, MyVisitor)?;
-    parser.parse_all()
+    parser.parse_to_end()
 }

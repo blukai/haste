@@ -12,10 +12,7 @@ use haste_dota2_protos::{
     CDemoSendTables, CDemoStringTables, CsvcMsgCreateStringTable, CsvcMsgPacketEntities,
     CsvcMsgUpdateStringTable, EDemoCommands, SvcMessages,
 };
-use std::{
-    io::{Read, Seek, SeekFrom},
-    ops::ControlFlow,
-};
+use std::io::{Read, Seek, SeekFrom};
 
 // as can be observed when dumping commands. also as specified in clarity
 // (src/main/java/skadistats/clarity/model/engine/AbstractDotaEngineType.java)
@@ -47,6 +44,23 @@ pub trait Visitor {
     fn visit_packet(&self, packet_type: u32, data: &[u8]) -> Result<()> {
         Ok(())
     }
+}
+
+// ControlFLow indicates the desired behavior of the run loop.
+pub enum ControlFlow {
+    // HandleCmd indicates that the command should be handled by the parser
+    HandleCmd,
+    // SkipCmd indicates that the command should be skipped; the stream position
+    // will be advanced by the size of the command using
+    // `SeekFrom::Current(cmd_header.size)`.
+    SkipCmd,
+    // IgnoreCmd indicates that the command should not be handled nor skipped,
+    // suggesting that it has been handled in a different manner outside the
+    // regular flow.
+    IgnoreCmd,
+    // Break stops further processing and indicates that any work performed
+    // during the current cycle must be undone.
+    Break,
 }
 
 // TODO: maybe rename to DemoPlayer (or DemoRunner?)
@@ -82,16 +96,29 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
 
     // ----
 
-    fn run<F>(&mut self, mut handler: F) -> Result<()>
+    pub fn run<F>(&mut self, mut handler: F) -> Result<()>
     where
-        F: FnMut(&mut Self) -> Result<ControlFlow<()>>,
+        F: FnMut(&mut Self, &CmdHeader) -> Result<ControlFlow>,
     {
         loop {
-            match handler(self) {
-                Ok(cf) => match cf {
-                    ControlFlow::Break(_) => return Ok(()),
-                    ControlFlow::Continue(_) => {}
-                },
+            match self.demo_file.read_cmd_header() {
+                Ok(cmd_header) => {
+                    let prev_tick = self.tick;
+                    self.tick = cmd_header.tick;
+                    match handler(self, &cmd_header) {
+                        Ok(cf) => match cf {
+                            ControlFlow::HandleCmd => self.handle_cmd(&cmd_header)?,
+                            ControlFlow::SkipCmd => self.demo_file.skip_cmd(&cmd_header)?,
+                            ControlFlow::IgnoreCmd => {}
+                            ControlFlow::Break => {
+                                self.demo_file.unread_cmd_header(&cmd_header)?;
+                                self.tick = prev_tick;
+                                return Ok(());
+                            }
+                        },
+                        Err(err) => return Err(Error::from(err)),
+                    }
+                }
                 Err(err) => {
                     if self.demo_file.is_eof().unwrap_or_default() {
                         return Ok(());
@@ -102,14 +129,8 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         }
     }
 
-    // TODO: rename parse_all to run_to_end
-    pub fn parse_all(&mut self) -> Result<()> {
-        self.run(|notnotself| {
-            let cmd_header = notnotself.demo_file.read_cmd_header()?;
-            notnotself.tick = cmd_header.tick;
-            notnotself.handle_cmd(cmd_header)?;
-            Ok(ControlFlow::Continue(()))
-        })
+    pub fn parse_to_end(&mut self) -> Result<()> {
+        self.run(|_notnotself, _cmd_header| Ok(ControlFlow::HandleCmd))
     }
 
     // TODO: rename parse_to_tick to run_to_tick
@@ -135,20 +156,15 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         // NOTE: EDemoCommands::DemFullPacket contains snapshot of everything
         let mut did_reach_last_full_packet = false;
 
-        self.run(|notnotself| {
-            let cmd_header = notnotself.demo_file.read_cmd_header()?;
+        self.run(|notnotself, cmd_header| {
             if cmd_header.tick > target_tick {
-                notnotself.demo_file.unread_cmd_header(&cmd_header)?;
-                return Ok(ControlFlow::Break(()));
+                return Ok(ControlFlow::Break);
             }
-
-            notnotself.tick = cmd_header.tick;
 
             // init string tables, flattened serializers and entity classes
             if !did_reach_first_sync_tick {
                 did_reach_first_sync_tick = cmd_header.command == EDemoCommands::DemSyncTick;
-                notnotself.handle_cmd(cmd_header)?;
-                return Ok(ControlFlow::Continue(()));
+                return Ok(ControlFlow::HandleCmd);
             }
 
             // skip uptil full packet
@@ -158,30 +174,27 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 // corrupted or something
                 let is_last_full_packet_close = target_tick_distance < FULL_PACKET_INTERVAL + 100;
                 if !is_last_full_packet_close {
-                    notnotself.demo_file.skip_cmd(&cmd_header)?;
-                    return Ok(ControlFlow::Continue(()));
+                    return Ok(ControlFlow::SkipCmd);
                 }
 
                 let is_full_packet = cmd_header.command == EDemoCommands::DemFullPacket;
                 if !is_full_packet {
-                    notnotself.demo_file.skip_cmd(&cmd_header)?;
-                    return Ok(ControlFlow::Continue(()));
+                    return Ok(ControlFlow::SkipCmd);
                 }
 
                 debug_assert!(is_full_packet);
                 did_reach_last_full_packet = true;
 
-                let data = notnotself.demo_file.read_cmd(&cmd_header)?;
-                notnotself.visitor.visit_cmd(&cmd_header, data)?;
+                let data = notnotself.demo_file.read_cmd(cmd_header)?;
+                notnotself.visitor.visit_cmd(cmd_header, data)?;
 
                 let cmd = CDemoFullPacket::decode(data)?;
                 notnotself.handle_cmd_full_packet(cmd)?;
 
-                return Ok(ControlFlow::Continue(()));
+                return Ok(ControlFlow::IgnoreCmd);
             }
 
-            notnotself.handle_cmd(cmd_header)?;
-            Ok(ControlFlow::Continue(()))
+            Ok(ControlFlow::HandleCmd)
         })
     }
 
@@ -189,9 +202,9 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     // 1. DemSignonPacket (SvcCreateStringTable)
     // 2. DemSendTables (flattened serializers; never update)
     // 3. DemClassInfo (never update)
-    fn handle_cmd(&mut self, cmd_header: CmdHeader) -> Result<()> {
-        let data = self.demo_file.read_cmd(&cmd_header)?;
-        self.visitor.visit_cmd(&cmd_header, data)?;
+    fn handle_cmd(&mut self, cmd_header: &CmdHeader) -> Result<()> {
+        let data = self.demo_file.read_cmd(cmd_header)?;
+        self.visitor.visit_cmd(cmd_header, data)?;
 
         match cmd_header.command {
             EDemoCommands::DemPacket | EDemoCommands::DemSignonPacket => {
