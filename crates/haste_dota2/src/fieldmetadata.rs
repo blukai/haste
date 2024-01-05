@@ -1,8 +1,8 @@
 use crate::{
     fielddecoder::{
-        self, BoolDecoder, F32Decoder, FieldDecode, I32Decoder, I64Decoder, QAngleDecoder,
-        QuantizedFloatDecoder, StringDecoder, U32Decoder, U64Decoder, Vec2Decoder, Vec3Decoder,
-        Vec4Decoder,
+        self, BoolDecoder, F32Decoder, FieldDecode, I32Decoder, I64Decoder, NopDecoder,
+        QAngleDecoder, QuantizedFloatDecoder, StringDecoder, U32Decoder, U64Decoder, Vec2Decoder,
+        Vec3Decoder, Vec4Decoder,
     },
     flattenedserializers::FlattenedSerializerField,
 };
@@ -43,8 +43,18 @@ pub struct FieldMetadata {
     pub decoder: Box<dyn FieldDecode>,
 }
 
+impl Default for FieldMetadata {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            special_descriptor: None,
+            decoder: Box::new(NopDecoder::default()),
+        }
+    }
+}
+
 #[inline]
-fn handle_ident(ident: &IdentAtom, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
+fn handle_ident(ident: IdentAtom, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
     macro_rules! unspecial {
         ($decoder:expr) => {
             Ok(FieldMetadata {
@@ -54,7 +64,7 @@ fn handle_ident(ident: &IdentAtom, field: &FlattenedSerializerField) -> Result<F
         };
     }
 
-    match *ident {
+    match ident {
         // TODO: smaller decoders (8 and 16 bit)
         // ints
         ident_atom!("int8") => unspecial!(I32Decoder::default()),
@@ -124,11 +134,11 @@ fn handle_ident(ident: &IdentAtom, field: &FlattenedSerializerField) -> Result<F
 
 #[inline]
 fn handle_template(
-    ident: &IdentAtom,
-    argument: &Decl,
+    ident: IdentAtom,
+    argument: Decl,
     field: &FlattenedSerializerField,
 ) -> Result<FieldMetadata> {
-    match *ident {
+    match ident {
         ident_atom!("CNetworkUtlVectorBase") => match field.field_serializer_name_hash {
             Some(_) => Ok(FieldMetadata {
                 special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
@@ -153,16 +163,16 @@ fn handle_template(
 
 #[inline]
 fn handle_array(
-    decl: &Decl,
-    length: &ArrayLength,
+    decl: Decl,
+    length: ArrayLength,
     field: &FlattenedSerializerField,
 ) -> Result<FieldMetadata> {
     let length = match length {
-        ArrayLength::Ident(ident) => match *ident {
+        ArrayLength::Ident(ident) => match ident {
             ident_atom!("MAX_ABILITY_DRAFT_ABILITIES") => Ok(48),
             _ => Err(Error::UnknownArrayLengthIdent(ident.clone())),
         },
-        ArrayLength::Number(length) => Ok(*length),
+        ArrayLength::Number(length) => Ok(length),
     }?;
 
     handle_any(decl, field).map(|field_metadata| FieldMetadata {
@@ -180,17 +190,20 @@ fn handle_pointer() -> FieldMetadata {
 }
 
 #[inline]
-fn handle_any(decl: &Decl, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
+fn handle_any(decl: Decl, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
     match decl {
         Decl::Ident(ident) => handle_ident(ident, field),
-        Decl::Template { ident, argument } => handle_template(ident, argument, field),
-        Decl::Array { decl, length } => handle_array(decl, length, field),
+        Decl::Template { ident, argument } => handle_template(ident, *argument, field),
+        Decl::Array { decl, length } => handle_array(*decl, length, field),
         Decl::Pointer(_) => Ok(handle_pointer()),
     }
 }
 
-pub fn get_field_metadata(field: &FlattenedSerializerField) -> Result<FieldMetadata> {
-    handle_any(&field.var_type_decl, field)
+pub fn get_field_metadata(
+    var_type_decl: Decl,
+    field: &FlattenedSerializerField,
+) -> Result<FieldMetadata> {
+    handle_any(var_type_decl, field)
 }
 
 // NOTE: a lot of values are enums, some were discovered in ocratine thing,

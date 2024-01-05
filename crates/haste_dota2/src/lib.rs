@@ -1,4 +1,3 @@
-#![feature(const_for)]
 #![feature(core_intrinsics)]
 
 // own crate re-exports

@@ -99,12 +99,6 @@ impl Entity {
 
                 // eprint!("{} {} ", field.var_name, field.var_type);
 
-                // SAFETY: metadata for the field is generated in
-                // flattenedserializers.rs; if metadata cannot be generated -
-                // FlattenedSerializers::parse will fail thus we'll never get
-                // here. it is safe to assume that field metadata cannot be
-                // None.
-                let field_metadata = unsafe { field.metadata.as_ref().unwrap_unchecked() };
                 // NOTE: a shit ton of time was being spent here in a Try trait.
                 // apparently Result is quite expensive xd. here's an artice
                 // that i managed to find that talks more about the Try trait -
@@ -118,7 +112,7 @@ impl Entity {
                 //   have no idea why, but this is quite impressive at this
                 //   point.
                 let field_key = unsafe { fp.hash_unchecked() };
-                field_metadata.decoder.decode(br).map(|field_value| {
+                field.metadata.decoder.decode(br).map(|field_value| {
                     // eprintln!(" -> {:?}", &field_value);
                     self.field_values.insert(field_key, field_value);
                 })?;

@@ -30,6 +30,18 @@ dyn_clone::clone_trait_object!(FieldDecode);
 // ----
 
 #[derive(Debug, Clone, Default)]
+pub struct NopDecoder {}
+
+impl FieldDecode for NopDecoder {
+    #[cold]
+    fn decode(&self, _br: &mut BitReader) -> Result<FieldValue> {
+        unreachable!()
+    }
+}
+
+// ----
+
+#[derive(Debug, Clone, Default)]
 pub struct U32Decoder {}
 
 impl FieldDecode for U32Decoder {
@@ -275,6 +287,7 @@ pub struct QuantizedFloatDecoder {
 }
 
 impl QuantizedFloatDecoder {
+    #[inline]
     pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
             decoder: Box::new(InternalQuantizedFloatDecoder::new(field)?),
@@ -372,6 +385,7 @@ pub struct F32Decoder {
 }
 
 impl F32Decoder {
+    #[inline]
     pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
             decoder: Box::new(InternalF32Decoder::new(field)?),
@@ -394,6 +408,7 @@ pub struct Vec2Decoder {
 }
 
 impl Vec2Decoder {
+    #[inline]
     pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
             decoder: Box::new(InternalF32Decoder::new(field)?),

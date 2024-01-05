@@ -42,7 +42,7 @@ fn read_uvarint<const MAX_VARINT_BYTES: usize, R: Read>(rdr: &mut R) -> Result<(
     let mut buf = [0u8; 1];
     for count in 0..=MAX_VARINT_BYTES {
         rdr.read_exact(&mut buf)?;
-        let byte = buf[0];
+        let byte = unsafe { *buf.get_unchecked(0) };
         result |= ((byte & PAYLOAD_BITS) as u64) << (count * 7);
         if (byte & CONTINUE_BIT) == 0 {
             return Ok((result, count));

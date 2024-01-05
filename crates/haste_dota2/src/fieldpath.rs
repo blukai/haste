@@ -182,7 +182,7 @@ fn push_two_left_delta_zero(fp: &mut FieldPath, br: &mut BitReader) -> Result<()
 }
 
 // PushTwoLeftDeltaOne
-#[inline(always)]
+#[cold]
 fn push_two_left_delta_one(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
     fp.data[fp.position] += 1;
     fp.push_back(br.read_ubitvarfp()? as i32);
@@ -191,7 +191,7 @@ fn push_two_left_delta_one(fp: &mut FieldPath, br: &mut BitReader) -> Result<()>
 }
 
 // PushTwoLeftDeltaN
-#[inline(always)]
+#[cold]
 fn push_two_left_delta_n(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
     fp.data[fp.position] += br.read_ubitvar()? as i32 + 2;
     fp.push_back(br.read_ubitvarfp()? as i32);
@@ -200,7 +200,7 @@ fn push_two_left_delta_n(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
 }
 
 // PushTwoPack5LeftDeltaZero
-#[inline(always)]
+#[cold]
 fn push_two_pack5_left_delta_zero(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
     fp.push_back(br.read_ubitlong(5)? as i32);
     fp.push_back(br.read_ubitlong(5)? as i32);
@@ -208,7 +208,7 @@ fn push_two_pack5_left_delta_zero(fp: &mut FieldPath, br: &mut BitReader) -> Res
 }
 
 // PushTwoPack5LeftDeltaOne
-#[inline(always)]
+#[cold]
 fn push_two_pack5_left_delta_one(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
     fp.data[fp.position] += 1;
     fp.push_back(br.read_ubitlong(5)? as i32);
@@ -217,7 +217,7 @@ fn push_two_pack5_left_delta_one(fp: &mut FieldPath, br: &mut BitReader) -> Resu
 }
 
 // PushTwoPack5LeftDeltaN
-#[inline(always)]
+#[cold]
 fn push_two_pack5_left_delta_n(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
     fp.data[fp.position] += br.read_ubitvar()? as i32 + 2;
     fp.push_back(br.read_ubitlong(5)? as i32);
@@ -226,7 +226,7 @@ fn push_two_pack5_left_delta_n(fp: &mut FieldPath, br: &mut BitReader) -> Result
 }
 
 // PushThreeLeftDeltaZero
-#[inline(always)]
+#[cold]
 fn push_three_left_delta_zero(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
     fp.push_back(br.read_ubitvarfp()? as i32);
     fp.push_back(br.read_ubitvarfp()? as i32);
@@ -235,7 +235,7 @@ fn push_three_left_delta_zero(fp: &mut FieldPath, br: &mut BitReader) -> Result<
 }
 
 // PushThreeLeftDeltaOne
-#[inline(always)]
+#[cold]
 fn push_three_left_delta_one(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
     fp.data[fp.position] += 1;
     fp.push_back(br.read_ubitvarfp()? as i32);
@@ -245,7 +245,7 @@ fn push_three_left_delta_one(fp: &mut FieldPath, br: &mut BitReader) -> Result<(
 }
 
 // PushThreeLeftDeltaN
-#[inline(always)]
+#[cold]
 fn push_three_left_delta_n(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
     fp.data[fp.position] += br.read_ubitvar()? as i32 + 2;
     fp.push_back(br.read_ubitvarfp()? as i32);
@@ -255,7 +255,7 @@ fn push_three_left_delta_n(fp: &mut FieldPath, br: &mut BitReader) -> Result<()>
 }
 
 // PushThreePack5LeftDeltaZero
-#[inline(always)]
+#[cold]
 fn push_three_pack5_left_delta_zero(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
     fp.push_back(br.read_ubitlong(5)? as i32);
     fp.push_back(br.read_ubitlong(5)? as i32);
@@ -264,7 +264,7 @@ fn push_three_pack5_left_delta_zero(fp: &mut FieldPath, br: &mut BitReader) -> R
 }
 
 // PushThreePack5LeftDeltaOne
-#[inline(always)]
+#[cold]
 fn push_three_pack5_left_delta_one(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
     fp.data[fp.position] += 1;
     fp.push_back(br.read_ubitlong(5)? as i32);
@@ -462,6 +462,7 @@ fn lookup_exec_op(id: u32, fp: &mut FieldPath, br: &mut BitReader) -> Result<boo
         55494 => pop_n_plus_one(fp, br)?,
         55495 => pop_one_plus_n(fp, br)?,
         55496 => push_two_left_delta_zero(fp, br)?,
+        // NOTE: functions that are down below are marked as cold
         110994 => push_three_left_delta_zero(fp, br)?,
         110995 => push_two_pack5_left_delta_zero(fp, br)?,
         111000 => push_two_left_delta_n(fp, br)?,

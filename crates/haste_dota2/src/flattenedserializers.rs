@@ -3,7 +3,6 @@ use crate::{
     hash, varint,
 };
 use hashbrown::{hash_map::Values, HashMap};
-use haste_dota2_deflat::var_type::Decl;
 use haste_dota2_protos::{
     prost::{self, Message},
     CDemoSendTables, CsvcMsgFlattenedSerializer, ProtoFlattenedSerializerFieldT,
@@ -34,7 +33,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct FlattenedSerializerField {
     #[cfg(debug_assertions)]
     pub var_type: Box<str>,
-    pub var_type_decl: Decl,
 
     #[cfg(debug_assertions)]
     pub var_name: Box<str>,
@@ -60,20 +58,21 @@ pub struct FlattenedSerializerField {
     pub var_encoder: Option<Box<str>>,
     pub var_encoder_hash: Option<u64>,
 
-    pub metadata: Option<FieldMetadata>,
+    pub metadata: FieldMetadata,
 }
 
 impl FlattenedSerializerField {
-    fn new(msg: &CsvcMsgFlattenedSerializer, field: &ProtoFlattenedSerializerFieldT) -> Self {
-        #[cfg(debug_assertions)]
-        let resolve_sym = |v: i32| msg.symbols[v as usize].clone().into_boxed_str();
-        #[cfg(not(debug_assertions))]
-        let resolve_sym = |v: i32| msg.symbols[v as usize].as_str();
+    fn new(
+        msg: &CsvcMsgFlattenedSerializer,
+        field: &ProtoFlattenedSerializerFieldT,
+    ) -> Result<Self> {
+        let resolve_sym_unchecked = |i: i32| unsafe { msg.symbols.get_unchecked(i as usize) };
+        let resolve_sym = |v: i32| &msg.symbols[v as usize];
 
-        let var_type = field.var_type_sym.map(resolve_sym).expect("var type");
-        let var_type_decl = haste_dota2_deflat::var_type::parse(&var_type);
+        let var_type = unsafe { resolve_sym_unchecked(field.var_type_sym.unwrap_unchecked()) };
+        let var_type_decl = haste_dota2_deflat::var_type::parse(var_type.as_str());
 
-        let var_name = field.var_name_sym.map(resolve_sym).expect("var name");
+        let var_name = unsafe { resolve_sym_unchecked(field.var_name_sym.unwrap_unchecked()) };
         let var_name_hash = hash::fx::hash_u8(var_name.as_bytes());
 
         let field_serializer_name = field.field_serializer_name_sym.map(resolve_sym);
@@ -86,13 +85,12 @@ impl FlattenedSerializerField {
             .as_ref()
             .map(|var_encoder| hash::fx::hash_u8(var_encoder.as_bytes()));
 
-        Self {
+        let mut ret = Self {
             #[cfg(debug_assertions)]
-            var_type,
-            var_type_decl,
+            var_type: var_type.clone().into_boxed_str(),
 
             #[cfg(debug_assertions)]
-            var_name,
+            var_name: var_name.clone().into_boxed_str(),
             var_name_hash,
 
             bit_count: field.bit_count,
@@ -101,16 +99,18 @@ impl FlattenedSerializerField {
             encode_flags: field.encode_flags,
 
             #[cfg(debug_assertions)]
-            field_serializer_name,
+            field_serializer_name: field_serializer_name.map(|s| s.clone().into_boxed_str()),
             field_serializer_name_hash,
             field_serializer: None,
 
             #[cfg(debug_assertions)]
-            var_encoder,
+            var_encoder: var_encoder.map(|s| s.clone().into_boxed_str()),
             var_encoder_hash,
 
-            metadata: None,
-        }
+            metadata: Default::default(),
+        };
+        ret.metadata = get_field_metadata(var_type_decl, &ret)?;
+        Ok(ret)
     }
 
     #[cfg(debug_assertions)]
@@ -121,7 +121,7 @@ impl FlattenedSerializerField {
             .unwrap_or_else(|| {
                 panic!(
                     "expected field serializer to be present in field of type {:?}",
-                    self.var_type_decl
+                    self.var_type
                 )
             })
             .get_child(index)
@@ -244,7 +244,7 @@ impl FlattenedSerializers {
                     field.clone()
                 } else {
                     let mut field =
-                        FlattenedSerializerField::new(&msg, &msg.fields[*field_index as usize]);
+                        FlattenedSerializerField::new(&msg, &msg.fields[*field_index as usize])?;
 
                     if let Some(field_serializer_name_hash) =
                         field.field_serializer_name_hash.as_ref()
@@ -253,58 +253,51 @@ impl FlattenedSerializers {
                             serializer_map.get(field_serializer_name_hash).cloned();
                     }
 
-                    field.metadata = Some(get_field_metadata(&field)?);
                     // TODO: maybe extract arms into separate functions
-                    match field.metadata.as_ref() {
-                        Some(field_metadata) => match field_metadata.special_descriptor {
-                            Some(FieldSpecialDescriptor::Array { length }) => {
-                                field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                    fields: {
-                                        let mut fields = Vec::with_capacity(length);
-                                        fields.resize(length, Rc::new(field.clone()));
-                                        fields
-                                    },
-                                    ..Default::default()
-                                }));
-                            }
-                            Some(FieldSpecialDescriptor::VariableLengthArray) => {
-                                field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                    fields: {
-                                        const SIZE: usize = 256;
-                                        let mut fields = Vec::with_capacity(SIZE);
-                                        fields.resize(SIZE, Rc::new(field.clone()));
-                                        fields
-                                    },
-                                    ..Default::default()
-                                }));
-                            }
-                            Some(FieldSpecialDescriptor::VariableLengthSerializerArray) => {
-                                field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                    fields: {
-                                        let sub_field = FlattenedSerializerField {
-                                            field_serializer: field
-                                                .field_serializer_name_hash
-                                                .and_then(|field_serializer_name_hash| {
-                                                    serializer_map.get(&field_serializer_name_hash)
-                                                })
-                                                .cloned(),
-                                            ..Default::default()
-                                        };
-
-                                        const SIZE: usize = 256;
-                                        let mut sub_fields = Vec::with_capacity(SIZE);
-                                        sub_fields.resize(SIZE, Rc::new(sub_field));
-                                        sub_fields
-                                    },
-                                    ..Default::default()
-                                }));
-                            }
-                            _ => {}
-                        },
-                        None => {
-                            // TODO: don't panic?
-                            panic!("unhandled flattened serializer: {:?}", &field.var_type_decl);
+                    match field.metadata.special_descriptor {
+                        Some(FieldSpecialDescriptor::Array { length }) => {
+                            field.field_serializer = Some(Rc::new(FlattenedSerializer {
+                                fields: {
+                                    let mut fields = Vec::with_capacity(length);
+                                    fields.resize(length, Rc::new(field.clone()));
+                                    fields
+                                },
+                                ..Default::default()
+                            }));
                         }
+                        Some(FieldSpecialDescriptor::VariableLengthArray) => {
+                            field.field_serializer = Some(Rc::new(FlattenedSerializer {
+                                fields: {
+                                    const SIZE: usize = 256;
+                                    let mut fields = Vec::with_capacity(SIZE);
+                                    fields.resize(SIZE, Rc::new(field.clone()));
+                                    fields
+                                },
+                                ..Default::default()
+                            }));
+                        }
+                        Some(FieldSpecialDescriptor::VariableLengthSerializerArray) => {
+                            field.field_serializer = Some(Rc::new(FlattenedSerializer {
+                                fields: {
+                                    let sub_field = FlattenedSerializerField {
+                                        field_serializer: field
+                                            .field_serializer_name_hash
+                                            .and_then(|field_serializer_name_hash| {
+                                                serializer_map.get(&field_serializer_name_hash)
+                                            })
+                                            .cloned(),
+                                        ..Default::default()
+                                    };
+
+                                    const SIZE: usize = 256;
+                                    let mut sub_fields = Vec::with_capacity(SIZE);
+                                    sub_fields.resize(SIZE, Rc::new(sub_field));
+                                    sub_fields
+                                },
+                                ..Default::default()
+                            }));
+                        }
+                        _ => {}
                     }
 
                     let field = Rc::new(field);

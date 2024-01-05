@@ -94,13 +94,13 @@ impl<'d> BitReader<'d> {
     // FORCEINLINE  size_t                  TotalBytesAvailable( void ) const
 
     // FORCEINLINE  int                     GetNumBitsLeft() const
-    #[inline(always)]
+    #[cold]
     pub fn get_num_bits_left(&self) -> usize {
         self.data_bits - self.curr_bit
     }
 
     // FORCEINLINE  int                     GetNumBytesLeft() const
-    #[inline(always)]
+    #[cold]
     pub fn get_num_bytes_left(&self) -> usize {
         self.get_num_bits_left() >> 3
     }
@@ -151,7 +151,7 @@ impl<'d> BitReader<'d> {
 
         // Read the current dword.
         let dw1_offset = self.curr_bit >> 5;
-        let mut dw1 = self.data[dw1_offset];
+        let mut dw1 = unsafe { *self.data.get_unchecked(dw1_offset) };
 
         dw1 >>= self.curr_bit & 31; // Get the bits we're interested in.
 
@@ -165,7 +165,7 @@ impl<'d> BitReader<'d> {
             }
         } else {
             let extra_bits = self.curr_bit & 31;
-            let mut dw2 = self.data[dw1_offset + 1];
+            let mut dw2 = unsafe { *self.data.get_unchecked(dw1_offset + 1) };
 
             dw2 &= EXTRA_MASKS[extra_bits];
 
@@ -283,7 +283,8 @@ impl<'d> BitReader<'d> {
             return Err(Error::Underflow);
         }
 
-        let one_bit = self.data[self.curr_bit >> 5] >> (self.curr_bit & 31) & 1;
+        let one_bit =
+            unsafe { self.data.get_unchecked(self.curr_bit >> 5) } >> (self.curr_bit & 31) & 1;
         self.curr_bit += 1;
 
         Ok(one_bit == 1)
