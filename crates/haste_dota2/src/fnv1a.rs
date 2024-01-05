@@ -23,3 +23,6 @@ generate_hash_fn!(u32, hash_u32);
 
 // TODO: try fxhash / firefox hash; it seems to be faster then fnv, see
 // https://github.com/cbreeden/fxhash/tree/master?tab=readme-ov-file#benchmarks
+
+// TODO: write a tool that will test collisions (in scope of 1 thing, for
+// example var_type)

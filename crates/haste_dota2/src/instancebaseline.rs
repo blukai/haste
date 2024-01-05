@@ -23,17 +23,7 @@ impl InstanceBaseline {
         }
 
         for (_entity_index, item) in string_table.items() {
-            let string = item
-                .string
-                .as_ref()
-                .expect("instance baseline class id string");
-
-            debug_assert!(
-                string.len() <= 4,
-                "unexpected len of instance baseline class id string: {}",
-                string.len()
-            );
-            let string = unsafe { std::str::from_utf8_unchecked(string) };
+            let string = unsafe { std::str::from_utf8_unchecked(item.string.as_ref().unwrap_unchecked()) };
             let class_id = string.parse::<i32>()?;
             self.data[class_id as usize] = item.user_data.clone();
         }

@@ -131,8 +131,19 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         }
     }
 
+    #[inline]
     pub fn parse_to_end(&mut self) -> Result<()> {
         self.run(|_notnotself, _cmd_header| Ok(ControlFlow::HandleCmd))
+    }
+
+    pub fn reset(&mut self) -> Result<()> {
+        self.demo_file
+            .seek(SeekFrom::Start(DEMO_HEADER_SIZE as u64))?;
+        self.string_tables.clear();
+        self.instance_baseline.clear();
+        self.entities.clear();
+        self.tick = -1;
+        Ok(())
     }
 
     // TODO: rename parse_to_tick to run_to_tick
@@ -144,12 +155,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         // TODO: do not clear if seeking forward and there's no full packet on
         // the way to the wanted tick / if target tick is closer then full
         // packet interval
-
-        self.demo_file
-            .seek(SeekFrom::Start(DEMO_HEADER_SIZE as u64))?;
-        self.string_tables.clear();
-        self.instance_baseline.clear();
-        self.entities.clear();
+        self.reset()?;
 
         // NOTE: EDemoCommands::DemSyncTick is the last command with 4294967295
         // tick (normlized to -1). last "initialization" command.
@@ -482,6 +488,7 @@ pub struct NopVisitor;
 impl Visitor for NopVisitor {}
 
 impl<R: Read + Seek> Parser<R, NopVisitor> {
+    #[inline]
     pub fn from_reader(rdr: R) -> Result<Self> {
         Self::from_reader_with_visitor(rdr, NopVisitor)
     }

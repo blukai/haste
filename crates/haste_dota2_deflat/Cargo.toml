@@ -5,4 +5,4 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-haste_dota2_deflat_atoms = { path = "../../crates/haste_dota2_deflat_atoms" }
+haste_dota2_atoms = { path = "../../crates/haste_dota2_atoms" }

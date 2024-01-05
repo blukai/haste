@@ -1,5 +1,3 @@
-use haste_dota2_deflat::var_type::{ident_atom, ArrayLength, IdentAtom, TypeDecl};
-
 use crate::{
     fielddecoder::{
         self, BoolDecoder, F32Decoder, FieldDecode, I32Decoder, I64Decoder, QAngleDecoder,
@@ -8,6 +6,7 @@ use crate::{
     },
     flattenedserializers::FlattenedSerializerField,
 };
+use haste_dota2_deflat::var_type::{ident_atom, ArrayLength, Decl, IdentAtom};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -126,7 +125,7 @@ fn handle_ident(ident: &IdentAtom, field: &FlattenedSerializerField) -> Result<F
 #[inline]
 fn handle_template(
     ident: &IdentAtom,
-    argument: &TypeDecl,
+    argument: &Decl,
     field: &FlattenedSerializerField,
 ) -> Result<FieldMetadata> {
     match *ident {
@@ -154,7 +153,7 @@ fn handle_template(
 
 #[inline]
 fn handle_array(
-    type_decl: &TypeDecl,
+    decl: &Decl,
     length: &ArrayLength,
     field: &FlattenedSerializerField,
 ) -> Result<FieldMetadata> {
@@ -166,7 +165,7 @@ fn handle_array(
         ArrayLength::Number(length) => Ok(*length),
     }?;
 
-    handle_any(type_decl, field).map(|field_metadata| FieldMetadata {
+    handle_any(decl, field).map(|field_metadata| FieldMetadata {
         special_descriptor: Some(FieldSpecialDescriptor::Array { length }),
         decoder: field_metadata.decoder,
     })
@@ -181,17 +180,17 @@ fn handle_pointer() -> FieldMetadata {
 }
 
 #[inline]
-fn handle_any(type_decl: &TypeDecl, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
-    match type_decl {
-        TypeDecl::Ident(ident) => handle_ident(ident, field),
-        TypeDecl::Template { ident, argument } => handle_template(ident, argument, field),
-        TypeDecl::Array { type_decl, length } => handle_array(type_decl, length, field),
-        TypeDecl::Pointer(_) => Ok(handle_pointer()),
+fn handle_any(decl: &Decl, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
+    match decl {
+        Decl::Ident(ident) => handle_ident(ident, field),
+        Decl::Template { ident, argument } => handle_template(ident, argument, field),
+        Decl::Array { decl, length } => handle_array(decl, length, field),
+        Decl::Pointer(_) => Ok(handle_pointer()),
     }
 }
 
 pub fn get_field_metadata(field: &FlattenedSerializerField) -> Result<FieldMetadata> {
-    handle_any(&field.type_decl, field)
+    handle_any(&field.var_type_decl, field)
 }
 
 // NOTE: a lot of values are enums, some were discovered in ocratine thing,

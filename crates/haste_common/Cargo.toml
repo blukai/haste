@@ -1,8 +1,0 @@
-[package]
-name = "haste_common"
-version = "0.0.0"
-edition = "2021"
-
-[dependencies]
-# TODO: maybe switch to onlyerror (to achieve faster comp times?)
-thiserror = "1.0"

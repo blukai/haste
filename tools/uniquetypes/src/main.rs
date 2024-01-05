@@ -1,10 +1,10 @@
 // uniquetypes tool can be used to get a list of unique types that are present
 // in the replay file.
 
-use haste_common::varint;
 use haste_dota2::{
     demofile::DemoFile,
     dota2_protos::{self, prost::Message, EDemoCommands},
+    varint,
 };
 use std::{
     fs::File,

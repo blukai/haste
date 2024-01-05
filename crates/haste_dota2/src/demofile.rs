@@ -1,4 +1,4 @@
-use haste_common::varint;
+use crate::varint;
 use haste_dota2_protos::{
     prost::{self, Message},
     CDemoFileInfo, EDemoCommands,

@@ -1,5 +1,5 @@
 use super::tokenizer::{Token, Tokenizer};
-use crate::var_type::{parse, ArrayLength, IdentAtom, TypeDecl};
+use crate::var_type::{parse, ArrayLength, Decl, IdentAtom};
 
 fn lex<'a>(input: &'a str) -> Vec<Token<'a>> {
     Tokenizer::new(input).collect()
@@ -9,7 +9,7 @@ fn lex<'a>(input: &'a str) -> Vec<Token<'a>> {
 fn test_primitive() {
     let input = "bool";
     assert_eq!(lex(input), vec![Token::Ident("bool"),]);
-    assert_eq!(parse(input), TypeDecl::Ident(IdentAtom::from("bool")));
+    assert_eq!(parse(input), Decl::Ident(IdentAtom::from("bool")));
 }
 
 #[test]
@@ -26,9 +26,9 @@ fn test_template() {
     );
     assert_eq!(
         parse(input),
-        TypeDecl::Template {
+        Decl::Template {
             ident: IdentAtom::from("CHandle"),
-            argument: Box::new(TypeDecl::Ident(IdentAtom::from("CBaseAnimatingActivity")))
+            argument: Box::new(Decl::Ident(IdentAtom::from("CBaseAnimatingActivity")))
         }
     );
 }
@@ -47,8 +47,8 @@ fn test_array() {
     );
     assert_eq!(
         parse(input),
-        TypeDecl::Array {
-            type_decl: Box::new(TypeDecl::Ident(IdentAtom::from("uint64"))),
+        Decl::Array {
+            decl: Box::new(Decl::Ident(IdentAtom::from("uint64"))),
             length: ArrayLength::Number(256)
         }
     );
@@ -63,9 +63,7 @@ fn test_pointer() {
     );
     assert_eq!(
         parse(input),
-        TypeDecl::Pointer(Box::new(TypeDecl::Ident(IdentAtom::from(
-            "CDOTAGameManager"
-        ))))
+        Decl::Pointer(Box::new(Decl::Ident(IdentAtom::from("CDOTAGameManager"))))
     );
 }
 
@@ -86,11 +84,11 @@ fn test_nested_template() {
     );
     assert_eq!(
         parse(input),
-        TypeDecl::Template {
+        Decl::Template {
             ident: IdentAtom::from("CNetworkUtlVectorBase"),
-            argument: Box::new(TypeDecl::Template {
+            argument: Box::new(Decl::Template {
                 ident: IdentAtom::from("CHandle"),
-                argument: Box::new(TypeDecl::Ident(IdentAtom::from("CBasePlayerController")))
+                argument: Box::new(Decl::Ident(IdentAtom::from("CBasePlayerController")))
             })
         }
     );
@@ -113,10 +111,10 @@ fn test_template_array() {
     );
     assert_eq!(
         parse(input),
-        TypeDecl::Array {
-            type_decl: Box::new(TypeDecl::Template {
+        Decl::Array {
+            decl: Box::new(Decl::Template {
                 ident: IdentAtom::from("CHandle"),
-                argument: Box::new(TypeDecl::Ident(IdentAtom::from("CDOTASpecGraphPlayerData")))
+                argument: Box::new(Decl::Ident(IdentAtom::from("CDOTASpecGraphPlayerData")))
             }),
             length: ArrayLength::Number(24)
         }
@@ -137,8 +135,8 @@ fn test_array_with_constant_length() {
     );
     assert_eq!(
         parse(input),
-        TypeDecl::Array {
-            type_decl: Box::new(TypeDecl::Ident(IdentAtom::from(
+        Decl::Array {
+            decl: Box::new(Decl::Ident(IdentAtom::from(
                 "CDOTA_AbilityDraftAbilityState"
             ))),
             length: ArrayLength::Ident(IdentAtom::from("MAX_ABILITY_DRAFT_ABILITIES"))

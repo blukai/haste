@@ -1,0 +1,17 @@
+[package]
+name = "haste_dota2_atoms_codegen"
+version = "0.0.0"
+edition = "2021"
+
+[lib]
+name = "haste_dota2_atoms_codegen"
+path = "src/lib.rs"
+
+[[bin]]
+name = "haste_dota2_atoms_codegen"
+path = "src/main.rs"
+
+[dependencies]
+haste_dota2 = { path = "../../crates/haste_dota2" }
+anyhow = "1.0"
+string_cache_codegen = "0.5"

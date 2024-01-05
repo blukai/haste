@@ -2,10 +2,10 @@ use crate::{
     fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialDescriptor},
     fnv1a,
     nohash::NoHashHasherBuilder,
+    varint,
 };
 use hashbrown::{hash_map::Values, HashMap};
-use haste_common::varint;
-use haste_dota2_deflat::var_type::TypeDecl;
+use haste_dota2_deflat::var_type::Decl;
 use haste_dota2_protos::{
     prost::{self, Message},
     CDemoSendTables, CsvcMsgFlattenedSerializer, ProtoFlattenedSerializerFieldT,
@@ -35,7 +35,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct FlattenedSerializerField {
     #[cfg(debug_assertions)]
     pub var_type: Box<str>,
-    pub type_decl: TypeDecl,
+    pub var_type_decl: Decl,
 
     #[cfg(debug_assertions)]
     pub var_name: Box<str>,
@@ -72,7 +72,7 @@ impl FlattenedSerializerField {
         let resolve_sym = |v: i32| msg.symbols[v as usize].as_str();
 
         let var_type = field.var_type_sym.map(resolve_sym).expect("var type");
-        let type_decl = haste_dota2_deflat::var_type::parse(&var_type);
+        let var_type_decl = haste_dota2_deflat::var_type::parse(&var_type);
 
         let var_name = field.var_name_sym.map(resolve_sym).expect("var name");
         let var_name_hash = fnv1a::hash_u8(var_name.as_bytes());
@@ -90,7 +90,7 @@ impl FlattenedSerializerField {
         Self {
             #[cfg(debug_assertions)]
             var_type,
-            type_decl,
+            var_type_decl,
 
             #[cfg(debug_assertions)]
             var_name,
@@ -122,7 +122,7 @@ impl FlattenedSerializerField {
             .unwrap_or_else(|| {
                 panic!(
                     "expected field serializer to be present in field of type {:?}",
-                    self.type_decl
+                    self.var_type_decl
                 )
             })
             .get_child(index)
@@ -304,7 +304,7 @@ impl FlattenedSerializers {
                         },
                         None => {
                             // TODO: don't panic?
-                            panic!("unhandled flattened serializer: {:?}", &field.type_decl);
+                            panic!("unhandled flattened serializer: {:?}", &field.var_type_decl);
                         }
                     }
 

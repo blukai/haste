@@ -1,8 +1,8 @@
 use super::tokenizer::{Token, Tokenizer};
 use std::iter::{Peekable, Rev};
 
-pub use haste_dota2_deflat_atoms::var_type::IdentAtom;
-pub use haste_dota2_deflat_atoms::var_type_ident_atom as ident_atom;
+pub use haste_dota2_atoms::var_type_ident::VarTypeIdentAtom as IdentAtom;
+pub use haste_dota2_atoms::var_type_ident_atom as ident_atom;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ArrayLength {
@@ -13,7 +13,7 @@ pub enum ArrayLength {
 // TODO: get rid of Box (/ do not allocate heap memory)
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum TypeDecl {
+pub enum Decl {
     Ident(IdentAtom),
     Pointer(Box<Self>),
     Template {
@@ -21,12 +21,12 @@ pub enum TypeDecl {
         argument: Box<Self>,
     },
     Array {
-        type_decl: Box<Self>,
+        decl: Box<Self>,
         length: ArrayLength,
     },
 }
 
-impl Default for TypeDecl {
+impl Default for Decl {
     fn default() -> Self {
         Self::Ident(IdentAtom::from(""))
     }
@@ -35,15 +35,15 @@ impl Default for TypeDecl {
 // ----
 
 #[inline]
-fn parse_ident(rev_iter: &mut Peekable<Rev<Tokenizer>>) -> TypeDecl {
+fn parse_ident(rev_iter: &mut Peekable<Rev<Tokenizer>>) -> Decl {
     match rev_iter.next() {
-        Some(Token::Ident(ident)) => TypeDecl::Ident(IdentAtom::from(ident)),
+        Some(Token::Ident(ident)) => Decl::Ident(IdentAtom::from(ident)),
         _ => unreachable!(),
     }
 }
 
 #[inline]
-fn parse_template(rev_iter: &mut Peekable<Rev<Tokenizer>>) -> TypeDecl {
+fn parse_template(rev_iter: &mut Peekable<Rev<Tokenizer>>) -> Decl {
     assert_eq!(rev_iter.next(), Some(Token::RAngle));
     let argument = parse_any(rev_iter);
     assert_eq!(rev_iter.next(), Some(Token::LAngle));
@@ -53,14 +53,14 @@ fn parse_template(rev_iter: &mut Peekable<Rev<Tokenizer>>) -> TypeDecl {
         _ => unreachable!(),
     };
 
-    TypeDecl::Template {
+    Decl::Template {
         ident: IdentAtom::from(ident),
         argument: Box::new(argument),
     }
 }
 
 #[inline]
-fn parse_array(rev_iter: &mut Peekable<Rev<Tokenizer>>) -> TypeDecl {
+fn parse_array(rev_iter: &mut Peekable<Rev<Tokenizer>>) -> Decl {
     assert_eq!(rev_iter.next(), Some(Token::RSquare));
     let length = match rev_iter.next() {
         Some(Token::Ident(ident)) => ArrayLength::Ident(IdentAtom::from(ident)),
@@ -72,25 +72,25 @@ fn parse_array(rev_iter: &mut Peekable<Rev<Tokenizer>>) -> TypeDecl {
     };
     assert_eq!(rev_iter.next(), Some(Token::LSquare));
 
-    let type_decl = parse_any(rev_iter);
+    let decl = parse_any(rev_iter);
 
-    TypeDecl::Array {
-        type_decl: Box::new(type_decl),
+    Decl::Array {
+        decl: Box::new(decl),
         length,
     }
 }
 
 #[inline]
-fn parse_pointer(rev_iter: &mut Peekable<Rev<Tokenizer>>) -> TypeDecl {
+fn parse_pointer(rev_iter: &mut Peekable<Rev<Tokenizer>>) -> Decl {
     assert_eq!(rev_iter.next(), Some(Token::Asterisk));
 
-    let type_decl = parse_any(rev_iter);
+    let decl = parse_any(rev_iter);
 
-    TypeDecl::Pointer(Box::new(type_decl))
+    Decl::Pointer(Box::new(decl))
 }
 
 #[inline]
-fn parse_any(rev_iter: &mut Peekable<Rev<Tokenizer>>) -> TypeDecl {
+fn parse_any(rev_iter: &mut Peekable<Rev<Tokenizer>>) -> Decl {
     match rev_iter.peek() {
         Some(Token::Ident(_)) => parse_ident(rev_iter),
         Some(Token::RAngle) => parse_template(rev_iter),
@@ -100,7 +100,7 @@ fn parse_any(rev_iter: &mut Peekable<Rev<Tokenizer>>) -> TypeDecl {
     }
 }
 
-pub fn parse(input: &str) -> TypeDecl {
+pub fn parse(input: &str) -> Decl {
     let mut tokens = Tokenizer::new(input).into_iter().rev().peekable();
     parse_any(&mut tokens)
 }
