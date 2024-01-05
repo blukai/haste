@@ -15,9 +15,8 @@ pub mod fieldmetadata;
 pub mod fieldpath;
 pub mod fieldvalue;
 pub mod flattenedserializers;
-pub mod fnv1a;
+pub mod hash;
 pub mod instancebaseline;
-pub mod nohash;
 pub mod parser;
 pub mod quantizedfloat;
 pub mod stringtables;
@@ -51,6 +50,3 @@ pub mod varint;
 // comparisons are expensive. valve mostly uses CUtlStringToken which computes a
 // hash and uses it for comparisons, it discards the string - this is nice. see
 // public/tier1/utlstringtoken.h
-
-// TODO: move bitbuf and fnv1a and nohash (or maybe get rid of self-made nohash
-// thing and install a crate)

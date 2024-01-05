@@ -1,8 +1,6 @@
 use crate::{
     fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialDescriptor},
-    fnv1a,
-    nohash::NoHashHasherBuilder,
-    varint,
+    hash, varint,
 };
 use hashbrown::{hash_map::Values, HashMap};
 use haste_dota2_deflat::var_type::Decl;
@@ -11,7 +9,8 @@ use haste_dota2_protos::{
     CDemoSendTables, CsvcMsgFlattenedSerializer, ProtoFlattenedSerializerFieldT,
     ProtoFlattenedSerializerT,
 };
-use std::rc::Rc;
+use nohash::NoHashHasher;
+use std::{hash::BuildHasherDefault, rc::Rc};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -75,17 +74,17 @@ impl FlattenedSerializerField {
         let var_type_decl = haste_dota2_deflat::var_type::parse(&var_type);
 
         let var_name = field.var_name_sym.map(resolve_sym).expect("var name");
-        let var_name_hash = fnv1a::hash_u8(var_name.as_bytes());
+        let var_name_hash = hash::fx::hash_u8(var_name.as_bytes());
 
         let field_serializer_name = field.field_serializer_name_sym.map(resolve_sym);
         let field_serializer_name_hash = field_serializer_name
             .as_ref()
-            .map(|field_serializer_name| fnv1a::hash_u8(field_serializer_name.as_bytes()));
+            .map(|field_serializer_name| hash::fx::hash_u8(field_serializer_name.as_bytes()));
 
         let var_encoder = field.var_encoder_sym.map(resolve_sym);
         let var_encoder_hash = var_encoder
             .as_ref()
-            .map(|var_encoder| fnv1a::hash_u8(var_encoder.as_bytes()));
+            .map(|var_encoder| hash::fx::hash_u8(var_encoder.as_bytes()));
 
         Self {
             #[cfg(debug_assertions)]
@@ -170,7 +169,7 @@ impl FlattenedSerializer {
             .serializer_name_sym
             .map(resolve_sym)
             .expect("serializer name");
-        let serializer_name_hash = fnv1a::hash_u8(serializer_name.as_bytes());
+        let serializer_name_hash = hash::fx::hash_u8(serializer_name.as_bytes());
 
         Ok(Self {
             #[cfg(debug_assertions)]
@@ -200,8 +199,8 @@ impl FlattenedSerializer {
     }
 }
 
-type FieldMap = HashMap<i32, Rc<FlattenedSerializerField>, NoHashHasherBuilder<i32>>;
-type SerializerMap = HashMap<u64, Rc<FlattenedSerializer>, NoHashHasherBuilder<u64>>;
+type FieldMap = HashMap<i32, Rc<FlattenedSerializerField>, BuildHasherDefault<NoHashHasher<i32>>>;
+type SerializerMap = HashMap<u64, Rc<FlattenedSerializer>, BuildHasherDefault<NoHashHasher<u64>>>;
 
 pub struct FlattenedSerializers {
     serializer_map: SerializerMap,
@@ -225,10 +224,10 @@ impl FlattenedSerializers {
         };
 
         let mut fields: FieldMap =
-            FieldMap::with_capacity_and_hasher(msg.fields.len(), NoHashHasherBuilder::default());
+            FieldMap::with_capacity_and_hasher(msg.fields.len(), BuildHasherDefault::default());
         let mut serializer_map: SerializerMap = SerializerMap::with_capacity_and_hasher(
             msg.serializers.len(),
-            NoHashHasherBuilder::default(),
+            BuildHasherDefault::default(),
         );
 
         for serializer in msg.serializers.iter() {

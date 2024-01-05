@@ -11,5 +11,6 @@ haste_dota2_protos = { path = "../haste_dota2_protos" }
 thiserror = "1.0"
 snap = "1.1"
 # NOTE: hashbrown::HashMap is noticeably faster then std::collections::hashMap
-hashbrown = { version = "0.14", features = ["ahash", "inline-more", "nightly"] }
+hashbrown = { version = "0.14", default-features = false, features = ["inline-more"] }
+nohash = "0.2"
 dyn-clone = "1.0"

@@ -23,7 +23,8 @@ impl InstanceBaseline {
         }
 
         for (_entity_index, item) in string_table.items() {
-            let string = unsafe { std::str::from_utf8_unchecked(item.string.as_ref().unwrap_unchecked()) };
+            let string =
+                unsafe { std::str::from_utf8_unchecked(item.string.as_ref().unwrap_unchecked()) };
             let class_id = string.parse::<i32>()?;
             self.data[class_id as usize] = item.user_data.clone();
         }

@@ -1,5 +1,4 @@
-use super::tokenizer::{Token, Tokenizer};
-use crate::var_type::{parse, ArrayLength, Decl, IdentAtom};
+use super::{parse, ArrayLength, Decl, IdentAtom, Token, Tokenizer};
 
 fn lex<'a>(input: &'a str) -> Vec<Token<'a>> {
     Tokenizer::new(input).collect()

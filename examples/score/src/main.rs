@@ -2,7 +2,7 @@ use haste_dota2::{
     entities::{Entity, UpdateType},
     fieldpath::FIELD_PATH_DATA_SIZE,
     fieldvalue::FieldValue,
-    fnv1a,
+    hash,
     parser::{self, Parser, Visitor},
 };
 use std::{fs::File, io::BufReader};
@@ -12,7 +12,7 @@ fn get_field_key(entity: &Entity, field_path: &[&str]) -> Option<u64> {
     let mut fields = &entity.flattened_serializer.fields;
     let mut i = 0;
     for var_name in field_path {
-        let var_name_hash = fnv1a::hash_u8(var_name.as_bytes());
+        let var_name_hash = hash::fx::hash_u8(var_name.as_bytes());
         for (j, field) in fields.iter().enumerate() {
             if field.var_name_hash == var_name_hash {
                 field_path_data[i] = j as u8;
@@ -25,7 +25,7 @@ fn get_field_key(entity: &Entity, field_path: &[&str]) -> Option<u64> {
         i += 1;
     }
     if field_path.len().eq(&i) {
-        Some(fnv1a::hash_u8(&field_path_data[..i]))
+        Some(hash::fx::hash_u8(&field_path_data[..i]))
     } else {
         None
     }
@@ -43,7 +43,7 @@ impl Visitor for MyVisitor {
         if entity
             .flattened_serializer
             .serializer_name_hash
-            .eq(&fnv1a::hash_u8(b"CDOTATeam"))
+            .eq(&hash::fx::hash_u8(b"CDOTATeam"))
         {
             let team_num_key = get_field_key(entity, &["m_iTeamNum"]);
             if let Some(team_num_key) = team_num_key {

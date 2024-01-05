@@ -5,10 +5,10 @@ use crate::{
     fieldvalue::FieldValue,
     flattenedserializers::{FlattenedSerializer, FlattenedSerializers},
     instancebaseline::InstanceBaseline,
-    nohash::NoHashHasherBuilder,
 };
 use hashbrown::HashMap;
-use std::rc::Rc;
+use nohash::NoHashHasher;
+use std::{hash::BuildHasherDefault, rc::Rc};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -75,7 +75,7 @@ pub fn determine_update_type(update_flags: usize) -> UpdateType {
 
 #[derive(Debug, Clone)]
 pub struct Entity {
-    pub field_values: HashMap<u64, FieldValue, NoHashHasherBuilder<u64>>,
+    pub field_values: HashMap<u64, FieldValue, BuildHasherDefault<NoHashHasher<u64>>>,
     pub flattened_serializer: Rc<FlattenedSerializer>,
 }
 
@@ -140,13 +140,13 @@ pub struct Entities {
     // be pre-determined? some clues about max entry count can be found in
     // public/const.h (NUM_ENT_ENTRIES); clarity (and possibly manta) specify 1
     // << 14 as the max count of entries; butterfly uses number 20480.
-    entities: HashMap<i32, Entity, NoHashHasherBuilder<i32>>,
+    entities: HashMap<i32, Entity, BuildHasherDefault<NoHashHasher<i32>>>,
 }
 
 impl Default for Entities {
     fn default() -> Self {
         Self {
-            entities: HashMap::with_capacity_and_hasher(20480, NoHashHasherBuilder::default()),
+            entities: HashMap::with_capacity_and_hasher(20480, BuildHasherDefault::default()),
         }
     }
 }
@@ -171,7 +171,7 @@ impl Entities {
         let mut entity = Entity {
             field_values: HashMap::with_capacity_and_hasher(
                 flattened_serializer.fields.len(),
-                NoHashHasherBuilder::default(),
+                BuildHasherDefault::default(),
             ),
             flattened_serializer,
         };
