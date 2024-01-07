@@ -55,7 +55,7 @@ impl Default for FieldMetadata {
 
 #[inline]
 fn handle_ident(ident: IdentAtom, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
-    macro_rules! unspecial {
+    macro_rules! nonspecial {
         ($decoder:expr) => {
             Ok(FieldMetadata {
                 special_descriptor: None,
@@ -67,24 +67,24 @@ fn handle_ident(ident: IdentAtom, field: &FlattenedSerializerField) -> Result<Fi
     match ident {
         // TODO: smaller decoders (8 and 16 bit)
         // ints
-        ident_atom!("int8") => unspecial!(I32Decoder::default()),
-        ident_atom!("int16") => unspecial!(I32Decoder::default()),
-        ident_atom!("int32") => unspecial!(I32Decoder::default()),
-        ident_atom!("int64") => unspecial!(I64Decoder::default()),
+        ident_atom!("int8") => nonspecial!(I32Decoder::default()),
+        ident_atom!("int16") => nonspecial!(I32Decoder::default()),
+        ident_atom!("int32") => nonspecial!(I32Decoder::default()),
+        ident_atom!("int64") => nonspecial!(I64Decoder::default()),
+
         // uints
-        ident_atom!("uint8") => unspecial!(U32Decoder::default()),
-        ident_atom!("uint16") => unspecial!(U32Decoder::default()),
-        ident_atom!("uint32") => unspecial!(U32Decoder::default()),
-        ident_atom!("uint64") => unspecial!(U64Decoder::new(field)),
+        ident_atom!("uint8") => nonspecial!(U32Decoder::default()),
+        ident_atom!("uint16") => nonspecial!(U32Decoder::default()),
+        ident_atom!("uint32") => nonspecial!(U32Decoder::default()),
+        ident_atom!("uint64") => nonspecial!(U64Decoder::new(field)),
 
         // other primitives
-        ident_atom!("bool") => unspecial!(BoolDecoder::default()),
-        ident_atom!("float32") => unspecial!(F32Decoder::new(field)?),
-        ident_atom!("char") => unspecial!(StringDecoder::default()),
+        ident_atom!("bool") => nonspecial!(BoolDecoder::default()),
+        ident_atom!("float32") => nonspecial!(F32Decoder::new(field)?),
 
         // templates
-        ident_atom!("CHandle") => unspecial!(U32Decoder::default()),
-        ident_atom!("CStrongHandle") => unspecial!(U64Decoder::new(field)),
+        ident_atom!("CHandle") => nonspecial!(U32Decoder::default()),
+        ident_atom!("CStrongHandle") => nonspecial!(U64Decoder::new(field)),
 
         // pointers (?)
         ident_atom!("CBodyComponent") => Ok(FieldMetadata {
@@ -101,17 +101,21 @@ fn handle_ident(ident: IdentAtom, field: &FlattenedSerializerField) -> Result<Fi
         }),
 
         // other custom types
-        ident_atom!("CUtlSymbolLarge") => unspecial!(StringDecoder::default()),
-        ident_atom!("CUtlString") => unspecial!(StringDecoder::default()),
-        ident_atom!("QAngle") => unspecial!(QAngleDecoder::new(field)),
-        ident_atom!("Vector") => unspecial!(Vec3Decoder::new(field)?),
-        ident_atom!("CNetworkedQuantizedFloat") => unspecial!(QuantizedFloatDecoder::new(field)?),
-        ident_atom!("GameTime_t") => unspecial!(F32Decoder::new(field)?),
-        ident_atom!("MatchID_t") => unspecial!(U64Decoder::new(field)),
-        ident_atom!("Vector2D") => unspecial!(Vec2Decoder::new(field)?),
-        ident_atom!("Vector4D") => unspecial!(Vec4Decoder::new(field)?),
+        ident_atom!("CUtlSymbolLarge") => nonspecial!(StringDecoder::default()),
+        ident_atom!("CUtlString") => nonspecial!(StringDecoder::default()),
+        // public/mathlib/vector.h
+        ident_atom!("QAngle") => nonspecial!(QAngleDecoder::new(field)),
+        ident_atom!("CNetworkedQuantizedFloat") => nonspecial!(QuantizedFloatDecoder::new(field)?),
+        ident_atom!("GameTime_t") => nonspecial!(F32Decoder::new(field)?),
+        ident_atom!("MatchID_t") => nonspecial!(U64Decoder::new(field)),
+        // public/mathlib/vector.h
+        ident_atom!("Vector") => nonspecial!(Vec3Decoder::new(field)?),
+        // public/mathlib/vector2d.h
+        ident_atom!("Vector2D") => nonspecial!(Vec2Decoder::new(field)?),
+        // public/mathlib/vector4d.h
+        ident_atom!("Vector4D") => nonspecial!(Vec4Decoder::new(field)?),
         // game/shared/econ/econ_item_constants.h
-        ident_atom!("itemid_t") => unspecial!(U64Decoder::new(field)),
+        ident_atom!("itemid_t") => nonspecial!(U64Decoder::new(field)),
 
         // exceptional specials xd
         ident_atom!("m_SpeechBubbles") => Ok(FieldMetadata {
@@ -167,6 +171,15 @@ fn handle_array(
     length: ArrayLength,
     field: &FlattenedSerializerField,
 ) -> Result<FieldMetadata> {
+    if let Decl::Ident(ref ident) = decl {
+        if *ident == ident_atom!("char") {
+            return Ok(FieldMetadata {
+                special_descriptor: None,
+                decoder: Box::new(StringDecoder::default()),
+            });
+        }
+    }
+
     let length = match length {
         ArrayLength::Ident(ident) => match ident {
             ident_atom!("MAX_ABILITY_DRAFT_ABILITIES") => Ok(48),

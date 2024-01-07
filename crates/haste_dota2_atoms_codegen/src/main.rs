@@ -22,7 +22,6 @@ fn inner_main(dem_path: &PathBuf, out_path: &PathBuf) -> Result<()> {
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-
     let dem_path = args
         .get(1)
         .map(PathBuf::from)

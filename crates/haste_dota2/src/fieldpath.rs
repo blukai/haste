@@ -481,6 +481,9 @@ fn lookup_exec_op(id: u32, fp: &mut FieldPath, br: &mut BitReader) -> Result<boo
 thread_local! {
     // NOTE: 4096 is an arbitrary value that is large enough that that came out
     // of printing out count of fps collected per "run". (sort -nr can be handy)
+    //
+    // NOTE: swapping RefCell to UnsafeCell doesn't seem to make any difference
+    // (with `let fps = unsafe { &mut *fps.get() }` inside of entities's parse)
     pub(crate) static FIELD_PATHS: RefCell<Vec<FieldPath>> = {
         const SIZE: usize = 4096;
         let mut v = Vec::with_capacity(SIZE);
