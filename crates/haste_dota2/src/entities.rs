@@ -6,7 +6,7 @@ use crate::{
     flattenedserializers::{FlattenedSerializer, FlattenedSerializers},
     instancebaseline::InstanceBaseline,
 };
-use hashbrown::HashMap;
+use hashbrown::{hash_map::Entry, HashMap};
 use nohash::NoHashHasher;
 use std::{hash::BuildHasherDefault, rc::Rc};
 
@@ -128,19 +128,21 @@ impl Entity {
 
 #[derive(Debug)]
 pub struct Entities {
-    // TODO: maybe use Vec<Option<.. or Vec<MaybeUninit<..
-    //
-    // but what if there will be more entities then the capacity&len that will
-    // be pre-determined? some clues about max entry count can be found in
-    // public/const.h (NUM_ENT_ENTRIES); clarity (and possibly manta) specify 1
-    // << 14 as the max count of entries; butterfly uses number 20480.
+    // NOTE: hashbrown hashmap with no hash performs better then Vec.
     entities: HashMap<i32, Entity, BuildHasherDefault<NoHashHasher<i32>>>,
+    baseline_entities: HashMap<i32, Entity, BuildHasherDefault<NoHashHasher<i32>>>,
 }
 
 impl Default for Entities {
     fn default() -> Self {
         Self {
+            // NOTE: clarity (and possibly manta) specify 1 << 14 as the max
+            // count of entries; butterfly uses number 20480.
             entities: HashMap::with_capacity_and_hasher(20480, BuildHasherDefault::default()),
+            baseline_entities: HashMap::with_capacity_and_hasher(
+                1024,
+                BuildHasherDefault::default(),
+            ),
         }
     }
 }
@@ -162,18 +164,22 @@ impl Entities {
         let flattened_serializer =
             unsafe { flattened_serializers.by_name_hash_unckecked(class_info.network_name_hash) };
 
-        let mut entity = Entity {
-            field_values: HashMap::with_capacity_and_hasher(
-                flattened_serializer.fields.len(),
-                BuildHasherDefault::default(),
-            ),
-            flattened_serializer,
+        let mut entity = match self.baseline_entities.entry(class_id) {
+            Entry::Occupied(entry) => entry.get().clone(),
+            Entry::Vacant(e) => {
+                let mut entity = Entity {
+                    field_values: HashMap::with_capacity_and_hasher(
+                        flattened_serializer.fields.len(),
+                        BuildHasherDefault::default(),
+                    ),
+                    flattened_serializer,
+                };
+                let baseline_data = instance_baseline.get_data(class_id).expect("baseline data");
+                let mut baseline_br = BitReader::new(baseline_data.as_ref());
+                entity.parse(&mut baseline_br)?;
+                e.insert(entity).clone()
+            }
         };
-
-        // TODO: maybe it would make sense to cache baseline reads?
-        let baseline_data = instance_baseline.get_data(class_id).expect("baseline data");
-        let mut baseline_br = BitReader::new(baseline_data.as_ref());
-        entity.parse(&mut baseline_br)?;
 
         entity.parse(br)?;
 
