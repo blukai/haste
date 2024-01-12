@@ -1,17 +1,60 @@
-// uniquetypes tool can be used to get a list of unique types that are present
-// in the replay file.
-
+use anyhow::anyhow;
 use haste_dota2::{
-    demofile::DemoFile,
-    dota2_protos::{self, prost::Message, EDemoCommands},
-    varint,
+    dota2_deflat::var_type::{Token, Tokenizer},
+    dota2_protos::EDemoCommands,
+    flattenedserializers::FlattenedSerializers,
+    parser::{ControlFlow, NopVisitor, Parser},
 };
 use std::{
+    collections::HashSet,
     fs::File,
-    io::{BufReader, SeekFrom},
+    io::{BufReader, Read, Seek},
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+// ----
+
+fn parse_to_flattened_serializers<R: Read + Seek>(
+    parser: &mut Parser<R, NopVisitor>,
+) -> Result<()> {
+    parser.reset()?;
+    parser.run(|notnotself, cmd_header| {
+        if notnotself.flattened_serializers().is_some() {
+            return Ok(ControlFlow::Break);
+        }
+        if cmd_header.command == EDemoCommands::DemSendTables {
+            return Ok(ControlFlow::HandleCmd);
+        }
+        Ok(ControlFlow::SkipCmd)
+    })
+}
+
+fn collect_unique_var_types(flattened_serializers: &FlattenedSerializers) -> Vec<String> {
+    let mut tmp: HashSet<String> = HashSet::new();
+    flattened_serializers.values().for_each(|fs| {
+        fs.fields.iter().for_each(|f| {
+            tmp.insert(f.var_type.to_string());
+        });
+    });
+    tmp.into_iter().collect()
+}
+
+fn collect_unique_var_type_idents(flattened_serializers: &FlattenedSerializers) -> Vec<String> {
+    let mut tmp = HashSet::<String>::new();
+    flattened_serializers.values().for_each(|fs| {
+        fs.fields.iter().for_each(|f| {
+            Tokenizer::new(&f.var_type).for_each(|token| {
+                if let Token::Ident(ident) = token {
+                    tmp.insert(ident.to_string());
+                }
+            });
+        });
+    });
+    tmp.into_iter().collect()
+}
+
+// ----
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -24,47 +67,36 @@ fn main() -> Result<()> {
     let file = File::open(filepath.unwrap())?;
     let buf_reader = BufReader::new(file);
 
-    let mut demo_file = DemoFile::from_reader(buf_reader);
-    let _demo_header = demo_file.read_demo_header()?;
+    let mut parser = Parser::from_reader(buf_reader)?;
 
-    loop {
-        let cmd_header = demo_file.read_cmd_header()?;
-        match cmd_header.command {
-            // DemSendTables cmd is sent only once
-            EDemoCommands::DemSendTables => {
-                let flattened_serializer = {
-                    let cmd =
-                        dota2_protos::CDemoSendTables::decode(demo_file.read_cmd(&cmd_header)?)?;
-                    let mut data = &cmd.data.expect("send tables data")[..];
-                    let (_size, _count) = varint::read_uvarint32(&mut data)?;
-                    dota2_protos::CsvcMsgFlattenedSerializer::decode(data)?
-                };
+    // ----
 
-                let mut types = std::collections::HashSet::<String>::new();
+    parse_to_flattened_serializers(&mut parser)?;
+    let flattened_serializers = parser
+        .flattened_serializers()
+        .ok_or_else(|| anyhow!("could not get flattened serializer"))?;
+    eprintln!("----------------");
+    eprintln!("unique var types");
+    eprintln!("----------------");
+    let mut var_types = collect_unique_var_types(&flattened_serializers);
+    var_types.sort();
+    var_types.iter().for_each(|var_type| {
+        eprintln!("{var_type}");
+    });
 
-                for serializer in flattened_serializer.serializers.into_iter() {
-                    for field_index in serializer.fields_index.into_iter() {
-                        let field = &flattened_serializer.fields[field_index as usize];
-                        let resolve =
-                            |v: i32| String::from(&flattened_serializer.symbols[v as usize]);
-                        let var_type = field.var_type_sym.map(resolve).expect("var type");
-                        types.insert(var_type.clone());
-                    }
-                }
+    eprintln!("----------------------");
+    eprintln!("unique var type idents");
+    eprintln!("----------------------");
+    let mut var_type_idents = collect_unique_var_type_idents(&flattened_serializers);
+    var_type_idents.sort();
+    var_type_idents.iter().for_each(|var_type_ident| {
+        eprintln!("{var_type_ident}");
+    });
 
-                let mut types = types.into_iter().collect::<Vec<String>>();
-                types.sort();
-                for typ in types {
-                    println!("{}", typ);
-                }
-
-                break;
-            }
-            _ => {
-                demo_file.seek(SeekFrom::Current(cmd_header.size as i64))?;
-            }
-        }
-    }
+    // ----
 
     Ok(())
 }
+
+// TODO: investigate arena.alloc_from_iter (specifically arena) in rust source
+// code.
