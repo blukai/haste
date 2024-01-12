@@ -1,13 +1,13 @@
 use crate::{
+    dota2_protos::{
+        prost::{self, Message},
+        CDemoSendTables, CsvcMsgFlattenedSerializer, ProtoFlattenedSerializerFieldT,
+        ProtoFlattenedSerializerT,
+    },
     fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialDescriptor},
-    hash, varint,
+    fxhash, varint,
 };
 use hashbrown::{hash_map::Values, HashMap};
-use haste_dota2_protos::{
-    prost::{self, Message},
-    CDemoSendTables, CsvcMsgFlattenedSerializer, ProtoFlattenedSerializerFieldT,
-    ProtoFlattenedSerializerT,
-};
 use nohash::NoHashHasher;
 use std::{hash::BuildHasherDefault, rc::Rc};
 
@@ -73,17 +73,17 @@ impl FlattenedSerializerField {
         let var_type_decl = haste_dota2_deflat::var_type::parse(var_type.as_str());
 
         let var_name = unsafe { resolve_sym_unchecked(field.var_name_sym.unwrap_unchecked()) };
-        let var_name_hash = hash::fx::hash_u8(var_name.as_bytes());
+        let var_name_hash = fxhash::hash_u8(var_name.as_bytes());
 
         let field_serializer_name = field.field_serializer_name_sym.map(resolve_sym);
         let field_serializer_name_hash = field_serializer_name
             .as_ref()
-            .map(|field_serializer_name| hash::fx::hash_u8(field_serializer_name.as_bytes()));
+            .map(|field_serializer_name| fxhash::hash_u8(field_serializer_name.as_bytes()));
 
         let var_encoder = field.var_encoder_sym.map(resolve_sym);
         let var_encoder_hash = var_encoder
             .as_ref()
-            .map(|var_encoder| hash::fx::hash_u8(var_encoder.as_bytes()));
+            .map(|var_encoder| fxhash::hash_u8(var_encoder.as_bytes()));
 
         let mut ret = Self {
             #[cfg(debug_assertions)]
@@ -169,7 +169,7 @@ impl FlattenedSerializer {
             .serializer_name_sym
             .map(resolve_sym)
             .expect("serializer name");
-        let serializer_name_hash = hash::fx::hash_u8(serializer_name.as_bytes());
+        let serializer_name_hash = fxhash::hash_u8(serializer_name.as_bytes());
 
         Ok(Self {
             #[cfg(debug_assertions)]
@@ -268,7 +268,7 @@ impl FlattenedSerializers {
                         Some(FieldSpecialDescriptor::VariableLengthArray) => {
                             field.field_serializer = Some(Rc::new(FlattenedSerializer {
                                 fields: {
-                                    const SIZE: usize = 256;
+                                    const SIZE: usize = 128;
                                     let mut fields = Vec::with_capacity(SIZE);
                                     fields.resize(SIZE, Rc::new(field.clone()));
                                     fields
@@ -289,7 +289,7 @@ impl FlattenedSerializers {
                                         ..Default::default()
                                     };
 
-                                    const SIZE: usize = 256;
+                                    const SIZE: usize = 128;
                                     let mut sub_fields = Vec::with_capacity(SIZE);
                                     sub_fields.resize(SIZE, Rc::new(sub_field));
                                     sub_fields

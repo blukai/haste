@@ -36,14 +36,13 @@ pub const MAX_VARINT64_BYTES: usize = 10;
 // TODO: look into faster ways to decode varints:
 // - https://github.com/as-com/varint-simd
 // - https://github.com/lemire/MaskedVByte
-#[inline(always)]
-fn read_uvarint<const MAX_VARINT_BYTES: usize, R: Read>(rdr: &mut R) -> Result<(u64, usize)> {
+pub fn read_uvarint32<R: Read>(rdr: &mut R) -> Result<(u32, usize)> {
     let mut result = 0;
     let mut buf = [0u8; 1];
-    for count in 0..=MAX_VARINT_BYTES {
+    for count in 0..=MAX_VARINT32_BYTES {
         rdr.read_exact(&mut buf)?;
         let byte = unsafe { *buf.get_unchecked(0) };
-        result |= ((byte & PAYLOAD_BITS) as u64) << (count * 7);
+        result |= ((byte & PAYLOAD_BITS) as u32) << (count * 7);
         if (byte & CONTINUE_BIT) == 0 {
             return Ok((result, count));
         }
@@ -51,10 +50,6 @@ fn read_uvarint<const MAX_VARINT_BYTES: usize, R: Read>(rdr: &mut R) -> Result<(
     // If we get here it means that the fifth bit had its high bit
     // set, which implies corrupt data.
     Err(Error::MalformedVarint)
-}
-
-pub fn read_uvarint32<R: Read>(rdr: &mut R) -> Result<(u32, usize)> {
-    read_uvarint::<{ MAX_VARINT32_BYTES }, _>(rdr).map(|(result, count)| (result as u32, count))
 }
 
 // stolen from csgo public/tier1/bitbuf.h only decoders, encoders aren't here.

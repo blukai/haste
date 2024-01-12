@@ -1,6 +1,6 @@
 use crate::{
     bitbuf::{self, BitReader},
-    hash,
+    fxhash,
 };
 use std::cell::RefCell;
 
@@ -64,7 +64,7 @@ impl FieldPath {
     #[inline(always)]
     pub unsafe fn hash_unchecked(&self) -> u64 {
         let slice: &[u32] = std::mem::transmute(&self.data[..=self.position]);
-        hash::fx::hash_u32(slice)
+        fxhash::hash_u32(slice)
     }
 }
 

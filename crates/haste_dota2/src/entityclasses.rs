@@ -1,5 +1,4 @@
-use crate::hash;
-use haste_dota2_protos::CDemoClassInfo;
+use crate::{dota2_protos::CDemoClassInfo, fxhash};
 
 #[derive(Clone)]
 pub struct ClassInfo {
@@ -24,7 +23,7 @@ impl EntityClasses {
         for class in proto.classes {
             let class_id = class.class_id.expect("class id");
             class_infos[class_id as usize] = Some(ClassInfo {
-                network_name_hash: hash::fx::hash_u8(class.network_name().as_bytes()),
+                network_name_hash: fxhash::hash_u8(class.network_name().as_bytes()),
             });
         }
 

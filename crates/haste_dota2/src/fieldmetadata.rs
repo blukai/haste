@@ -1,12 +1,12 @@
 use crate::{
+    dota2_deflat::var_type::{ident_atom, ArrayLength, Decl, IdentAtom},
     fielddecoder::{
-        self, BoolDecoder, F32Decoder, FieldDecode, I32Decoder, I64Decoder, NopDecoder,
-        QAngleDecoder, QuantizedFloatDecoder, StringDecoder, U32Decoder, U64Decoder, Vec2Decoder,
-        Vec3Decoder, Vec4Decoder,
+        self, BoolDecoder, F32Decoder, FieldDecode, I16Decoder, I32Decoder, I64Decoder, I8Decoder,
+        NopDecoder, QAngleDecoder, QuantizedFloatDecoder, StringDecoder, U16Decoder, U32Decoder,
+        U64Decoder, U8Decoder, Vector2DDecoder, Vector4DDecoder, VectorDecoder,
     },
     flattenedserializers::FlattenedSerializerField,
 };
-use haste_dota2_deflat::var_type::{ident_atom, ArrayLength, Decl, IdentAtom};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -54,7 +54,7 @@ impl Default for FieldMetadata {
 }
 
 #[inline]
-fn handle_ident(ident: IdentAtom, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
+fn visit_ident(ident: IdentAtom, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
     macro_rules! nonspecial {
         ($decoder:expr) => {
             Ok(FieldMetadata {
@@ -67,14 +67,14 @@ fn handle_ident(ident: IdentAtom, field: &FlattenedSerializerField) -> Result<Fi
     match ident {
         // TODO: smaller decoders (8 and 16 bit)
         // ints
-        ident_atom!("int8") => nonspecial!(I32Decoder::default()),
-        ident_atom!("int16") => nonspecial!(I32Decoder::default()),
+        ident_atom!("int8") => nonspecial!(I8Decoder::default()),
+        ident_atom!("int16") => nonspecial!(I16Decoder::default()),
         ident_atom!("int32") => nonspecial!(I32Decoder::default()),
         ident_atom!("int64") => nonspecial!(I64Decoder::default()),
 
         // uints
-        ident_atom!("uint8") => nonspecial!(U32Decoder::default()),
-        ident_atom!("uint16") => nonspecial!(U32Decoder::default()),
+        ident_atom!("uint8") => nonspecial!(U8Decoder::default()),
+        ident_atom!("uint16") => nonspecial!(U16Decoder::default()),
         ident_atom!("uint32") => nonspecial!(U32Decoder::default()),
         ident_atom!("uint64") => nonspecial!(U64Decoder::new(field)),
 
@@ -109,11 +109,11 @@ fn handle_ident(ident: IdentAtom, field: &FlattenedSerializerField) -> Result<Fi
         ident_atom!("GameTime_t") => nonspecial!(F32Decoder::new(field)?),
         ident_atom!("MatchID_t") => nonspecial!(U64Decoder::new(field)),
         // public/mathlib/vector.h
-        ident_atom!("Vector") => nonspecial!(Vec3Decoder::new(field)?),
+        ident_atom!("Vector") => nonspecial!(VectorDecoder::new(field)?),
         // public/mathlib/vector2d.h
-        ident_atom!("Vector2D") => nonspecial!(Vec2Decoder::new(field)?),
+        ident_atom!("Vector2D") => nonspecial!(Vector2DDecoder::new(field)?),
         // public/mathlib/vector4d.h
-        ident_atom!("Vector4D") => nonspecial!(Vec4Decoder::new(field)?),
+        ident_atom!("Vector4D") => nonspecial!(Vector4DDecoder::new(field)?),
         // game/shared/econ/econ_item_constants.h
         ident_atom!("itemid_t") => nonspecial!(U64Decoder::new(field)),
 
@@ -137,7 +137,7 @@ fn handle_ident(ident: IdentAtom, field: &FlattenedSerializerField) -> Result<Fi
 }
 
 #[inline]
-fn handle_template(
+fn visit_template(
     ident: IdentAtom,
     argument: Decl,
     field: &FlattenedSerializerField,
@@ -148,7 +148,7 @@ fn handle_template(
                 special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
                 decoder: Box::new(U32Decoder::default()),
             }),
-            None => handle_any(argument, field).map(|field_metadata| FieldMetadata {
+            None => visit_any(argument, field).map(|field_metadata| FieldMetadata {
                 special_descriptor: Some(FieldSpecialDescriptor::VariableLengthArray),
                 decoder: field_metadata.decoder,
             }),
@@ -161,12 +161,12 @@ fn handle_template(
             special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
             decoder: Box::new(U32Decoder::default()),
         }),
-        _ => handle_ident(ident, field),
+        _ => visit_ident(ident, field),
     }
 }
 
 #[inline]
-fn handle_array(
+fn visit_array(
     decl: Decl,
     length: ArrayLength,
     field: &FlattenedSerializerField,
@@ -182,20 +182,23 @@ fn handle_array(
 
     let length = match length {
         ArrayLength::Ident(ident) => match ident {
+            // NOTE: it seems like this was changed from array to vec, see
+            // https://github.com/SteamDatabase/GameTracking-CS2/blob/6b3bf6ad44266e3ee4440a0b9b2fee1268812840/game/core/tools/demoinfo2/demoinfo2.txt#L160
+            // TODO: test ability draft game
             ident_atom!("MAX_ABILITY_DRAFT_ABILITIES") => Ok(48),
             _ => Err(Error::UnknownArrayLengthIdent(ident.clone())),
         },
         ArrayLength::Number(length) => Ok(length),
     }?;
 
-    handle_any(decl, field).map(|field_metadata| FieldMetadata {
+    visit_any(decl, field).map(|field_metadata| FieldMetadata {
         special_descriptor: Some(FieldSpecialDescriptor::Array { length }),
         decoder: field_metadata.decoder,
     })
 }
 
 #[inline]
-fn handle_pointer() -> FieldMetadata {
+fn visit_pointer() -> FieldMetadata {
     FieldMetadata {
         special_descriptor: Some(FieldSpecialDescriptor::Pointer),
         decoder: Box::new(BoolDecoder::default()),
@@ -203,12 +206,12 @@ fn handle_pointer() -> FieldMetadata {
 }
 
 #[inline]
-fn handle_any(decl: Decl, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
+fn visit_any(decl: Decl, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
     match decl {
-        Decl::Ident(ident) => handle_ident(ident, field),
-        Decl::Template { ident, argument } => handle_template(ident, *argument, field),
-        Decl::Array { decl, length } => handle_array(*decl, length, field),
-        Decl::Pointer(_) => Ok(handle_pointer()),
+        Decl::Ident(ident) => visit_ident(ident, field),
+        Decl::Template { ident, argument } => visit_template(ident, *argument, field),
+        Decl::Array { decl, length } => visit_array(*decl, length, field),
+        Decl::Pointer(_) => Ok(visit_pointer()),
     }
 }
 
@@ -216,7 +219,7 @@ pub fn get_field_metadata(
     var_type_decl: Decl,
     field: &FlattenedSerializerField,
 ) -> Result<FieldMetadata> {
-    handle_any(var_type_decl, field)
+    visit_any(var_type_decl, field)
 }
 
 // NOTE: a lot of values are enums, some were discovered in ocratine thing,

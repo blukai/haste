@@ -99,6 +99,7 @@ impl Entity {
 
                 // eprint!("{} {} ", field.var_name, field.var_type);
 
+                let field_key = unsafe { fp.hash_unchecked() };
                 // NOTE: a shit ton of time was being spent here in a Try trait.
                 // apparently Result is quite expensive xd. here's an artice
                 // that i managed to find that talks more about the Try trait -
@@ -111,7 +112,6 @@ impl Entity {
                 // - map shaved off ~40 ms without sacrafacing error checking, i
                 //   have no idea why, but this is quite impressive at this
                 //   point.
-                let field_key = unsafe { fp.hash_unchecked() };
                 field.metadata.decoder.decode(br).map(|field_value| {
                     // eprintln!(" -> {:?}", &field_value);
                     self.field_values.insert(field_key, field_value);
@@ -181,11 +181,13 @@ impl Entities {
         Ok(unsafe { self.entities.get(&index).unwrap_unchecked() })
     }
 
+    #[inline]
     pub fn handle_delete(&mut self, index: i32) -> Entity {
         // SAFETY: if it's being deleted menas that it was created, riiight?
         unsafe { self.entities.remove(&(index)).unwrap_unchecked() }
     }
 
+    #[inline]
     pub fn handle_update(&mut self, index: i32, br: &mut BitReader) -> Result<&Entity> {
         // SAFETY: if entity was ever created, and not deleted, it can be
         // updated!

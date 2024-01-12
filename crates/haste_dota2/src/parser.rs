@@ -1,16 +1,16 @@
 use crate::{
     bitbuf::BitReader,
     demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_BUFFER_SIZE, DEMO_HEADER_SIZE},
+    dota2_protos::{
+        prost::Message, CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoPacket,
+        CDemoSendTables, CDemoStringTables, CsvcMsgCreateStringTable, CsvcMsgPacketEntities,
+        CsvcMsgUpdateStringTable, EDemoCommands, SvcMessages,
+    },
     entities::{self, Entities},
     entityclasses::EntityClasses,
     flattenedserializers::FlattenedSerializers,
     instancebaseline::{InstanceBaseline, INSTANCE_BASELINE_TABLE_NAME},
     stringtables::StringTableContainer,
-};
-use haste_dota2_protos::{
-    self, prost::Message, CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoPacket,
-    CDemoSendTables, CDemoStringTables, CsvcMsgCreateStringTable, CsvcMsgPacketEntities,
-    CsvcMsgUpdateStringTable, EDemoCommands, SvcMessages,
 };
 use std::io::{Read, Seek, SeekFrom};
 

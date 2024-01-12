@@ -393,16 +393,17 @@ impl<'d> BitReader<'d> {
     //              char*                   ReadAndAllocateString( bool *pOverflow = 0 );
     //              int64                   ReadLongLong( void );
 
-    // NOTE: read_uvarint is simillar to function with the same exact name
-    // withint varint.rs, and yes, it is possible to have only one, BUT
-    // implementing a Read trait for BitReader degrades performance quite
-    // significantly.
-    #[inline(always)]
-    fn read_uvarint<const MAX_VARINT_BYTES: usize>(&mut self) -> Result<u64> {
+    // NOTE: read_uvarint32 and read_uvarint64 are pretty much the same as
+    // read_uvarint32 in haste_common::varint. yes, it is possible to have only
+    // one, BUT implementing a Read trait for BitReader degrades performance
+    // quite significantly.
+
+    //              uint32                  ReadVarInt32();
+    pub fn read_uvarint32(&mut self) -> Result<u32> {
         let mut result = 0;
-        for count in 0..=MAX_VARINT_BYTES {
+        for count in 0..=varint::MAX_VARINT32_BYTES {
             let byte = self.read_byte()?;
-            result |= ((byte & varint::PAYLOAD_BITS) as u64) << (count * 7);
+            result |= ((byte & varint::PAYLOAD_BITS) as u32) << (count * 7);
             if (byte & varint::CONTINUE_BIT) == 0 {
                 return Ok(result);
             }
@@ -410,15 +411,17 @@ impl<'d> BitReader<'d> {
         Err(Error::MalformedVarint)
     }
 
-    //              uint32                  ReadVarInt32();
-    pub fn read_uvarint32(&mut self) -> Result<u32> {
-        self.read_uvarint::<{ varint::MAX_VARINT32_BYTES }>()
-            .map(|result| result as u32)
-    }
-
     //              uint64                  ReadVarInt64();
     pub fn read_uvarint64(&mut self) -> Result<u64> {
-        self.read_uvarint::<{ varint::MAX_VARINT64_BYTES }>()
+        let mut result = 0;
+        for count in 0..=varint::MAX_VARINT64_BYTES {
+            let byte = self.read_byte()?;
+            result |= ((byte & varint::PAYLOAD_BITS) as u64) << (count * 7);
+            if (byte & varint::CONTINUE_BIT) == 0 {
+                return Ok(result);
+            }
+        }
+        Err(Error::MalformedVarint)
     }
 
     //              int32                   ReadSignedVarInt32() { return bitbuf::ZigZagDecode32( ReadVarInt32() ); }
