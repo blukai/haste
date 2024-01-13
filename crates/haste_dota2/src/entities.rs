@@ -6,7 +6,10 @@ use crate::{
     flattenedserializers::{FlattenedSerializer, FlattenedSerializers},
     instancebaseline::InstanceBaseline,
 };
-use hashbrown::{hash_map::Entry, HashMap};
+use hashbrown::{
+    hash_map::{Entry, Values},
+    HashMap,
+};
 use nohash::NoHashHasher;
 use std::{hash::BuildHasherDefault, rc::Rc};
 
@@ -92,9 +95,12 @@ impl Entity {
                 // NOTE: this loop performes much better then the unrolled
                 // version of it, probably because a bunch of ifs cause a bunch
                 // of branch misses and branch missles are disasterous.
-                let mut field = self.flattened_serializer.get_child(fp.get(0));
+                let mut field = unsafe {
+                    self.flattened_serializer
+                        .get_child_unchecked(fp.get_unchecked(0))
+                };
                 for i in 1..=fp.position {
-                    field = field.get_child(fp.get(i));
+                    field = unsafe { field.get_child_unchecked(fp.get_unchecked(i)) };
                 }
 
                 // eprint!("{} {} ", field.var_name, field.var_type);
@@ -127,13 +133,13 @@ impl Entity {
 }
 
 #[derive(Debug)]
-pub struct Entities {
+pub struct EntityContainer {
     // NOTE: hashbrown hashmap with no hash performs better then Vec.
     entities: HashMap<i32, Entity, BuildHasherDefault<NoHashHasher<i32>>>,
     baseline_entities: HashMap<i32, Entity, BuildHasherDefault<NoHashHasher<i32>>>,
 }
 
-impl Default for Entities {
+impl Default for EntityContainer {
     fn default() -> Self {
         Self {
             // NOTE: clarity (and possibly manta) specify 1 << 14 as the max
@@ -147,7 +153,7 @@ impl Default for Entities {
     }
 }
 
-impl Entities {
+impl EntityContainer {
     pub fn handle_create(
         &mut self,
         index: i32,
@@ -160,7 +166,7 @@ impl Entities {
         let _serial = br.read_ubitlong(17)?;
         let _unknown = br.read_uvarint32()?;
 
-        let class_info = entity_classes.get_by_id(class_id).expect("class info");
+        let class_info = unsafe { entity_classes.by_id_unckecked(class_id) };
         let flattened_serializer =
             unsafe { flattened_serializers.by_name_hash_unckecked(class_info.network_name_hash) };
 
@@ -174,7 +180,7 @@ impl Entities {
                     ),
                     flattened_serializer,
                 };
-                let baseline_data = instance_baseline.get_data(class_id).expect("baseline data");
+                let baseline_data = unsafe { instance_baseline.by_id_unchecked(class_id) };
                 let mut baseline_br = BitReader::new(baseline_data.as_ref());
                 entity.parse(&mut baseline_br)?;
                 e.insert(entity).clone()
@@ -184,19 +190,25 @@ impl Entities {
         entity.parse(br)?;
 
         self.entities.insert(index, entity);
+        // SAFETY: the entity was just inserted ^, it's safe.
         Ok(unsafe { self.entities.get(&index).unwrap_unchecked() })
     }
 
+    // SAFETY: if it's being deleted menas that it was created, riiight? but
+    // there's a risk (that only should exist if replay is corrupted).
     #[inline]
-    pub fn handle_delete(&mut self, index: i32) -> Entity {
-        // SAFETY: if it's being deleted menas that it was created, riiight?
+    pub unsafe fn handle_delete_unchecked(&mut self, index: i32) -> Entity {
         unsafe { self.entities.remove(&(index)).unwrap_unchecked() }
     }
 
+    // SAFETY: if entity was ever created, and not deleted, it can be updated!
+    // but there's a risk (that only should exist if replay is corrupted).
     #[inline]
-    pub fn handle_update(&mut self, index: i32, br: &mut BitReader) -> Result<&Entity> {
-        // SAFETY: if entity was ever created, and not deleted, it can be
-        // updated!
+    pub unsafe fn handle_update_unchecked(
+        &mut self,
+        index: i32,
+        br: &mut BitReader,
+    ) -> Result<&Entity> {
         let entity = unsafe { self.entities.get_mut(&index).unwrap_unchecked() };
         entity.parse(br)?;
         Ok(entity)
@@ -206,5 +218,15 @@ impl Entities {
     // capacity.
     pub fn clear(&mut self) {
         self.entities.clear();
+    }
+
+    pub fn is_empty(&self) -> bool {
+        // TODO: should entity_baselines be checked?
+        self.entities.is_empty()
+    }
+
+    #[inline]
+    pub fn values(&self) -> Values<'_, i32, Entity> {
+        self.entities.values()
     }
 }

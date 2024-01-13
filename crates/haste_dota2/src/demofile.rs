@@ -302,7 +302,7 @@ impl<R: Read + Seek> DemoFile<R> {
 
         self.seek(SeekFrom::Start(backup))?;
 
-        Ok(unsafe { self.file_info.as_ref().unwrap_unchecked() })
+        Ok(unsafe { self.file_info_unchecked() })
     }
 
     // NOTE: file_info will call read_file_info if file info have not been read

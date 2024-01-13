@@ -63,9 +63,9 @@ impl<'a, 'tokenizer> DirectedTokenizer<'tokenizer> for ForwardTokenizer<'a, 'tok
             .bytes
             .get(self.0.fwd_pos)
             .map(|b| *b as char)
-            .and_then(|ch| {
+            .map(|ch| {
                 self.bump();
-                Some(ch)
+                ch
             })
     }
 

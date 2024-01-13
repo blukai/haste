@@ -1,6 +1,6 @@
 use super::{parse, ArrayLength, Decl, IdentAtom, Token, Tokenizer};
 
-fn lex<'a>(input: &'a str) -> Vec<Token<'a>> {
+fn lex(input: &str) -> Vec<Token<'_>> {
     Tokenizer::new(input).collect()
 }
 

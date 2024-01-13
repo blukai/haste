@@ -48,14 +48,20 @@ impl Default for FieldMetadata {
     fn default() -> Self {
         Self {
             special_descriptor: None,
-            decoder: Box::new(NopDecoder::default()),
+            decoder: Box::<NopDecoder>::default(),
         }
     }
 }
 
 #[inline]
 fn visit_ident(ident: IdentAtom, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
-    macro_rules! nonspecial {
+    macro_rules! non_special {
+        ($decoder:ident) => {
+            Ok(FieldMetadata {
+                special_descriptor: None,
+                decoder: Box::<$decoder>::default(),
+            })
+        };
         ($decoder:expr) => {
             Ok(FieldMetadata {
                 special_descriptor: None,
@@ -67,71 +73,71 @@ fn visit_ident(ident: IdentAtom, field: &FlattenedSerializerField) -> Result<Fie
     match ident {
         // TODO: smaller decoders (8 and 16 bit)
         // ints
-        ident_atom!("int8") => nonspecial!(I8Decoder::default()),
-        ident_atom!("int16") => nonspecial!(I16Decoder::default()),
-        ident_atom!("int32") => nonspecial!(I32Decoder::default()),
-        ident_atom!("int64") => nonspecial!(I64Decoder::default()),
+        ident_atom!("int8") => non_special!(I8Decoder),
+        ident_atom!("int16") => non_special!(I16Decoder),
+        ident_atom!("int32") => non_special!(I32Decoder),
+        ident_atom!("int64") => non_special!(I64Decoder),
 
         // uints
-        ident_atom!("uint8") => nonspecial!(U8Decoder::default()),
-        ident_atom!("uint16") => nonspecial!(U16Decoder::default()),
-        ident_atom!("uint32") => nonspecial!(U32Decoder::default()),
-        ident_atom!("uint64") => nonspecial!(U64Decoder::new(field)),
+        ident_atom!("uint8") => non_special!(U8Decoder),
+        ident_atom!("uint16") => non_special!(U16Decoder),
+        ident_atom!("uint32") => non_special!(U32Decoder),
+        ident_atom!("uint64") => non_special!(U64Decoder::new(field)),
 
         // other primitives
-        ident_atom!("bool") => nonspecial!(BoolDecoder::default()),
-        ident_atom!("float32") => nonspecial!(F32Decoder::new(field)?),
+        ident_atom!("bool") => non_special!(BoolDecoder),
+        ident_atom!("float32") => non_special!(F32Decoder::new(field)?),
 
         // templates
-        ident_atom!("CHandle") => nonspecial!(U32Decoder::default()),
-        ident_atom!("CStrongHandle") => nonspecial!(U64Decoder::new(field)),
+        ident_atom!("CHandle") => non_special!(U32Decoder),
+        ident_atom!("CStrongHandle") => non_special!(U64Decoder::new(field)),
 
         // pointers (?)
         ident_atom!("CBodyComponent") => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::Pointer),
-            decoder: Box::new(BoolDecoder::default()),
+            decoder: Box::<BoolDecoder>::default(),
         }),
         ident_atom!("CLightComponent") => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::Pointer),
-            decoder: Box::new(BoolDecoder::default()),
+            decoder: Box::<BoolDecoder>::default(),
         }),
         ident_atom!("CRenderComponent") => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::Pointer),
-            decoder: Box::new(BoolDecoder::default()),
+            decoder: Box::<BoolDecoder>::default(),
         }),
 
         // other custom types
-        ident_atom!("CUtlSymbolLarge") => nonspecial!(StringDecoder::default()),
-        ident_atom!("CUtlString") => nonspecial!(StringDecoder::default()),
+        ident_atom!("CUtlSymbolLarge") => non_special!(StringDecoder),
+        ident_atom!("CUtlString") => non_special!(StringDecoder),
         // public/mathlib/vector.h
-        ident_atom!("QAngle") => nonspecial!(QAngleDecoder::new(field)),
-        ident_atom!("CNetworkedQuantizedFloat") => nonspecial!(QuantizedFloatDecoder::new(field)?),
-        ident_atom!("GameTime_t") => nonspecial!(F32Decoder::new(field)?),
-        ident_atom!("MatchID_t") => nonspecial!(U64Decoder::new(field)),
+        ident_atom!("QAngle") => non_special!(QAngleDecoder::new(field)),
+        ident_atom!("CNetworkedQuantizedFloat") => non_special!(QuantizedFloatDecoder::new(field)?),
+        ident_atom!("GameTime_t") => non_special!(F32Decoder::new(field)?),
+        ident_atom!("MatchID_t") => non_special!(U64Decoder::new(field)),
         // public/mathlib/vector.h
-        ident_atom!("Vector") => nonspecial!(VectorDecoder::new(field)?),
+        ident_atom!("Vector") => non_special!(VectorDecoder::new(field)?),
         // public/mathlib/vector2d.h
-        ident_atom!("Vector2D") => nonspecial!(Vector2DDecoder::new(field)?),
+        ident_atom!("Vector2D") => non_special!(Vector2DDecoder::new(field)?),
         // public/mathlib/vector4d.h
-        ident_atom!("Vector4D") => nonspecial!(Vector4DDecoder::new(field)?),
+        ident_atom!("Vector4D") => non_special!(Vector4DDecoder::new(field)?),
         // game/shared/econ/econ_item_constants.h
-        ident_atom!("itemid_t") => nonspecial!(U64Decoder::new(field)),
+        ident_atom!("itemid_t") => non_special!(U64Decoder::new(field)),
 
         // exceptional specials xd
         ident_atom!("m_SpeechBubbles") => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
-            decoder: Box::new(U32Decoder::default()),
+            decoder: Box::<U32Decoder>::default(),
         }),
         // https://github.com/SteamDatabase/GameTracking-CS2/blob/6b3bf6ad44266e3ee4440a0b9b2fee1268812840/game/core/tools/demoinfo2/demoinfo2.txt#L155C83-L155C111
         ident_atom!("DOTA_CombatLogQueryProgress") => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
-            decoder: Box::new(U32Decoder::default()),
+            decoder: Box::<U32Decoder>::default(),
         }),
 
         // ----
         _ => Ok(FieldMetadata {
             special_descriptor: None,
-            decoder: Box::new(U32Decoder::default()),
+            decoder: Box::<U32Decoder>::default(),
         }),
     }
 }
@@ -146,7 +152,7 @@ fn visit_template(
         ident_atom!("CNetworkUtlVectorBase") => match field.field_serializer_name_hash {
             Some(_) => Ok(FieldMetadata {
                 special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
-                decoder: Box::new(U32Decoder::default()),
+                decoder: Box::<U32Decoder>::default(),
             }),
             None => visit_any(argument, field).map(|field_metadata| FieldMetadata {
                 special_descriptor: Some(FieldSpecialDescriptor::VariableLengthArray),
@@ -155,11 +161,11 @@ fn visit_template(
         },
         ident_atom!("CUtlVectorEmbeddedNetworkVar") => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
-            decoder: Box::new(U32Decoder::default()),
+            decoder: Box::<U32Decoder>::default(),
         }),
         ident_atom!("CUtlVector") => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
-            decoder: Box::new(U32Decoder::default()),
+            decoder: Box::<U32Decoder>::default(),
         }),
         _ => visit_ident(ident, field),
     }
@@ -175,7 +181,7 @@ fn visit_array(
         if *ident == ident_atom!("char") {
             return Ok(FieldMetadata {
                 special_descriptor: None,
-                decoder: Box::new(StringDecoder::default()),
+                decoder: Box::<StringDecoder>::default(),
             });
         }
     }
@@ -201,7 +207,7 @@ fn visit_array(
 fn visit_pointer() -> FieldMetadata {
     FieldMetadata {
         special_descriptor: Some(FieldSpecialDescriptor::Pointer),
-        decoder: Box::new(BoolDecoder::default()),
+        decoder: Box::<BoolDecoder>::default(),
     }
 }
 

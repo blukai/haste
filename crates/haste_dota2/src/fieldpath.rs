@@ -55,8 +55,8 @@ impl FieldPath {
     }
 
     #[inline(always)]
-    pub fn get(&self, index: usize) -> usize {
-        unsafe { *self.data.get_unchecked(index) as usize }
+    pub unsafe fn get_unchecked(&self, index: usize) -> usize {
+        *self.data.get_unchecked(index) as usize
     }
 
     // SAFETY: hash_unchecked is safe if replay data is correct. all items of

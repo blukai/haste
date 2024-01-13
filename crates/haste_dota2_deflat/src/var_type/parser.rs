@@ -101,6 +101,6 @@ fn parse_any(rev_iter: &mut Peekable<Rev<Tokenizer>>) -> Decl {
 }
 
 pub fn parse(input: &str) -> Decl {
-    let mut tokens = Tokenizer::new(input).into_iter().rev().peekable();
+    let mut tokens = Tokenizer::new(input).rev().peekable();
     parse_any(&mut tokens)
 }

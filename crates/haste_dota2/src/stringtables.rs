@@ -248,8 +248,7 @@ impl StringTable {
                 .or_insert_with(|| StringTableItem {
                     string: string.map(|src| {
                         let mut dst = Vec::with_capacity(src.len());
-                        unsafe { dst.set_len(src.len()) };
-                        dst.clone_from_slice(src);
+                        dst.extend_from_slice(src);
                         dst
                     }),
                     user_data: user_data.map(|v| v.to_vec()),
@@ -369,6 +368,11 @@ impl StringTableContainer {
         self.tables.get_mut(id)
     }
 
+    #[inline]
+    pub fn has_table(&self, id: usize) -> bool {
+        self.get_table(id).is_some()
+    }
+
     // clear clears underlying storage, but this has no effect on the allocated
     // capacity.
     //
@@ -377,7 +381,6 @@ impl StringTableContainer {
     // memory; - rust's variant would be `clear`.
     //
     // void             RemoveAllTables( void );
-    #[inline]
     pub fn clear(&mut self) {
         self.tables.clear();
     }
@@ -388,7 +391,6 @@ impl StringTableContainer {
     // idiomatic xd - `is_empty` is.
     //
     // int                  GetNumTables( void ) const;
-    #[inline]
     pub fn is_empty(&self) -> bool {
         self.tables.is_empty()
     }
@@ -398,6 +400,7 @@ impl StringTableContainer {
     // void EnableRollback( bool bState );
     // void RestoreTick( int tick );
 
+    // TODO: rename to iter?
     #[inline]
     pub fn tables(&self) -> impl Iterator<Item = &StringTable> {
         self.tables.iter()

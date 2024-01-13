@@ -41,6 +41,7 @@ pub fn read_uvarint32<R: Read>(rdr: &mut R) -> Result<(u32, usize)> {
     let mut buf = [0u8; 1];
     for count in 0..=MAX_VARINT32_BYTES {
         rdr.read_exact(&mut buf)?;
+        // SAFELY: this is completely safe
         let byte = unsafe { *buf.get_unchecked(0) };
         result |= ((byte & PAYLOAD_BITS) as u32) << (count * 7);
         if (byte & CONTINUE_BIT) == 0 {

@@ -6,7 +6,7 @@ use crate::{
         CDemoSendTables, CDemoStringTables, CsvcMsgCreateStringTable, CsvcMsgPacketEntities,
         CsvcMsgUpdateStringTable, EDemoCommands, SvcMessages,
     },
-    entities::{self, Entities},
+    entities::{self, EntityContainer},
     entityclasses::EntityClasses,
     flattenedserializers::FlattenedSerializers,
     instancebaseline::{InstanceBaseline, INSTANCE_BASELINE_TABLE_NAME},
@@ -69,11 +69,8 @@ pub struct Parser<R: Read + Seek, V: Visitor> {
     string_tables: StringTableContainer,
     instance_baseline: InstanceBaseline,
     flattened_serializers: Option<FlattenedSerializers>,
-    // TODO: maybe expose (via "getter") entity classes (string tables and
-    // flattened serializers are exposed, what is the use-case for exposing
-    // entity classes though?)
     entity_classes: Option<EntityClasses>,
-    entities: Entities,
+    entities: EntityContainer,
     tick: i32,
     visitor: V,
 }
@@ -90,7 +87,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             instance_baseline: InstanceBaseline::default(),
             flattened_serializers: None,
             entity_classes: None,
-            entities: Entities::default(),
+            entities: EntityContainer::default(),
             tick: -1,
             visitor,
         })
@@ -131,7 +128,6 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         }
     }
 
-    #[inline]
     pub fn parse_to_end(&mut self) -> Result<()> {
         self.run(|_notnotself, _cmd_header| Ok(ControlFlow::HandleCmd))
     }
@@ -249,7 +245,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 if let Some(string_table) =
                     self.string_tables.find_table(INSTANCE_BASELINE_TABLE_NAME)
                 {
-                    // SAFETY: entity_classes value was assigned right above ^.
+                    // SAFETY: entity_classes value was assigned above ^.
                     let entity_classes = unsafe { self.entity_classes.as_ref().unwrap_unchecked() };
                     self.instance_baseline
                         .update(string_table, entity_classes.classes)?;
@@ -330,11 +326,18 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     }
 
     fn handle_svc_update_string_table(&mut self, msg: CsvcMsgUpdateStringTable) -> Result<()> {
-        let string_table = self
-            .string_tables
-            .get_table_mut(msg.table_id.expect("table id") as usize)
-            // TODO: do not panic
-            .expect("table");
+        debug_assert!(msg.table_id.is_some(), "invalid table id");
+        let table_id = msg.table_id() as usize;
+
+        debug_assert!(
+            self.string_tables.has_table(table_id),
+            "tryting to update non-existent table"
+        );
+        let string_table = unsafe {
+            self.string_tables
+                .get_table_mut(table_id)
+                .unwrap_unchecked()
+        };
         string_table.parse_update(
             &mut BitReader::new(msg.string_data()),
             msg.num_changed_entries(),
@@ -363,11 +366,11 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             unsafe { self.flattened_serializers.as_ref().unwrap_unchecked() };
         let instance_baseline = &self.instance_baseline;
 
-        let entity_data = msg.entity_data.expect("entity data");
-        let mut br = BitReader::new(&entity_data);
+        let entity_data = msg.entity_data();
+        let mut br = BitReader::new(entity_data);
 
         let mut entity_index: i32 = -1;
-        for _ in (0..msg.updated_entries.expect("updated entries")).rev() {
+        for _ in (0..msg.updated_entries()).rev() {
             entity_index += br.read_ubitvar()? as i32 + 1;
 
             let update_flags = parse_delta_header(&mut br)?;
@@ -387,13 +390,16 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 }
                 UpdateType::LeavePVS => {
                     if (update_flags & FHDR_DELETE) != 0 {
-                        let entity = self.entities.handle_delete(entity_index);
+                        let entity = unsafe { self.entities.handle_delete_unchecked(entity_index) };
                         self.visitor
                             .visit_entity(update_flags, update_type, &entity)?;
                     }
                 }
                 UpdateType::DeltaEnt => {
-                    let entity = self.entities.handle_update(entity_index, &mut br)?;
+                    let entity = unsafe {
+                        self.entities
+                            .handle_update_unchecked(entity_index, &mut br)?
+                    };
                     self.visitor
                         .visit_entity(update_flags, update_type, entity)?;
                 }
@@ -481,6 +487,15 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     #[inline]
     pub fn flattened_serializers(&self) -> Option<&FlattenedSerializers> {
         self.flattened_serializers.as_ref()
+    }
+
+    #[inline]
+    pub fn entities(&self) -> Option<&EntityContainer> {
+        if self.entities.is_empty() {
+            None
+        } else {
+            Some(&self.entities)
+        }
     }
 }
 

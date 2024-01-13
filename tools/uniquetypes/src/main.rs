@@ -78,7 +78,7 @@ fn main() -> Result<()> {
     eprintln!("----------------");
     eprintln!("unique var types");
     eprintln!("----------------");
-    let mut var_types = collect_unique_var_types(&flattened_serializers);
+    let mut var_types = collect_unique_var_types(flattened_serializers);
     var_types.sort();
     var_types.iter().for_each(|var_type| {
         eprintln!("{var_type}");
@@ -87,7 +87,7 @@ fn main() -> Result<()> {
     eprintln!("----------------------");
     eprintln!("unique var type idents");
     eprintln!("----------------------");
-    let mut var_type_idents = collect_unique_var_type_idents(&flattened_serializers);
+    let mut var_type_idents = collect_unique_var_type_idents(flattened_serializers);
     var_type_idents.sort();
     var_type_idents.iter().for_each(|var_type_ident| {
         eprintln!("{var_type_ident}");

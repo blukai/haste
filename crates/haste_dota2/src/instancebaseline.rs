@@ -24,6 +24,9 @@ impl InstanceBaseline {
         }
 
         for (_entity_index, item) in string_table.items() {
+            // SAFETY: in normal circumbstances this is safe; it is expected for
+            // instancebaseline's string to be convertable to number, if it
+            // cannot be converted to number - fail loudly!
             let string =
                 unsafe { std::str::from_utf8_unchecked(item.string.as_ref().unwrap_unchecked()) };
             let class_id = string.parse::<i32>()?;
@@ -33,13 +36,17 @@ impl InstanceBaseline {
     }
 
     #[inline]
-    pub fn get_data(&self, class_id: i32) -> Option<&Vec<u8>> {
-        unsafe { self.data.get_unchecked(class_id as usize) }.as_ref()
+    pub unsafe fn by_id_unchecked(&self, class_id: i32) -> &Vec<u8> {
+        unsafe {
+            self.data
+                .get_unchecked(class_id as usize)
+                .as_ref()
+                .unwrap_unchecked()
+        }
     }
 
     // clear clears underlying storage, but this has no effect on the allocated
     // capacity.
-    #[inline]
     pub fn clear(&mut self) {
         self.data.clear();
     }

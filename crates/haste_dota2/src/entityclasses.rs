@@ -8,34 +8,39 @@ pub struct ClassInfo {
 pub struct EntityClasses {
     pub classes: usize,
     pub bits: usize,
-    class_infos: Vec<Option<ClassInfo>>,
+    class_infos: Vec<ClassInfo>,
 }
 
 impl EntityClasses {
-    pub fn parse(proto: CDemoClassInfo) -> Self {
-        let classes = proto.classes.len();
+    pub fn parse(cmd: CDemoClassInfo) -> Self {
+        let class_count = cmd.classes.len();
 
         // bits is the number of bits to read for entity classes. stolen from
         // butterfly's entity_classes.hpp.
-        let bits = (classes as f32).log2().ceil() as usize;
+        let bits = (class_count as f32).log2().ceil() as usize;
 
-        let mut class_infos = vec![None; classes];
-        for class in proto.classes {
-            let class_id = class.class_id.expect("class id");
-            class_infos[class_id as usize] = Some(ClassInfo {
-                network_name_hash: fxhash::hash_u8(class.network_name().as_bytes()),
-            });
-        }
+        let class_infos: Vec<ClassInfo> = cmd
+            .classes
+            .iter()
+            .enumerate()
+            .map(|(i, class)| {
+                let class_id = class.class_id() as usize;
+                debug_assert_eq!(class_id, i + 1, "invliad class id");
+                ClassInfo {
+                    network_name_hash: fxhash::hash_u8(class.network_name().as_bytes()),
+                }
+            })
+            .collect();
 
         Self {
-            classes,
+            classes: class_count,
             bits,
             class_infos,
         }
     }
 
     #[inline(always)]
-    pub fn get_by_id(&self, id: i32) -> Option<&ClassInfo> {
-        unsafe { self.class_infos.get_unchecked(id as usize).as_ref() }
+    pub unsafe fn by_id_unckecked(&self, class_id: i32) -> &ClassInfo {
+        self.class_infos.get_unchecked(class_id as usize)
     }
 }

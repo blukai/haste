@@ -151,6 +151,8 @@ impl<'d> BitReader<'d> {
 
         // Read the current dword.
         let dw1_offset = self.curr_bit >> 5;
+        // TODO: slap debug asserts on top of get_unchecked or actually perform
+        // checks, or maybe introduce _unchecked variants of functions.
         let mut dw1 = unsafe { *self.data.get_unchecked(dw1_offset) };
 
         dw1 >>= self.curr_bit & 31; // Get the bits we're interested in.

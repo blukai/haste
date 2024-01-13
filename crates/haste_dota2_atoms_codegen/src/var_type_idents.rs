@@ -8,7 +8,7 @@ use haste_dota2::{
 use std::{
     collections::HashSet,
     io::{Read, Seek},
-    path::PathBuf,
+    path::Path,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -42,7 +42,7 @@ fn collect_unique_var_type_idents(flattened_serializers: &FlattenedSerializers) 
     tmp.into_iter().collect()
 }
 
-pub fn build<R: Read + Seek>(parser: &mut Parser<R, NopVisitor>, out_path: &PathBuf) -> Result<()> {
+pub fn build<R: Read + Seek>(parser: &mut Parser<R, NopVisitor>, out_path: &Path) -> Result<()> {
     parse_to_flattened_serializers(parser)?;
     let flattened_serializers = parser
         .flattened_serializers()

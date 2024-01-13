@@ -1,4 +1,8 @@
 #![feature(core_intrinsics)]
+#![feature(maybe_uninit_uninit_array)]
+#![deny(clippy::unwrap_used)]
+#![deny(clippy::expect_used)]
+#![deny(clippy::panic)]
 
 // own crate re-exports
 pub use haste_common::bitbuf;
@@ -49,3 +53,5 @@ pub mod stringtables;
 // comparisons are expensive. valve mostly uses CUtlStringToken which computes a
 // hash and uses it for comparisons, it discards the string - this is nice. see
 // public/tier1/utlstringtoken.h
+
+// TODO: figure out combat log

@@ -66,13 +66,25 @@ impl FlattenedSerializerField {
         msg: &CsvcMsgFlattenedSerializer,
         field: &ProtoFlattenedSerializerFieldT,
     ) -> Result<Self> {
+        // SAFETY: some symbols are cricual, if they don't exist - fail early
+        // and loudly.
         let resolve_sym_unchecked = |i: i32| unsafe { msg.symbols.get_unchecked(i as usize) };
         let resolve_sym = |v: i32| &msg.symbols[v as usize];
 
-        let var_type = unsafe { resolve_sym_unchecked(field.var_type_sym.unwrap_unchecked()) };
+        let var_type = unsafe {
+            field
+                .var_type_sym
+                .map(resolve_sym_unchecked)
+                .unwrap_unchecked()
+        };
         let var_type_decl = haste_dota2_deflat::var_type::parse(var_type.as_str());
 
-        let var_name = unsafe { resolve_sym_unchecked(field.var_name_sym.unwrap_unchecked()) };
+        let var_name = unsafe {
+            field
+                .var_name_sym
+                .map(resolve_sym_unchecked)
+                .unwrap_unchecked()
+        };
         let var_name_hash = fxhash::hash_u8(var_name.as_bytes());
 
         let field_serializer_name = field.field_serializer_name_sym.map(resolve_sym);
@@ -113,29 +125,18 @@ impl FlattenedSerializerField {
         Ok(ret)
     }
 
-    #[cfg(debug_assertions)]
     #[inline(always)]
-    pub fn get_child(&self, index: usize) -> &Self {
-        self.field_serializer
-            .as_ref()
-            .unwrap_or_else(|| {
-                panic!(
-                    "expected field serializer to be present in field of type {:?}",
-                    self.var_type
-                )
-            })
-            .get_child(index)
-    }
+    pub unsafe fn get_child_unchecked(&self, index: usize) -> &Self {
+        let fs = self.field_serializer.as_ref();
 
-    #[cfg(not(debug_assertions))]
-    #[inline(always)]
-    pub fn get_child(&self, index: usize) -> &Self {
-        unsafe {
-            self.field_serializer
-                .as_ref()
-                .unwrap_unchecked()
-                .get_child(index)
-        }
+        #[cfg(debug_assertions)]
+        debug_assert!(
+            fs.is_some(),
+            "expected field serializer to be present in field of type {:?}",
+            self.var_type
+        );
+
+        fs.unwrap_unchecked().get_child_unchecked(index)
     }
 
     #[inline(always)]
@@ -160,20 +161,20 @@ pub struct FlattenedSerializer {
 
 impl FlattenedSerializer {
     fn new(msg: &CsvcMsgFlattenedSerializer, fs: &ProtoFlattenedSerializerT) -> Result<Self> {
-        #[cfg(debug_assertions)]
-        let resolve_sym = |v: i32| msg.symbols[v as usize].clone().into_boxed_str();
-        #[cfg(not(debug_assertions))]
-        let resolve_sym = |v: i32| msg.symbols[v as usize].as_str();
+        // SAFETY: some symbols are cricual, if they don't exist - fail early
+        // and loudly.
+        let resolve_sym_unchecked = |i: i32| unsafe { msg.symbols.get_unchecked(i as usize) };
 
-        let serializer_name = fs
-            .serializer_name_sym
-            .map(resolve_sym)
-            .expect("serializer name");
+        let serializer_name = unsafe {
+            fs.serializer_name_sym
+                .map(resolve_sym_unchecked)
+                .unwrap_unchecked()
+        };
         let serializer_name_hash = fxhash::hash_u8(serializer_name.as_bytes());
 
         Ok(Self {
             #[cfg(debug_assertions)]
-            serializer_name,
+            serializer_name: serializer_name.clone().into_boxed_str(),
             serializer_name_hash,
 
             serializer_version: fs.serializer_version,
@@ -181,21 +182,17 @@ impl FlattenedSerializer {
         })
     }
 
-    #[cfg(debug_assertions)]
     #[inline(always)]
-    pub fn get_child(&self, index: usize) -> &FlattenedSerializerField {
-        self.fields.get(index).unwrap_or_else(|| {
-            panic!(
-                "expected field to be at index {} in {}",
-                index, self.serializer_name
-            )
-        })
-    }
+    pub unsafe fn get_child_unchecked(&self, index: usize) -> &FlattenedSerializerField {
+        #[cfg(debug_assertions)]
+        debug_assert!(
+            self.fields.get(index).is_some(),
+            "expected field to be at index {} in {}",
+            index,
+            self.serializer_name
+        );
 
-    #[cfg(not(debug_assertions))]
-    #[inline(always)]
-    pub fn get_child(&self, index: usize) -> &FlattenedSerializerField {
-        unsafe { self.fields.get_unchecked(index) }
+        self.fields.get_unchecked(index)
     }
 }
 
@@ -210,7 +207,10 @@ impl FlattenedSerializers {
     pub fn parse(cmd: CDemoSendTables) -> Result<Self> {
         let msg = {
             // TODO: make prost work with ByteString and turn data into Bytes
-            let mut data = &cmd.data.expect("send tables data")[..];
+            //
+            // NOTE: calling unwrap_or_default is for some reason faster then
+            // relying on prost's default unwrapping by calling .data().
+            let mut data = &cmd.data.unwrap_or_default()[..];
             // NOTE: count is useless because read_uvarint32 will "consume"
             // bytes that it'll read from data; size is useless because data
             // supposedly contains only one message.
@@ -336,6 +336,7 @@ impl FlattenedSerializers {
             .unwrap_unchecked()
     }
 
+    #[inline]
     pub fn values(&self) -> Values<'_, u64, Rc<FlattenedSerializer>> {
         self.serializer_map.values()
     }

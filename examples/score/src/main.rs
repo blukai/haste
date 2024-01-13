@@ -48,10 +48,7 @@ impl Visitor for MyVisitor {
             let team_num_key = get_field_key(entity, &["m_iTeamNum"]);
             if let Some(team_num_key) = team_num_key {
                 let team_num = entity.field_values.get(&team_num_key);
-                if team_num.is_some_and(|team_num| match team_num {
-                    FieldValue::U8(team_num) if *team_num == 2 || *team_num == 3 => true,
-                    _ => false,
-                }) {
+                if team_num.is_some_and(|team_num| matches!(team_num, FieldValue::U8(team_num) if *team_num == 2 || *team_num == 3)) {
                     let hero_kills_key = get_field_key(entity, &["m_iHeroKills"]);
                     if let Some(hero_kills_key) = hero_kills_key {
                         let hero_kills = entity.field_values.get(&hero_kills_key);
