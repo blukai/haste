@@ -5,9 +5,11 @@ use crate::{
 use hashbrown::HashMap;
 use nohash::NoHashHasher;
 use std::{
+    cell::UnsafeCell,
     hash::BuildHasherDefault,
     intrinsics::{likely, unlikely},
     mem::MaybeUninit,
+    rc::Rc,
 };
 
 // NOTE: some info about string tables is available at
@@ -56,7 +58,7 @@ const MAX_USERDATA_SIZE: usize = 1 << MAX_USERDATA_BITS;
 #[derive(Debug)]
 pub struct StringTableItem {
     pub string: Option<Vec<u8>>,
-    pub user_data: Option<Vec<u8>>,
+    pub user_data: Option<Rc<UnsafeCell<Vec<u8>>>>,
 }
 
 #[derive(Debug)]
@@ -236,13 +238,14 @@ impl StringTable {
             self.items
                 .entry(entry_index)
                 .and_modify(|entry| {
-                    if let Some(dst) = entry.user_data.as_mut() {
+                    if let Some(dst_container) = entry.user_data.as_ref() {
                         if let Some(src) = user_data {
+                            let dst = unsafe { dst_container.get().as_mut().unwrap_unchecked() };
                             dst.resize(src.len(), 0);
                             dst.clone_from_slice(src);
                         }
                     } else {
-                        entry.user_data = user_data.map(|v| v.to_vec());
+                        entry.user_data = user_data.map(|v| Rc::new(UnsafeCell::new(v.to_vec())));
                     }
                 })
                 .or_insert_with(|| StringTableItem {
@@ -251,7 +254,7 @@ impl StringTable {
                         dst.extend_from_slice(src);
                         dst
                     }),
-                    user_data: user_data.map(|v| v.to_vec()),
+                    user_data: user_data.map(|v| Rc::new(UnsafeCell::new(v.to_vec()))),
                 });
         }
 
@@ -273,10 +276,18 @@ impl StringTable {
         for (i, incoming) in table.items.iter().enumerate() {
             self.items
                 .entry(i as i32)
-                .and_modify(|existing| existing.user_data = incoming.data.clone())
+                .and_modify(|existing| {
+                    existing.user_data = incoming
+                        .data
+                        .as_ref()
+                        .map(|data| Rc::new(UnsafeCell::new(data.clone())))
+                })
                 .or_insert_with(|| StringTableItem {
                     string: incoming.str.as_ref().map(|v| v.as_bytes().to_vec()),
-                    user_data: incoming.data.clone(),
+                    user_data: incoming
+                        .data
+                        .as_ref()
+                        .map(|data| Rc::new(UnsafeCell::new(data.clone()))),
                 });
         }
     }

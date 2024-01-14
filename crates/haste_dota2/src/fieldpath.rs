@@ -2,7 +2,7 @@ use crate::{
     bitbuf::{self, BitReader},
     fxhash,
 };
-use std::cell::RefCell;
+use std::cell::UnsafeCell;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -484,11 +484,11 @@ thread_local! {
     //
     // NOTE: swapping RefCell to UnsafeCell doesn't seem to make any difference
     // (with `let fps = unsafe { &mut *fps.get() }` inside of entities's parse)
-    pub(crate) static FIELD_PATHS: RefCell<Vec<FieldPath>> = {
+    pub(crate) static FIELD_PATHS: UnsafeCell<Vec<FieldPath>> = {
         const SIZE: usize = 4096;
         let mut v = Vec::with_capacity(SIZE);
         unsafe { v.set_len(SIZE) };
-        RefCell::new(v)
+        UnsafeCell::new(v)
     };
 }
 

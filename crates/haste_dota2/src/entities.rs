@@ -87,7 +87,7 @@ impl Entity {
         // eprintln!("-- {}", self.flattened_serializer.serializer_name);
 
         fieldpath::FIELD_PATHS.with(|fps| {
-            let mut fps = fps.borrow_mut();
+            let mut fps = unsafe { &mut *fps.get() };
             let fps = fieldpath::read_field_paths(br, &mut fps)?;
             for fp in fps {
                 // eprint!("{:?} ", &fp.data[..=fp.position],);

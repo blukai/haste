@@ -1,4 +1,5 @@
 use crate::stringtables::StringTable;
+use std::{cell::UnsafeCell, rc::Rc};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -14,7 +15,7 @@ pub const INSTANCE_BASELINE_TABLE_NAME: &str = "instancebaseline";
 #[derive(Default)]
 pub struct InstanceBaseline {
     // TODO: ref into StringTables instead of cloning
-    data: Vec<Option<Vec<u8>>>,
+    data: Vec<Option<Rc<UnsafeCell<Vec<u8>>>>>,
 }
 
 impl InstanceBaseline {
@@ -36,12 +37,14 @@ impl InstanceBaseline {
     }
 
     #[inline]
-    pub unsafe fn by_id_unchecked(&self, class_id: i32) -> &Vec<u8> {
+    pub unsafe fn by_id_unchecked(&self, class_id: i32) -> &[u8] {
         unsafe {
-            self.data
+            &*self
+                .data
                 .get_unchecked(class_id as usize)
                 .as_ref()
                 .unwrap_unchecked()
+                .get()
         }
     }
 

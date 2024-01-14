@@ -237,11 +237,11 @@ impl FlattenedSerializers {
                 let field = if fields.contains_key(field_index) {
                     // SAFETY: we already know that hashmap has the key!
                     let field = unsafe { fields.get(field_index).unwrap_unchecked() };
-                    // NOTE: it is more efficient to clone outself instead of
+                    // NOTE: it is more efficient to clone outside instead of
                     // using .clonned() because we're doing unsafe unwrap which
-                    // removes the branch, but .clonned() used match under the
+                    // removes the branch, but .clonned() uses match under the
                     // hood which adds a branch!
-                    field.clone()
+                    Rc::clone(field)
                 } else {
                     let mut field =
                         FlattenedSerializerField::new(&msg, &msg.fields[*field_index as usize])?;
@@ -301,8 +301,7 @@ impl FlattenedSerializers {
                     }
 
                     let field = Rc::new(field);
-                    // NOTE: not field is being clonned, but rc!
-                    let ret = field.clone();
+                    let ret = Rc::clone(&field);
                     fields.insert(*field_index, field);
                     ret
                 };
