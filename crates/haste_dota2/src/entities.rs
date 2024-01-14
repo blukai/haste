@@ -4,6 +4,7 @@ use crate::{
     fielddecoder, fieldpath,
     fieldvalue::FieldValue,
     flattenedserializers::{FlattenedSerializer, FlattenedSerializers},
+    fxhash,
     instancebaseline::InstanceBaseline,
 };
 use hashbrown::{
@@ -76,6 +77,7 @@ pub fn determine_update_type(update_flags: usize) -> UpdateType {
     }
 }
 
+// TODO: do not publicly expose Entity's fields
 #[derive(Debug, Clone)]
 pub struct Entity {
     pub field_values: HashMap<u64, FieldValue, BuildHasherDefault<NoHashHasher<u64>>>,
@@ -99,13 +101,15 @@ impl Entity {
                     self.flattened_serializer
                         .get_child_unchecked(fp.get_unchecked(0))
                 };
+                let mut field_key_hasher = fxhash::Hasher::new_with_seed(field.var_name_hash);
                 for i in 1..=fp.position {
                     field = unsafe { field.get_child_unchecked(fp.get_unchecked(i)) };
+                    field_key_hasher.write_u64(field.var_name_hash);
                 }
+                let field_key = field_key_hasher.finish();
 
                 // eprint!("{} {} ", field.var_name, field.var_type);
 
-                let field_key = unsafe { fp.hash_unchecked() };
                 // NOTE: a shit ton of time was being spent here in a Try trait.
                 // apparently Result is quite expensive xd. here's an artice
                 // that i managed to find that talks more about the Try trait -
@@ -129,6 +133,10 @@ impl Entity {
 
             Ok(())
         })
+    }
+
+    pub fn get_field_value(&self, field_key: u64) -> Option<&FieldValue> {
+        self.field_values.get(&field_key)
     }
 }
 
@@ -229,4 +237,17 @@ impl EntityContainer {
     pub fn values(&self) -> Values<'_, i32, Entity> {
         self.entities.values()
     }
+}
+
+// ----
+
+pub fn make_field_key(path: &[&str]) -> u64 {
+    assert!(path.len() > 0, "invalud path");
+    let first = fxhash::hash_u8(unsafe { path.get_unchecked(0).as_bytes() });
+    let mut hasher = fxhash::Hasher::new_with_seed(first);
+    for i in 1..path.len() {
+        let part = fxhash::hash_u8(unsafe { path.get_unchecked(i).as_bytes() });
+        hasher.write_u64(part);
+    }
+    hasher.finish()
 }

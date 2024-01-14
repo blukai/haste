@@ -19,6 +19,10 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+// TODO: get rid of trait objects; find a better, more efficient, way to
+// "attach" decoders to fields; but note that having separate decoding functions
+// and attaching function "pointers" to fields is even worse.
+
 // NOTE: PropTypeFns is what you are looking for, it has all the encoders,
 // decoders, proxies and all of the stuff.
 

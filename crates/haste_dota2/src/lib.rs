@@ -15,13 +15,16 @@ pub use haste_dota2_protos as dota2_protos;
 pub mod demofile;
 pub mod entities;
 pub mod entityclasses;
+// TODO: try to not publicly expose fielddecoder
 pub mod fielddecoder;
+// TODO: try to not publicly expose fieldmetadata
 pub mod fieldmetadata;
-pub mod fieldpath;
+pub(crate) mod fieldpath;
 pub mod fieldvalue;
 pub mod flattenedserializers;
 pub mod instancebaseline;
 pub mod parser;
+// TODO: try to not publicly expose quantizedfloat
 pub mod quantizedfloat;
 pub mod stringtables;
 

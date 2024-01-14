@@ -57,24 +57,64 @@
 const GOLDEN_RATIO: u64 = 0x517cc1b727220a95;
 const ROTATION_LENGTH: u32 = 5;
 
-macro_rules! impl_fn {
-    ($type:ty, $name:ident) => {
-        #[inline(always)]
-        pub const fn $name(values: &[$type]) -> u64 {
-            let mut hash: u64 = 0;
-            // NOTE: while is used because for loops and ranges don't work in
-            // const fns.
-            // TODO: try to use for loop (like in read_uvarint32)
-            let mut i = 0;
-            while i < values.len() {
-                hash = (hash.rotate_left(ROTATION_LENGTH) ^ values[i] as u64)
-                    .wrapping_mul(GOLDEN_RATIO);
-                i += 1;
-            }
-            hash
-        }
-    };
+// NOTE: FxHasher mimics std::hash::Hasher, but it does not directly implement
+// the std::hash::Hasher trait because traits do not support const fns.
+#[repr(transparent)]
+pub struct Hasher {
+    state: u64,
 }
 
-impl_fn!(u8, hash_u8);
-impl_fn!(u32, hash_u32);
+impl Hasher {
+    #[inline(always)]
+    pub const fn default() -> Self {
+        Self { state: 0 }
+    }
+
+    #[inline(always)]
+    pub const fn new_with_seed(seed: u64) -> Self {
+        Self { state: seed }
+    }
+
+    #[inline(always)]
+    pub const fn finish(&self) -> u64 {
+        self.state
+    }
+
+    // fn write(&mut self, bytes: &[u8]);
+
+    // ----
+
+    // fn write_u8(&mut self, i: u8) { ... }
+    // fn write_u16(&mut self, i: u16) { ... }
+    // fn write_u32(&mut self, i: u32) { ... }
+
+    #[inline(always)]
+    pub const fn write_u64(&mut self, i: u64) {
+        self.state = (self.state.rotate_left(ROTATION_LENGTH) ^ i).wrapping_mul(GOLDEN_RATIO);
+    }
+
+    // fn write_u128(&mut self, i: u128) { ... }
+    // fn write_usize(&mut self, i: usize) { ... }
+    // fn write_i8(&mut self, i: i8) { ... }
+    // fn write_i16(&mut self, i: i16) { ... }
+    // fn write_i32(&mut self, i: i32) { ... }
+    // fn write_i64(&mut self, i: i64) { ... }
+    // fn write_i128(&mut self, i: i128) { ... }
+    // fn write_isize(&mut self, i: isize) { ... }
+    // fn write_length_prefix(&mut self, len: usize) { ... }
+    // fn write_str(&mut self, s: &str) { ... }
+}
+
+// ----
+
+#[inline(always)]
+pub const fn hash_u8(values: &[u8]) -> u64 {
+    let mut hasher = Hasher::default();
+    // NOTE: while is used because for loops and ranges don't work in const fns.
+    let mut i = 0;
+    while i < values.len() {
+        hasher.write_u64(values[i] as u64);
+        i += 1;
+    }
+    hasher.finish()
+}

@@ -1,7 +1,4 @@
-use crate::{
-    bitbuf::{self, BitReader},
-    fxhash,
-};
+use crate::bitbuf::{self, BitReader};
 use std::cell::UnsafeCell;
 
 #[derive(thiserror::Error, Debug)]
@@ -16,16 +13,17 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub const FIELD_PATH_DATA_SIZE: usize = 7;
-
-// TODO: FieldPath should be just data with hash method; current field path
-// should become FieldPathReader or decoder or something like that..
+// TODO: try clarity's field path format (encode all components into u64); see
+// src/main/java/skadistats/clarity/model/s2/S2LongFieldPathFormat.java for
+// implementation and
+// https://github.com/skadistats/clarity/commit/212eaddf7dc8b716c22faaec37952236f521a804#commitcomment-86037653
+// for a technical exmplanation.
 
 #[derive(Debug, Clone)]
-pub struct FieldPath {
-    pub data: [i32; FIELD_PATH_DATA_SIZE],
-    pub position: usize,
-    pub finished: bool,
+pub(crate) struct FieldPath {
+    data: [i32; 7],
+    pub(crate) position: usize,
+    finished: bool,
 }
 
 impl Default for FieldPath {
@@ -54,17 +52,11 @@ impl FieldPath {
         }
     }
 
-    #[inline(always)]
-    pub unsafe fn get_unchecked(&self, index: usize) -> usize {
-        *self.data.get_unchecked(index) as usize
-    }
+    // ----
 
-    // SAFETY: hash_unchecked is safe if replay data is correct. all items of
-    // data array never go below 0 or beyond 255.
     #[inline(always)]
-    pub unsafe fn hash_unchecked(&self) -> u64 {
-        let slice: &[u32] = std::mem::transmute(&self.data[..=self.position]);
-        fxhash::hash_u32(slice)
+    pub(crate) unsafe fn get_unchecked(&self, index: usize) -> usize {
+        *self.data.get_unchecked(index) as usize
     }
 }
 
@@ -294,9 +286,9 @@ fn push_n(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
     Ok(())
 }
 
-// PushNAndNonTopological
+// PushNAndNonTopographical
 #[inline(always)]
-fn push_n_and_non_topological(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
+fn push_n_and_non_topographical(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
     for i in 0..=fp.position {
         if br.read_bool()? {
             fp.data[i] += br.read_varint32()? + 1;
@@ -396,9 +388,9 @@ fn non_topo_complex(fp: &mut FieldPath, br: &mut BitReader) -> Result<()> {
     Ok(())
 }
 
-// NonTopoPenultimatePlusOne
+// NonTopoPenultimatePluseOne
 #[inline(always)]
-fn non_topo_penultimate_plus_one(fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
+fn non_topo_penultimate_pluse_one(fp: &mut FieldPath, _br: &mut BitReader) -> Result<()> {
     fp.data[fp.position - 1] += 1;
     Ok(())
 }
@@ -447,9 +439,9 @@ fn lookup_exec_op(id: u32, fp: &mut FieldPath, br: &mut BitReader) -> Result<boo
         223 => plus_four(fp, br)?,
         432 => pop_all_but_one_plus_n(fp, br)?,
         438 => push_one_left_delta_n_right_non_zero_pack8_bits(fp, br)?,
-        439 => non_topo_penultimate_plus_one(fp, br)?,
+        439 => non_topo_penultimate_pluse_one(fp, br)?,
         442 => pop_all_but_one_plus_n_pack3_bits(fp, br)?,
-        443 => push_n_and_non_topological(fp, br)?,
+        443 => push_n_and_non_topographical(fp, br)?,
         866 => non_topo_complex_pack4_bits(fp, br)?,
         1735 => non_topo_complex(fp, br)?,
         3469 => push_one_left_delta_zero_right_zero(fp, br)?,

@@ -268,7 +268,7 @@ impl FlattenedSerializers {
                         Some(FieldSpecialDescriptor::VariableLengthArray) => {
                             field.field_serializer = Some(Rc::new(FlattenedSerializer {
                                 fields: {
-                                    const SIZE: usize = 128;
+                                    const SIZE: usize = 100;
                                     let mut fields = Vec::with_capacity(SIZE);
                                     fields.resize(SIZE, Rc::new(field.clone()));
                                     fields
@@ -289,7 +289,7 @@ impl FlattenedSerializers {
                                         ..Default::default()
                                     };
 
-                                    const SIZE: usize = 128;
+                                    const SIZE: usize = 100;
                                     let mut sub_fields = Vec::with_capacity(SIZE);
                                     sub_fields.resize(SIZE, Rc::new(sub_field));
                                     sub_fields
