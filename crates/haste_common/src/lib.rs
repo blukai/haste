@@ -1,6 +1,6 @@
 #![feature(core_intrinsics)]
+#![feature(const_mut_refs)]
 
 pub mod bitbuf;
-pub mod fnv1ahash;
 pub mod fxhash;
 pub mod varint;
