@@ -1,5 +1,6 @@
 #![feature(core_intrinsics)]
 #![feature(maybe_uninit_uninit_array)]
+#![feature(const_mut_refs)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
@@ -58,3 +59,5 @@ pub mod stringtables;
 // public/tier1/utlstringtoken.h
 
 // TODO: figure out combat log
+
+// TODO: wasm! make this whole thing run in a browser

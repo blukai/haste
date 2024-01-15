@@ -237,17 +237,21 @@ impl EntityContainer {
     pub fn values(&self) -> Values<'_, i32, Entity> {
         self.entities.values()
     }
+
+    // TODO: introduce something like get_entity method
 }
 
 // ----
 
-pub fn make_field_key(path: &[&str]) -> u64 {
-    assert!(path.len() > 0, "invalud path");
-    let first = fxhash::hash_u8(unsafe { path.get_unchecked(0).as_bytes() });
+pub const fn make_field_key(path: &[&str]) -> u64 {
+    assert!(path.len() > 0, "invalid path");
+    let first = fxhash::hash_u8(path[0].as_bytes());
     let mut hasher = fxhash::Hasher::new_with_seed(first);
-    for i in 1..path.len() {
-        let part = fxhash::hash_u8(unsafe { path.get_unchecked(i).as_bytes() });
+    let mut i = 1;
+    while i < path.len() {
+        let part = fxhash::hash_u8(path[i].as_bytes());
         hasher.write_u64(part);
+        i += 1;
     }
     hasher.finish()
 }

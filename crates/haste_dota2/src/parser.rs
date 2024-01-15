@@ -22,6 +22,7 @@ const FULL_PACKET_INTERVAL: i32 = 1800;
 pub type Error = Box<dyn std::error::Error>;
 pub type Result<T> = std::result::Result<T, Error>;
 
+// TODO: introduce something like visit_tick_start and/or visit_tick_end
 pub trait Visitor {
     #[allow(unused_variables)]
     fn visit_entity(
