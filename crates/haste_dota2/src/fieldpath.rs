@@ -446,12 +446,21 @@ impl FieldPath {
 
     #[inline(always)]
     fn exec_op(&mut self, id: u32, br: &mut BitReader) -> Result<bool> {
-        // stolen from butterfly. those ids are result of encoding sequence of bools
-        // into numeric representation like so (in a loop): id = ( id << 1 ) |
-        // br.readBool().
+        // stolen from butterfly. those ids are result of encoding sequence of
+        // bools into numeric representation like so (in a loop): id = ( id << 1
+        // ) | br.readBool().
         //
-        // TODO: don't questionmark all the ops, instead combine op result with the
-        // final "true" return.
+        // TODO: don't questionmark all the ops, instead combine op result with
+        // the final "true" return.
+        //
+        // TODO: too many branch misses happen here. $ perf record -e
+        // branch-misses ./target/release/emptybench
+        // fixtures/7116662198_1379602574.dem $ perf report
+        //
+        // TODO: try to optimize by walking hufflam tree. aparantely some
+        // compression algos use it (or similar techniques) because it allows to
+        // reduce branch misses by providing hierarchical structure that allows
+        // making decisions based on variable values.
         match id {
             0 => self.plus_one(br)?,
             2 => self.field_path_encode_finish(br)?,

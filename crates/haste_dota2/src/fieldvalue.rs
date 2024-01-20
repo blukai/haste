@@ -39,6 +39,9 @@ pub enum FieldValue {
     QAngle([f32; 3]),
 
     // TODO: array backed string
+    //
+    // NOTE: for example smol_str does not fit well because its default size
+    // when it's empty on 64 bit arch is 64 bit xd, but Box<str>'s size is 16.
     String(Box<str>),
 }
 

@@ -299,8 +299,8 @@ pub struct InternalF32Decoder {
 
 impl InternalF32Decoder {
     pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
-        if field.var_name_hash == fxhash::hash_u8(b"m_flSimulationTime")
-            || field.var_name_hash == fxhash::hash_u8(b"m_flAnimTime")
+        if field.var_name.hash == fxhash::hash_u8(b"m_flSimulationTime")
+            || field.var_name.hash == fxhash::hash_u8(b"m_flAnimTime")
         {
             return Ok(Self {
                 decoder: Box::<InternalF32SimulationTimeDecoder>::default(),

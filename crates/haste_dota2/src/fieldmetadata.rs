@@ -149,7 +149,7 @@ fn visit_template(
     field: &FlattenedSerializerField,
 ) -> Result<FieldMetadata> {
     match ident {
-        ident_atom!("CNetworkUtlVectorBase") => match field.field_serializer_name_hash {
+        ident_atom!("CNetworkUtlVectorBase") => match field.field_serializer_name.as_ref() {
             Some(_) => Ok(FieldMetadata {
                 special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
                 decoder: Box::<U32Decoder>::default(),

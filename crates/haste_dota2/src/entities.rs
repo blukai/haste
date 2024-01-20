@@ -93,7 +93,7 @@ pub struct Entity {
 
 impl Entity {
     fn parse(&mut self, br: &mut BitReader) -> Result<()> {
-        // eprintln!("-- {}", self.flattened_serializer.serializer_name);
+        // eprintln!("-- {}", self.serializer.serializer_name);
 
         fieldpath::FIELD_PATHS.with(|fps| {
             let mut fps = unsafe { &mut *fps.get() };
@@ -105,10 +105,10 @@ impl Entity {
                 // version of it, probably because a bunch of ifs cause a bunch
                 // of branch misses and branch missles are disasterous.
                 let mut field = unsafe { self.serializer.get_child_unchecked(fp.get_unchecked(0)) };
-                let mut field_key_hasher = fxhash::Hasher::with_seed(field.var_name_hash);
+                let mut field_key_hasher = fxhash::Hasher::with_seed(field.var_name.hash);
                 for i in 1..=fp.last() {
                     field = unsafe { field.get_child_unchecked(fp.get_unchecked(i)) };
-                    field_key_hasher.write_u64(field.var_name_hash);
+                    field_key_hasher.write_u64(field.var_name.hash);
                 }
                 let field_key = field_key_hasher.finish();
 

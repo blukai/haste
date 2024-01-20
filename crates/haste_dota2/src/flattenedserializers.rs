@@ -26,27 +26,51 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+// TODO: symbol table / string cache (but do not use servo's string cache
+// because it's super slow; it relies on rust-phf that uses sip13 cryptograpgic
+// hasher, and you can't replace it with something else (without forking it
+// really)).
+//
+// valve's implementation: public/tier1/utlsymbol.h;
+// blukai's 3head implementation:
+#[derive(Debug, Clone, Default)]
+pub struct Symbol {
+    pub hash: u64,
+    #[cfg(feature = "preserve-metadata")]
+    pub str: Box<str>,
+}
+
+impl From<&String> for Symbol {
+    #[inline(always)]
+    fn from(value: &String) -> Self {
+        Self {
+            hash: fxhash::hash_u8(value.as_bytes()),
+            #[cfg(feature = "preserve-metadata")]
+            str: value.clone().into_boxed_str(),
+        }
+    }
+}
+
 // some info about string tables
 // https://developer.valvesoftware.com/wiki/Networking_Events_%26_Messages
 // https://developer.valvesoftware.com/wiki/Networking_Entities
 
+// TODO: merge string + hash into a single struct or something
+//
+// TODO: do not clone strings, but reference them instead -> introduce lifetimes
+// or build a symbol table from symbols (string cache?)
+
 #[derive(Debug, Clone, Default)]
 pub struct FlattenedSerializerField {
-    #[cfg(feature = "preserve-metadata")]
-    pub var_type: Box<str>,
-
-    #[cfg(feature = "preserve-metadata")]
-    pub var_name: Box<str>,
-    pub var_name_hash: u64,
+    pub var_type: Symbol,
+    pub var_name: Symbol,
 
     pub bit_count: Option<i32>,
     pub low_value: Option<f32>,
     pub high_value: Option<f32>,
     pub encode_flags: Option<i32>,
 
-    #[cfg(feature = "preserve-metadata")]
-    pub field_serializer_name: Option<Box<str>>,
-    pub field_serializer_name_hash: Option<u64>,
+    pub field_serializer_name: Option<Symbol>,
     pub field_serializer: Option<Rc<FlattenedSerializer>>,
 
     // NOTE: field_serializer_version and send_node are not being used anywhere
@@ -55,9 +79,7 @@ pub struct FlattenedSerializerField {
     // pub field_serializer_version: Option<i32>, pub
     // send_node: Option<Box<str>>,
     //
-    #[cfg(feature = "preserve-metadata")]
-    pub var_encoder: Option<Box<str>>,
-    pub var_encoder_hash: Option<u64>,
+    pub var_encoder: Option<Symbol>,
 
     pub metadata: FieldMetadata,
 }
@@ -86,39 +108,23 @@ impl FlattenedSerializerField {
                 .map(resolve_sym_unchecked)
                 .unwrap_unchecked()
         };
-        let var_name_hash = fxhash::hash_u8(var_name.as_bytes());
-
-        let field_serializer_name = field.field_serializer_name_sym.map(resolve_sym);
-        let field_serializer_name_hash = field_serializer_name
-            .as_ref()
-            .map(|field_serializer_name| fxhash::hash_u8(field_serializer_name.as_bytes()));
-
-        let var_encoder = field.var_encoder_sym.map(resolve_sym);
-        let var_encoder_hash = var_encoder
-            .as_ref()
-            .map(|var_encoder| fxhash::hash_u8(var_encoder.as_bytes()));
 
         let mut ret = Self {
-            #[cfg(feature = "preserve-metadata")]
-            var_type: var_type.clone().into_boxed_str(),
-
-            #[cfg(feature = "preserve-metadata")]
-            var_name: var_name.clone().into_boxed_str(),
-            var_name_hash,
+            var_type: Symbol::from(var_type),
+            var_name: Symbol::from(var_name),
 
             bit_count: field.bit_count,
             low_value: field.low_value,
             high_value: field.high_value,
             encode_flags: field.encode_flags,
 
-            #[cfg(feature = "preserve-metadata")]
-            field_serializer_name: field_serializer_name.map(|s| s.clone().into_boxed_str()),
-            field_serializer_name_hash,
+            field_serializer_name: field
+                .field_serializer_name_sym
+                .map(resolve_sym)
+                .map(Symbol::from),
             field_serializer: None,
 
-            #[cfg(feature = "preserve-metadata")]
-            var_encoder: var_encoder.map(|s| s.clone().into_boxed_str()),
-            var_encoder_hash,
+            var_encoder: field.var_encoder_sym.map(resolve_sym).map(Symbol::from),
 
             metadata: Default::default(),
         };
@@ -144,9 +150,8 @@ impl FlattenedSerializerField {
     }
 
     #[inline(always)]
-    pub(crate) fn var_encoder_hash_eq(&self, var_encoder_hash: u64) -> bool {
-        self.var_encoder_hash
-            .is_some_and(|veh| veh == var_encoder_hash)
+    pub(crate) fn var_encoder_hash_eq(&self, rhs: u64) -> bool {
+        self.var_encoder.as_ref().is_some_and(|lhs| lhs.hash == rhs)
     }
 }
 
@@ -154,9 +159,7 @@ impl FlattenedSerializerField {
 // clonable which means that all members of it also should be clonable.
 #[derive(Debug, Clone, Default)]
 pub struct FlattenedSerializer {
-    #[cfg(feature = "preserve-metadata")]
-    pub serializer_name: Box<str>,
-    pub serializer_name_hash: u64,
+    pub serializer_name: Symbol,
 
     pub serializer_version: Option<i32>,
     pub fields: Vec<Rc<FlattenedSerializerField>>,
@@ -175,9 +178,7 @@ impl FlattenedSerializer {
         };
 
         Ok(Self {
-            #[cfg(feature = "preserve-metadata")]
-            serializer_name: serializer_name.clone().into_boxed_str(),
-            serializer_name_hash: fxhash::hash_u8(serializer_name.as_bytes()),
+            serializer_name: Symbol::from(serializer_name),
 
             serializer_version: fs.serializer_version,
             fields: Vec::with_capacity(fs.fields_index.len()),
@@ -254,11 +255,9 @@ impl FlattenedSerializerContainer {
                     let mut field =
                         FlattenedSerializerField::new(&msg, &msg.fields[*field_index as usize])?;
 
-                    if let Some(field_serializer_name_hash) =
-                        field.field_serializer_name_hash.as_ref()
-                    {
+                    if let Some(field_serializer_name) = field.field_serializer_name.as_ref() {
                         field.field_serializer =
-                            serializer_map.get(field_serializer_name_hash).cloned();
+                            serializer_map.get(&field_serializer_name.hash).cloned();
                     }
 
                     // TODO: maybe extract arms into separate functions
@@ -289,9 +288,10 @@ impl FlattenedSerializerContainer {
                                 fields: {
                                     let sub_field = FlattenedSerializerField {
                                         field_serializer: field
-                                            .field_serializer_name_hash
-                                            .and_then(|field_serializer_name_hash| {
-                                                serializer_map.get(&field_serializer_name_hash)
+                                            .field_serializer_name
+                                            .as_ref()
+                                            .and_then(|field_serializer_name| {
+                                                serializer_map.get(&field_serializer_name.hash)
                                             })
                                             .cloned(),
                                         ..Default::default()
@@ -317,7 +317,7 @@ impl FlattenedSerializerContainer {
             }
 
             serializer_map.insert(
-                flattened_serializer.serializer_name_hash,
+                flattened_serializer.serializer_name.hash,
                 Rc::new(flattened_serializer),
             );
         }
