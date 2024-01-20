@@ -16,15 +16,15 @@ impl Visitor for MyVisitor {
         entity: &Entity,
     ) -> parser::Result<()> {
         if entity
-            .flattened_serializer
+            .get_serializer()
             .serializer_name_hash
             .eq(&fxhash::hash_u8(b"CDOTATeam"))
         {
             let team_num_key = entities::make_field_key(&["m_iTeamNum"]);
-            let team_num = entity.get_field_value(team_num_key);
+            let team_num = entity.get_value(&team_num_key);
             if team_num.is_some_and(|team_num| matches!(team_num, FieldValue::U8(team_num) if *team_num == 2 || *team_num == 3)) {
                 let hero_kills_key = entities::make_field_key( &["m_iHeroKills"]);
-                let hero_kills = entity.get_field_value(hero_kills_key);
+                let hero_kills = entity.get_value(&hero_kills_key);
                 println!("team_num: {:?}; hero_kills: {:?}", team_num, hero_kills);
             }
         }

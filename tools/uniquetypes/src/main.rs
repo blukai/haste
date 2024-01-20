@@ -1,9 +1,9 @@
 use anyhow::anyhow;
 use haste_dota2::{
-    dota2_deflat::var_type::{Token, Tokenizer},
-    dota2_protos::EDemoCommands,
-    flattenedserializers::FlattenedSerializers,
+    deflat::var_type::{Token, Tokenizer},
+    flattenedserializers::FlattenedSerializerContainer,
     parser::{ControlFlow, NopVisitor, Parser},
+    protos::EDemoCommands,
 };
 use std::{
     collections::HashSet,
@@ -15,12 +15,10 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 // ----
 
-fn parse_to_flattened_serializers<R: Read + Seek>(
-    parser: &mut Parser<R, NopVisitor>,
-) -> Result<()> {
+fn parse_to_serializers<R: Read + Seek>(parser: &mut Parser<R, NopVisitor>) -> Result<()> {
     parser.reset()?;
     parser.run(|notnotself, cmd_header| {
-        if notnotself.flattened_serializers().is_some() {
+        if notnotself.serializers().is_some() {
             return Ok(ControlFlow::Break);
         }
         if cmd_header.command == EDemoCommands::DemSendTables {
@@ -30,9 +28,9 @@ fn parse_to_flattened_serializers<R: Read + Seek>(
     })
 }
 
-fn collect_unique_var_types(flattened_serializers: &FlattenedSerializers) -> Vec<String> {
+fn collect_unique_var_types(serializers: &FlattenedSerializerContainer) -> Vec<String> {
     let mut tmp: HashSet<String> = HashSet::new();
-    flattened_serializers.values().for_each(|fs| {
+    serializers.values().for_each(|fs| {
         fs.fields.iter().for_each(|f| {
             tmp.insert(f.var_type.to_string());
         });
@@ -40,9 +38,9 @@ fn collect_unique_var_types(flattened_serializers: &FlattenedSerializers) -> Vec
     tmp.into_iter().collect()
 }
 
-fn collect_unique_var_type_idents(flattened_serializers: &FlattenedSerializers) -> Vec<String> {
+fn collect_unique_var_type_idents(serializers: &FlattenedSerializerContainer) -> Vec<String> {
     let mut tmp = HashSet::<String>::new();
-    flattened_serializers.values().for_each(|fs| {
+    serializers.values().for_each(|fs| {
         fs.fields.iter().for_each(|f| {
             Tokenizer::new(&f.var_type).for_each(|token| {
                 if let Token::Ident(ident) = token {
@@ -71,14 +69,14 @@ fn main() -> Result<()> {
 
     // ----
 
-    parse_to_flattened_serializers(&mut parser)?;
-    let flattened_serializers = parser
-        .flattened_serializers()
+    parse_to_serializers(&mut parser)?;
+    let serializers = parser
+        .serializers()
         .ok_or_else(|| anyhow!("could not get flattened serializer"))?;
     eprintln!("----------------");
     eprintln!("unique var types");
     eprintln!("----------------");
-    let mut var_types = collect_unique_var_types(flattened_serializers);
+    let mut var_types = collect_unique_var_types(serializers);
     var_types.sort();
     var_types.iter().for_each(|var_type| {
         eprintln!("{var_type}");
@@ -87,7 +85,7 @@ fn main() -> Result<()> {
     eprintln!("----------------------");
     eprintln!("unique var type idents");
     eprintln!("----------------------");
-    let mut var_type_idents = collect_unique_var_type_idents(flattened_serializers);
+    let mut var_type_idents = collect_unique_var_type_idents(serializers);
     var_type_idents.sort();
     var_type_idents.iter().for_each(|var_type_ident| {
         eprintln!("{var_type_ident}");

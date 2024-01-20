@@ -1,4 +1,4 @@
-use crate::{dota2_protos::CDemoClassInfo, fxhash};
+use crate::{fxhash, protos::CDemoClassInfo};
 
 #[derive(Clone)]
 pub struct ClassInfo {

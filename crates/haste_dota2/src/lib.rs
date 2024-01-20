@@ -9,8 +9,8 @@
 pub use haste_common::bitbuf;
 pub use haste_common::fxhash;
 pub use haste_common::varint;
-pub use haste_dota2_deflat as dota2_deflat;
-pub use haste_dota2_protos as dota2_protos;
+pub use haste_dota2_deflat as deflat;
+pub use haste_dota2_protos as protos;
 
 // TODO: figure pub scopes for all the things
 pub mod demofile;
@@ -20,7 +20,7 @@ pub mod entityclasses;
 pub mod fielddecoder;
 // TODO: try to not publicly expose fieldmetadata
 pub mod fieldmetadata;
-pub(crate) mod fieldpath;
+pub mod fieldpath;
 pub mod fieldvalue;
 pub mod flattenedserializers;
 pub mod instancebaseline;

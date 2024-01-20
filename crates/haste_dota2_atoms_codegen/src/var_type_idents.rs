@@ -1,9 +1,9 @@
 use anyhow::anyhow;
 use haste_dota2::{
-    dota2_deflat::var_type::{Token, Tokenizer},
-    dota2_protos::EDemoCommands,
-    flattenedserializers::FlattenedSerializers,
+    deflat::var_type::{Token, Tokenizer},
+    flattenedserializers::FlattenedSerializerContainer,
     parser::{ControlFlow, NopVisitor, Parser},
+    protos::EDemoCommands,
 };
 use std::{
     collections::HashSet,
@@ -13,12 +13,10 @@ use std::{
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
-fn parse_to_flattened_serializers<R: Read + Seek>(
-    parser: &mut Parser<R, NopVisitor>,
-) -> Result<()> {
+fn parse_to_serializers<R: Read + Seek>(parser: &mut Parser<R, NopVisitor>) -> Result<()> {
     parser.reset()?;
     parser.run(|notnotself, cmd_header| {
-        if notnotself.flattened_serializers().is_some() {
+        if notnotself.serializers().is_some() {
             return Ok(ControlFlow::Break);
         }
         if cmd_header.command == EDemoCommands::DemSendTables {
@@ -28,9 +26,9 @@ fn parse_to_flattened_serializers<R: Read + Seek>(
     })
 }
 
-fn collect_unique_var_type_idents(flattened_serializers: &FlattenedSerializers) -> Vec<String> {
+fn collect_unique_var_type_idents(serializers: &FlattenedSerializerContainer) -> Vec<String> {
     let mut tmp = HashSet::<String>::new();
-    flattened_serializers.values().for_each(|fs| {
+    serializers.values().for_each(|fs| {
         fs.fields.iter().for_each(|f| {
             Tokenizer::new(&f.var_type).for_each(|token| {
                 if let Token::Ident(ident) = token {
@@ -43,11 +41,11 @@ fn collect_unique_var_type_idents(flattened_serializers: &FlattenedSerializers) 
 }
 
 pub fn build<R: Read + Seek>(parser: &mut Parser<R, NopVisitor>, out_path: &Path) -> Result<()> {
-    parse_to_flattened_serializers(parser)?;
-    let flattened_serializers = parser
-        .flattened_serializers()
+    parse_to_serializers(parser)?;
+    let serializers = parser
+        .serializers()
         .ok_or_else(|| anyhow!("could not get flattened serializer"))?;
-    let unique_var_type_idents = collect_unique_var_type_idents(flattened_serializers);
+    let unique_var_type_idents = collect_unique_var_type_idents(serializers);
 
     string_cache_codegen::AtomType::new("var_type_ident::VarTypeIdentAtom", "var_type_ident_atom!")
         .atoms(unique_var_type_idents)

@@ -1,6 +1,6 @@
 use crate::{
     bitbuf::{self, BitReader},
-    dota2_protos::{c_demo_string_tables, CDemoStringTables},
+    protos::{c_demo_string_tables, CDemoStringTables},
 };
 use hashbrown::HashMap;
 use nohash::NoHashHasher;

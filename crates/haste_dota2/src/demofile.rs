@@ -1,5 +1,5 @@
 use crate::{
-    dota2_protos::{
+    protos::{
         prost::{self, Message},
         CDemoFileInfo, EDemoCommands,
     },
@@ -51,14 +51,14 @@ const DEMO_HEADER_ID_SIZE: usize = 8;
 const DEMO_HEADER_ID: [u8; DEMO_HEADER_ID_SIZE] = *b"PBDEMS2\0";
 
 // NOTE: naming is based on stuff from demofile.h of valve's demoinfo2 thing.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone)]
 pub struct DemoHeader {
     pub demofilestamp: [u8; DEMO_HEADER_ID_SIZE],
     pub fileinfo_offset: i32,
     pub spawngroups_offset: i32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CmdHeader {
     pub command: EDemoCommands,
     pub is_compressed: bool,

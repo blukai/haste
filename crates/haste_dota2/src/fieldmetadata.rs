@@ -1,5 +1,5 @@
 use crate::{
-    dota2_deflat::var_type::{ident_atom, ArrayLength, Decl, IdentAtom},
+    deflat::var_type::{ident_atom, ArrayLength, Decl, IdentAtom},
     fielddecoder::{
         self, BoolDecoder, F32Decoder, FieldDecode, I16Decoder, I32Decoder, I64Decoder, I8Decoder,
         NopDecoder, QAngleDecoder, QuantizedFloatDecoder, StringDecoder, U16Decoder, U32Decoder,

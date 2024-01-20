@@ -71,7 +71,7 @@ impl Hasher {
     }
 
     #[inline(always)]
-    pub const fn new_with_seed(seed: u64) -> Self {
+    pub const fn with_seed(seed: u64) -> Self {
         Self { state: seed }
     }
 

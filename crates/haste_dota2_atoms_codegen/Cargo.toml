@@ -12,6 +12,6 @@ name = "haste_dota2_atoms_codegen"
 path = "src/main.rs"
 
 [dependencies]
-haste_dota2 = { path = "../../crates/haste_dota2" }
+haste_dota2 = { path = "../../crates/haste_dota2", features = ["preserve-metadata"] }
 anyhow = "1.0"
 string_cache_codegen = "0.5"

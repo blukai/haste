@@ -1,6 +1,6 @@
 fn main() -> std::io::Result<()> {
-    let dir_entries = std::fs::read_dir("./protos")?;
-    let proto_paths = dir_entries
+    std::env::set_var("PROTOC", protobuf_src::protoc());
+    let proto_paths = std::fs::read_dir("./protos")?
         .into_iter()
         .map(|path| Ok(path?.path()))
         .collect::<std::io::Result<Vec<_>>>()?;

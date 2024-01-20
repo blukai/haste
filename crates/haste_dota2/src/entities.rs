@@ -1,16 +1,16 @@
 use crate::{
     bitbuf::{self, BitReader},
     entityclasses::EntityClasses,
-    fielddecoder, fieldpath,
+    fielddecoder,
+    fieldpath::{self, FieldPath},
     fieldvalue::FieldValue,
-    flattenedserializers::{FlattenedSerializer, FlattenedSerializers},
+    flattenedserializers::{
+        FlattenedSerializer, FlattenedSerializerContainer, FlattenedSerializerField,
+    },
     fxhash,
     instancebaseline::InstanceBaseline,
 };
-use hashbrown::{
-    hash_map::{Entry, Values},
-    HashMap,
-};
+use hashbrown::{hash_map::Entry, HashMap};
 use nohash::NoHashHasher;
 use std::{hash::BuildHasherDefault, rc::Rc};
 
@@ -39,7 +39,7 @@ pub const FHDR_ENTERPVS: usize = 0x0004;
 
 // CL_ParseDeltaHeader in engine/client.cpp
 #[inline(always)]
-pub fn parse_delta_header(br: &mut BitReader) -> Result<usize> {
+pub(crate) fn parse_delta_header(br: &mut BitReader) -> Result<usize> {
     let mut update_flags = FHDR_ZERO;
     // NOTE: read_bool is equivalent to ReadOneBit() == 1
     if !br.read_bool()? {
@@ -67,7 +67,7 @@ pub enum UpdateType {
 
 // DetermineUpdateType in engine/client.cpp
 #[inline(always)]
-pub fn determine_update_type(update_flags: usize) -> UpdateType {
+pub(crate) fn determine_update_type(update_flags: usize) -> UpdateType {
     if update_flags & FHDR_ENTERPVS != 0 {
         UpdateType::EnterPVS
     } else if update_flags & FHDR_LEAVEPVS != 0 {
@@ -77,11 +77,18 @@ pub fn determine_update_type(update_flags: usize) -> UpdateType {
     }
 }
 
+#[derive(Debug, Clone)]
+struct EntityField {
+    #[cfg(feature = "preserve-metadata")]
+    path: FieldPath,
+    value: FieldValue,
+}
+
 // TODO: do not publicly expose Entity's fields
 #[derive(Debug, Clone)]
 pub struct Entity {
-    pub field_values: HashMap<u64, FieldValue, BuildHasherDefault<NoHashHasher<u64>>>,
-    pub flattened_serializer: Rc<FlattenedSerializer>,
+    fields: HashMap<u64, EntityField, BuildHasherDefault<NoHashHasher<u64>>>,
+    serializer: Rc<FlattenedSerializer>,
 }
 
 impl Entity {
@@ -97,12 +104,9 @@ impl Entity {
                 // NOTE: this loop performes much better then the unrolled
                 // version of it, probably because a bunch of ifs cause a bunch
                 // of branch misses and branch missles are disasterous.
-                let mut field = unsafe {
-                    self.flattened_serializer
-                        .get_child_unchecked(fp.get_unchecked(0))
-                };
-                let mut field_key_hasher = fxhash::Hasher::new_with_seed(field.var_name_hash);
-                for i in 1..=fp.position {
+                let mut field = unsafe { self.serializer.get_child_unchecked(fp.get_unchecked(0)) };
+                let mut field_key_hasher = fxhash::Hasher::with_seed(field.var_name_hash);
+                for i in 1..=fp.last() {
                     field = unsafe { field.get_child_unchecked(fp.get_unchecked(i)) };
                     field_key_hasher.write_u64(field.var_name_hash);
                 }
@@ -124,7 +128,14 @@ impl Entity {
                 //   point.
                 field.metadata.decoder.decode(br).map(|field_value| {
                     // eprintln!(" -> {:?}", &field_value);
-                    self.field_values.insert(field_key, field_value);
+                    self.fields.insert(
+                        field_key,
+                        EntityField {
+                            #[cfg(feature = "preserve-metadata")]
+                            path: std::mem::take(fp),
+                            value: field_value,
+                        },
+                    );
                 })?;
             }
 
@@ -135,8 +146,35 @@ impl Entity {
         })
     }
 
-    pub fn get_field_value(&self, field_key: u64) -> Option<&FieldValue> {
-        self.field_values.get(&field_key)
+    // ----
+
+    #[inline]
+    pub fn iter(&self) -> impl Iterator<Item = (&u64, &FieldValue)> {
+        self.fields.iter().map(|(key, ef)| (key, &ef.value))
+    }
+
+    #[inline]
+    pub fn get_value(&self, key: &u64) -> Option<&FieldValue> {
+        self.fields.get(key).map(|ef| &ef.value)
+    }
+
+    #[cfg(feature = "preserve-metadata")]
+    #[inline]
+    pub fn get_path(&self, key: &u64) -> Option<&FieldPath> {
+        self.fields.get(key).map(|ef| &ef.path)
+    }
+
+    #[inline]
+    pub fn get_serializer(&self) -> &FlattenedSerializer {
+        self.serializer.as_ref()
+    }
+
+    #[inline]
+    pub fn get_serializer_field(&self, path: &FieldPath) -> Option<&FlattenedSerializerField> {
+        let first = path.get(0).and_then(|i| self.serializer.get_child(i));
+        path.iter().skip(1).fold(first, |field, i| {
+            field.and_then(|f| f.get_child(*i as usize))
+        })
     }
 }
 
@@ -147,8 +185,8 @@ pub struct EntityContainer {
     baseline_entities: HashMap<i32, Entity, BuildHasherDefault<NoHashHasher<i32>>>,
 }
 
-impl Default for EntityContainer {
-    fn default() -> Self {
+impl EntityContainer {
+    pub(crate) fn new() -> Self {
         Self {
             // NOTE: clarity (and possibly manta) specify 1 << 14 as the max
             // count of entries; butterfly uses number 20480.
@@ -159,34 +197,32 @@ impl Default for EntityContainer {
             ),
         }
     }
-}
 
-impl EntityContainer {
-    pub fn handle_create(
+    pub(crate) fn handle_create(
         &mut self,
         index: i32,
         br: &mut BitReader,
         entity_classes: &EntityClasses,
         instance_baseline: &InstanceBaseline,
-        flattened_serializers: &FlattenedSerializers,
+        serializers: &FlattenedSerializerContainer,
     ) -> Result<&Entity> {
         let class_id = br.read_ubitlong(entity_classes.bits)? as i32;
         let _serial = br.read_ubitlong(17)?;
         let _unknown = br.read_uvarint32()?;
 
         let class_info = unsafe { entity_classes.by_id_unckecked(class_id) };
-        let flattened_serializer =
-            unsafe { flattened_serializers.by_name_hash_unckecked(class_info.network_name_hash) };
+        let serializer =
+            unsafe { serializers.by_name_hash_unckecked(class_info.network_name_hash) };
 
         let mut entity = match self.baseline_entities.entry(class_id) {
             Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(e) => {
                 let mut entity = Entity {
-                    field_values: HashMap::with_capacity_and_hasher(
-                        flattened_serializer.fields.len(),
+                    fields: HashMap::with_capacity_and_hasher(
+                        serializer.fields.len(),
                         BuildHasherDefault::default(),
                     ),
-                    flattened_serializer,
+                    serializer,
                 };
                 let baseline_data = unsafe { instance_baseline.by_id_unchecked(class_id) };
                 let mut baseline_br = BitReader::new(baseline_data.as_ref());
@@ -205,14 +241,14 @@ impl EntityContainer {
     // SAFETY: if it's being deleted menas that it was created, riiight? but
     // there's a risk (that only should exist if replay is corrupted).
     #[inline]
-    pub unsafe fn handle_delete_unchecked(&mut self, index: i32) -> Entity {
+    pub(crate) unsafe fn handle_delete_unchecked(&mut self, index: i32) -> Entity {
         unsafe { self.entities.remove(&(index)).unwrap_unchecked() }
     }
 
     // SAFETY: if entity was ever created, and not deleted, it can be updated!
     // but there's a risk (that only should exist if replay is corrupted).
     #[inline]
-    pub unsafe fn handle_update_unchecked(
+    pub(crate) unsafe fn handle_update_unchecked(
         &mut self,
         index: i32,
         br: &mut BitReader,
@@ -222,20 +258,29 @@ impl EntityContainer {
         Ok(entity)
     }
 
-    // clear clears underlying storage, but this has no effect on the allocated
-    // capacity.
-    pub fn clear(&mut self) {
-        self.entities.clear();
-    }
+    // ----
 
-    pub fn is_empty(&self) -> bool {
-        // TODO: should entity_baselines be checked?
-        self.entities.is_empty()
+    #[inline]
+    pub fn iter(&self) -> impl Iterator<Item = (&i32, &Entity)> {
+        self.entities.iter()
     }
 
     #[inline]
-    pub fn values(&self) -> Values<'_, i32, Entity> {
-        self.entities.values()
+    pub fn get(&self, index: &i32) -> Option<&Entity> {
+        self.entities.get(index)
+    }
+
+    // clear clears underlying storage, but this has no effect on the allocated
+    // capacity.
+    #[inline]
+    pub fn clear(&mut self) {
+        self.entities.clear();
+        self.baseline_entities.clear();
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.entities.is_empty()
     }
 
     // TODO: introduce something like get_entity method
@@ -246,7 +291,7 @@ impl EntityContainer {
 pub const fn make_field_key(path: &[&str]) -> u64 {
     assert!(path.len() > 0, "invalid path");
     let first = fxhash::hash_u8(path[0].as_bytes());
-    let mut hasher = fxhash::Hasher::new_with_seed(first);
+    let mut hasher = fxhash::Hasher::with_seed(first);
     let mut i = 1;
     while i < path.len() {
         let part = fxhash::hash_u8(path[i].as_bytes());

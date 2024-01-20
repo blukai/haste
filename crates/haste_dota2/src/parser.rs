@@ -1,15 +1,15 @@
 use crate::{
     bitbuf::BitReader,
     demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_BUFFER_SIZE, DEMO_HEADER_SIZE},
-    dota2_protos::{
+    entities::{self, EntityContainer},
+    entityclasses::EntityClasses,
+    flattenedserializers::FlattenedSerializerContainer,
+    instancebaseline::{InstanceBaseline, INSTANCE_BASELINE_TABLE_NAME},
+    protos::{
         prost::Message, CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoPacket,
         CDemoSendTables, CDemoStringTables, CsvcMsgCreateStringTable, CsvcMsgPacketEntities,
         CsvcMsgUpdateStringTable, EDemoCommands, SvcMessages,
     },
-    entities::{self, EntityContainer},
-    entityclasses::EntityClasses,
-    flattenedserializers::FlattenedSerializers,
-    instancebaseline::{InstanceBaseline, INSTANCE_BASELINE_TABLE_NAME},
     stringtables::StringTableContainer,
 };
 use std::io::{Read, Seek, SeekFrom};
@@ -69,7 +69,7 @@ pub struct Parser<R: Read + Seek, V: Visitor> {
     buf: Vec<u8>,
     string_tables: StringTableContainer,
     instance_baseline: InstanceBaseline,
-    flattened_serializers: Option<FlattenedSerializers>,
+    serializers: Option<FlattenedSerializerContainer>,
     entity_classes: Option<EntityClasses>,
     entities: EntityContainer,
     tick: i32,
@@ -86,9 +86,9 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             buf: vec![0; DEMO_BUFFER_SIZE],
             string_tables: StringTableContainer::default(),
             instance_baseline: InstanceBaseline::default(),
-            flattened_serializers: None,
+            serializers: None,
             entity_classes: None,
-            entities: EntityContainer::default(),
+            entities: EntityContainer::new(),
             tick: -1,
             visitor,
         })
@@ -220,12 +220,12 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             EDemoCommands::DemSendTables => {
                 // NOTE: this check exists because seeking exists, there's no
                 // need to re-parse flattened serializers
-                if self.flattened_serializers.is_some() {
+                if self.serializers.is_some() {
                     return Ok(());
                 }
 
                 let cmd = CDemoSendTables::decode(data)?;
-                self.flattened_serializers = Some(FlattenedSerializers::parse(cmd)?);
+                self.serializers = Some(FlattenedSerializerContainer::parse(cmd)?);
             }
 
             EDemoCommands::DemClassInfo => {
@@ -363,8 +363,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         // classes and flattened serializers become available before packet
         // entities.
         let entity_classes = unsafe { self.entity_classes.as_ref().unwrap_unchecked() };
-        let flattened_serializers =
-            unsafe { self.flattened_serializers.as_ref().unwrap_unchecked() };
+        let serializers = unsafe { self.serializers.as_ref().unwrap_unchecked() };
         let instance_baseline = &self.instance_baseline;
 
         let entity_data = msg.entity_data();
@@ -384,7 +383,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                         &mut br,
                         entity_classes,
                         instance_baseline,
-                        flattened_serializers,
+                        serializers,
                     )?;
                     self.visitor
                         .visit_entity(update_flags, update_type, entity)?;
@@ -486,8 +485,8 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     }
 
     #[inline]
-    pub fn flattened_serializers(&self) -> Option<&FlattenedSerializers> {
-        self.flattened_serializers.as_ref()
+    pub fn serializers(&self) -> Option<&FlattenedSerializerContainer> {
+        self.serializers.as_ref()
     }
 
     #[inline]

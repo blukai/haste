@@ -1,11 +1,12 @@
 use crate::{
-    dota2_protos::{
+    fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialDescriptor},
+    fxhash,
+    protos::{
         prost::{self, Message},
         CDemoSendTables, CsvcMsgFlattenedSerializer, ProtoFlattenedSerializerFieldT,
         ProtoFlattenedSerializerT,
     },
-    fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialDescriptor},
-    fxhash, varint,
+    varint,
 };
 use hashbrown::{hash_map::Values, HashMap};
 use nohash::NoHashHasher;
@@ -31,10 +32,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Clone, Default)]
 pub struct FlattenedSerializerField {
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "preserve-metadata")]
     pub var_type: Box<str>,
 
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "preserve-metadata")]
     pub var_name: Box<str>,
     pub var_name_hash: u64,
 
@@ -43,7 +44,7 @@ pub struct FlattenedSerializerField {
     pub high_value: Option<f32>,
     pub encode_flags: Option<i32>,
 
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "preserve-metadata")]
     pub field_serializer_name: Option<Box<str>>,
     pub field_serializer_name_hash: Option<u64>,
     pub field_serializer: Option<Rc<FlattenedSerializer>>,
@@ -54,7 +55,7 @@ pub struct FlattenedSerializerField {
     // pub field_serializer_version: Option<i32>, pub
     // send_node: Option<Box<str>>,
     //
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "preserve-metadata")]
     pub var_encoder: Option<Box<str>>,
     pub var_encoder_hash: Option<u64>,
 
@@ -98,10 +99,10 @@ impl FlattenedSerializerField {
             .map(|var_encoder| fxhash::hash_u8(var_encoder.as_bytes()));
 
         let mut ret = Self {
-            #[cfg(debug_assertions)]
+            #[cfg(feature = "preserve-metadata")]
             var_type: var_type.clone().into_boxed_str(),
 
-            #[cfg(debug_assertions)]
+            #[cfg(feature = "preserve-metadata")]
             var_name: var_name.clone().into_boxed_str(),
             var_name_hash,
 
@@ -110,12 +111,12 @@ impl FlattenedSerializerField {
             high_value: field.high_value,
             encode_flags: field.encode_flags,
 
-            #[cfg(debug_assertions)]
+            #[cfg(feature = "preserve-metadata")]
             field_serializer_name: field_serializer_name.map(|s| s.clone().into_boxed_str()),
             field_serializer_name_hash,
             field_serializer: None,
 
-            #[cfg(debug_assertions)]
+            #[cfg(feature = "preserve-metadata")]
             var_encoder: var_encoder.map(|s| s.clone().into_boxed_str()),
             var_encoder_hash,
 
@@ -126,24 +127,26 @@ impl FlattenedSerializerField {
     }
 
     #[inline(always)]
-    pub unsafe fn get_child_unchecked(&self, index: usize) -> &Self {
+    pub(crate) unsafe fn get_child_unchecked(&self, index: usize) -> &Self {
         let fs = self.field_serializer.as_ref();
 
-        #[cfg(debug_assertions)]
-        debug_assert!(
-            fs.is_some(),
-            "expected field serializer to be present in field of type {:?}",
-            self.var_type
-        );
+        debug_assert!(fs.is_some(), "field serializer is missing");
 
         fs.unwrap_unchecked().get_child_unchecked(index)
     }
 
+    // NOTE: using this method can hurt performance when used in critical code
+    // paths. use the unsafe [`Self::get_child_unchecked`] instead.
+    pub fn get_child(&self, index: usize) -> Option<&Self> {
+        self.field_serializer
+            .as_ref()
+            .and_then(|fs| fs.get_child(index))
+    }
+
     #[inline(always)]
-    pub fn var_encoder_hash_eq(&self, var_encoder_hash: u64) -> bool {
+    pub(crate) fn var_encoder_hash_eq(&self, var_encoder_hash: u64) -> bool {
         self.var_encoder_hash
-            .map(|veh| veh == var_encoder_hash)
-            .unwrap_or(false)
+            .is_some_and(|veh| veh == var_encoder_hash)
     }
 }
 
@@ -151,7 +154,7 @@ impl FlattenedSerializerField {
 // clonable which means that all members of it also should be clonable.
 #[derive(Debug, Clone, Default)]
 pub struct FlattenedSerializer {
-    #[cfg(debug_assertions)]
+    #[cfg(feature = "preserve-metadata")]
     pub serializer_name: Box<str>,
     pub serializer_name_hash: u64,
 
@@ -170,12 +173,11 @@ impl FlattenedSerializer {
                 .map(resolve_sym_unchecked)
                 .unwrap_unchecked()
         };
-        let serializer_name_hash = fxhash::hash_u8(serializer_name.as_bytes());
 
         Ok(Self {
-            #[cfg(debug_assertions)]
+            #[cfg(feature = "preserve-metadata")]
             serializer_name: serializer_name.clone().into_boxed_str(),
-            serializer_name_hash,
+            serializer_name_hash: fxhash::hash_u8(serializer_name.as_bytes()),
 
             serializer_version: fs.serializer_version,
             fields: Vec::with_capacity(fs.fields_index.len()),
@@ -183,27 +185,31 @@ impl FlattenedSerializer {
     }
 
     #[inline(always)]
-    pub unsafe fn get_child_unchecked(&self, index: usize) -> &FlattenedSerializerField {
-        #[cfg(debug_assertions)]
+    pub(crate) unsafe fn get_child_unchecked(&self, index: usize) -> &FlattenedSerializerField {
         debug_assert!(
             self.fields.get(index).is_some(),
-            "expected field to be at index {} in {}",
+            "field at index {} is missing",
             index,
-            self.serializer_name
         );
 
         self.fields.get_unchecked(index)
+    }
+
+    // NOTE: using this method can hurt performance when used in critical code
+    // paths. use the unsafe [`Self::get_child_unchecked`] instead.
+    pub fn get_child(&self, index: usize) -> Option<&FlattenedSerializerField> {
+        self.fields.get(index).map(|field| field.as_ref())
     }
 }
 
 type FieldMap = HashMap<i32, Rc<FlattenedSerializerField>, BuildHasherDefault<NoHashHasher<i32>>>;
 type SerializerMap = HashMap<u64, Rc<FlattenedSerializer>, BuildHasherDefault<NoHashHasher<u64>>>;
 
-pub struct FlattenedSerializers {
+pub struct FlattenedSerializerContainer {
     serializer_map: SerializerMap,
 }
 
-impl FlattenedSerializers {
+impl FlattenedSerializerContainer {
     pub fn parse(cmd: CDemoSendTables) -> Result<Self> {
         let msg = {
             // TODO: make prost work with ByteString and turn data into Bytes
@@ -229,6 +235,8 @@ impl FlattenedSerializers {
             msg.serializers.len(),
             BuildHasherDefault::default(),
         );
+
+        // TODO: can fields be stored flatly?
 
         for serializer in msg.serializers.iter() {
             let mut flattened_serializer = FlattenedSerializer::new(&msg, serializer)?;
