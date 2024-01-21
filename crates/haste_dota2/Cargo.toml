@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 haste_common = { path = "../haste_common" }
-haste_dota2_atoms = { path = "../haste_dota2_atoms" }
 haste_dota2_deflat = { path = "../haste_dota2_deflat" }
 haste_dota2_protos = { path = "../haste_dota2_protos" }
 # TODO: maybe switch to onlyerror (to achieve faster comp times)

@@ -4,5 +4,5 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-haste_dota2 = { path = "../../crates/haste_dota2" }
+haste_dota2 = { path = "../../crates/haste_dota2", features = ["preserve-metadata"] }
 anyhow = "1.0"

@@ -1,7 +1,0 @@
-[package]
-name = "haste_dota2_atoms"
-version = "0.0.0"
-edition = "2021"
-
-[dependencies]
-string_cache = "0.8"

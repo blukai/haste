@@ -17,7 +17,8 @@ impl Visitor for MyVisitor {
     ) -> parser::Result<()> {
         if entity
             .get_serializer()
-            .serializer_name_hash
+            .serializer_name
+            .hash
             .eq(&fxhash::hash_u8(b"CDOTATeam"))
         {
             let team_num_key = entities::make_field_key(&["m_iTeamNum"]);

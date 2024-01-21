@@ -32,7 +32,7 @@ fn collect_unique_var_types(serializers: &FlattenedSerializerContainer) -> Vec<S
     let mut tmp: HashSet<String> = HashSet::new();
     serializers.values().for_each(|fs| {
         fs.fields.iter().for_each(|f| {
-            tmp.insert(f.var_type.to_string());
+            tmp.insert(f.var_type.str.to_string());
         });
     });
     tmp.into_iter().collect()
@@ -42,7 +42,7 @@ fn collect_unique_var_type_idents(serializers: &FlattenedSerializerContainer) ->
     let mut tmp = HashSet::<String>::new();
     serializers.values().for_each(|fs| {
         fs.fields.iter().for_each(|f| {
-            Tokenizer::new(&f.var_type).for_each(|token| {
+            Tokenizer::new(&f.var_type.str).for_each(|token| {
                 if let Token::Ident(ident) = token {
                     tmp.insert(ident.to_string());
                 }
