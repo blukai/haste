@@ -6,7 +6,6 @@ use crate::{
         U64Decoder, U8Decoder, Vector2DDecoder, Vector4DDecoder, VectorDecoder,
     },
     flattenedserializers::FlattenedSerializerField,
-    fxhash,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -54,10 +53,8 @@ impl Default for FieldMetadata {
     }
 }
 
-// NOTE: it is faster to compute hash and compare u64 then compare strings
-
 #[inline]
-fn visit_ident(ident_hash: u64, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
+fn visit_ident(ident: &str, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
     macro_rules! non_special {
         ($decoder:ident) => {
             Ok(FieldMetadata {
@@ -73,68 +70,68 @@ fn visit_ident(ident_hash: u64, field: &FlattenedSerializerField) -> Result<Fiel
         };
     }
 
-    match ident_hash {
+    match ident {
         // TODO: smaller decoders (8 and 16 bit)
         // ints
-        h if h == fxhash::hash_u8(b"int8") => non_special!(I8Decoder),
-        h if h == fxhash::hash_u8(b"int16") => non_special!(I16Decoder),
-        h if h == fxhash::hash_u8(b"int32") => non_special!(I32Decoder),
-        h if h == fxhash::hash_u8(b"int64") => non_special!(I64Decoder),
+        "int8" => non_special!(I8Decoder),
+        "int16" => non_special!(I16Decoder),
+        "int32" => non_special!(I32Decoder),
+        "int64" => non_special!(I64Decoder),
 
         // uints
-        h if h == fxhash::hash_u8(b"uint8") => non_special!(U8Decoder),
-        h if h == fxhash::hash_u8(b"uint16") => non_special!(U16Decoder),
-        h if h == fxhash::hash_u8(b"uint32") => non_special!(U32Decoder),
-        h if h == fxhash::hash_u8(b"uint64") => non_special!(U64Decoder::new(field)),
+        "uint8" => non_special!(U8Decoder),
+        "uint16" => non_special!(U16Decoder),
+        "uint32" => non_special!(U32Decoder),
+        "uint64" => non_special!(U64Decoder::new(field)),
 
         // other primitives
-        h if h == fxhash::hash_u8(b"bool") => non_special!(BoolDecoder),
-        h if h == fxhash::hash_u8(b"float32") => non_special!(F32Decoder::new(field)?),
+        "bool" => non_special!(BoolDecoder),
+        "float32" => non_special!(F32Decoder::new(field)?),
 
         // templates
-        h if h == fxhash::hash_u8(b"CHandle") => non_special!(U32Decoder),
-        h if h == fxhash::hash_u8(b"CStrongHandle") => non_special!(U64Decoder::new(field)),
+        "CHandle" => non_special!(U32Decoder),
+        "CStrongHandle" => non_special!(U64Decoder::new(field)),
 
         // pointers (?)
-        h if h == fxhash::hash_u8(b"CBodyComponent") => Ok(FieldMetadata {
+        "CBodyComponent" => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::Pointer),
             decoder: Box::<BoolDecoder>::default(),
         }),
-        h if h == fxhash::hash_u8(b"CLightComponent") => Ok(FieldMetadata {
+        "CLightComponent" => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::Pointer),
             decoder: Box::<BoolDecoder>::default(),
         }),
-        h if h == fxhash::hash_u8(b"CRenderComponent") => Ok(FieldMetadata {
+        "CRenderComponent" => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::Pointer),
             decoder: Box::<BoolDecoder>::default(),
         }),
 
         // other custom types
-        h if h == fxhash::hash_u8(b"CUtlSymbolLarge") => non_special!(StringDecoder),
-        h if h == fxhash::hash_u8(b"CUtlString") => non_special!(StringDecoder),
+        "CUtlSymbolLarge" => non_special!(StringDecoder),
+        "CUtlString" => non_special!(StringDecoder),
         // public/mathlib/vector.h
-        h if h == fxhash::hash_u8(b"QAngle") => non_special!(QAngleDecoder::new(field)),
-        h if h == fxhash::hash_u8(b"CNetworkedQuantizedFloat") => {
+        "QAngle" => non_special!(QAngleDecoder::new(field)),
+        "CNetworkedQuantizedFloat" => {
             non_special!(QuantizedFloatDecoder::new(field)?)
         }
-        h if h == fxhash::hash_u8(b"GameTime_t") => non_special!(F32Decoder::new(field)?),
-        h if h == fxhash::hash_u8(b"MatchID_t") => non_special!(U64Decoder::new(field)),
+        "GameTime_t" => non_special!(F32Decoder::new(field)?),
+        "MatchID_t" => non_special!(U64Decoder::new(field)),
         // public/mathlib/vector.h
-        h if h == fxhash::hash_u8(b"Vector") => non_special!(VectorDecoder::new(field)?),
+        "Vector" => non_special!(VectorDecoder::new(field)?),
         // public/mathlib/vector2d.h
-        h if h == fxhash::hash_u8(b"Vector2D") => non_special!(Vector2DDecoder::new(field)?),
+        "Vector2D" => non_special!(Vector2DDecoder::new(field)?),
         // public/mathlib/vector4d.h
-        h if h == fxhash::hash_u8(b"Vector4D") => non_special!(Vector4DDecoder::new(field)?),
+        "Vector4D" => non_special!(Vector4DDecoder::new(field)?),
         // game/shared/econ/econ_item_constants.h
-        h if h == fxhash::hash_u8(b"itemid_t") => non_special!(U64Decoder::new(field)),
+        "itemid_t" => non_special!(U64Decoder::new(field)),
 
         // exceptional specials xd
-        h if h == fxhash::hash_u8(b"m_SpeechBubbles") => Ok(FieldMetadata {
+        "m_SpeechBubbles" => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
             decoder: Box::<U32Decoder>::default(),
         }),
         // https://github.com/SteamDatabase/GameTracking-CS2/blob/6b3bf6ad44266e3ee4440a0b9b2fee1268812840/game/core/tools/demoinfo2/demoinfo2.txt#L155C83-L155C111
-        h if h == fxhash::hash_u8(b"DOTA_CombatLogQueryProgress") => Ok(FieldMetadata {
+        "DOTA_CombatLogQueryProgress" => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
             decoder: Box::<U32Decoder>::default(),
         }),
@@ -149,32 +146,30 @@ fn visit_ident(ident_hash: u64, field: &FlattenedSerializerField) -> Result<Fiel
 
 #[inline]
 fn visit_template(
-    ident_hash: u64,
+    ident: &str,
     argument: Decl,
     field: &FlattenedSerializerField,
 ) -> Result<FieldMetadata> {
-    match ident_hash {
-        h if h == fxhash::hash_u8(b"CNetworkUtlVectorBase") => {
-            match field.field_serializer_name.as_ref() {
-                Some(_) => Ok(FieldMetadata {
-                    special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
-                    decoder: Box::<U32Decoder>::default(),
-                }),
-                None => visit_any(argument, field).map(|field_metadata| FieldMetadata {
-                    special_descriptor: Some(FieldSpecialDescriptor::VariableLengthArray),
-                    decoder: field_metadata.decoder,
-                }),
-            }
-        }
-        h if h == fxhash::hash_u8(b"CUtlVectorEmbeddedNetworkVar") => Ok(FieldMetadata {
+    match ident {
+        "CNetworkUtlVectorBase" => match field.field_serializer_name.as_ref() {
+            Some(_) => Ok(FieldMetadata {
+                special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
+                decoder: Box::<U32Decoder>::default(),
+            }),
+            None => visit_any(argument, field).map(|field_metadata| FieldMetadata {
+                special_descriptor: Some(FieldSpecialDescriptor::VariableLengthArray),
+                decoder: field_metadata.decoder,
+            }),
+        },
+        "CUtlVectorEmbeddedNetworkVar" => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
             decoder: Box::<U32Decoder>::default(),
         }),
-        h if h == fxhash::hash_u8(b"CUtlVector") => Ok(FieldMetadata {
+        "CUtlVector" => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
             decoder: Box::<U32Decoder>::default(),
         }),
-        _ => visit_ident(ident_hash, field),
+        _ => visit_ident(ident, field),
     }
 }
 
@@ -185,7 +180,7 @@ fn visit_array(
     field: &FlattenedSerializerField,
 ) -> Result<FieldMetadata> {
     if let Decl::Ident(ident) = decl {
-        if fxhash::hash_u8(ident.as_bytes()) == fxhash::hash_u8(b"char") {
+        if ident == "char" {
             return Ok(FieldMetadata {
                 special_descriptor: None,
                 decoder: Box::<StringDecoder>::default(),
@@ -194,11 +189,11 @@ fn visit_array(
     }
 
     let length = match length {
-        ArrayLength::Ident(ident) => match fxhash::hash_u8(ident.as_bytes()) {
+        ArrayLength::Ident(ident) => match ident {
             // NOTE: it seems like this was changed from array to vec, see
             // https://github.com/SteamDatabase/GameTracking-CS2/blob/6b3bf6ad44266e3ee4440a0b9b2fee1268812840/game/core/tools/demoinfo2/demoinfo2.txt#L160
             // TODO: test ability draft game
-            h if h == fxhash::hash_u8(b"MAX_ABILITY_DRAFT_ABILITIES") => Ok(48),
+            "MAX_ABILITY_DRAFT_ABILITIES" => Ok(48),
             _ => Err(Error::UnknownArrayLengthIdent(ident.to_owned())),
         },
         ArrayLength::Number(length) => Ok(length),
@@ -221,10 +216,8 @@ fn visit_pointer() -> FieldMetadata {
 #[inline]
 fn visit_any(decl: Decl, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
     match decl {
-        Decl::Ident(ident) => visit_ident(fxhash::hash_u8(ident.as_bytes()), field),
-        Decl::Template { ident, argument } => {
-            visit_template(fxhash::hash_u8(ident.as_bytes()), *argument, field)
-        }
+        Decl::Ident(ident) => visit_ident(ident, field),
+        Decl::Template { ident, argument } => visit_template(ident, *argument, field),
         Decl::Array { decl, length } => visit_array(*decl, length, field),
         Decl::Pointer(_) => Ok(visit_pointer()),
     }
