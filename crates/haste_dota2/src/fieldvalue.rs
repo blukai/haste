@@ -47,6 +47,32 @@ pub enum FieldValue {
 
 // ----
 
+impl std::fmt::Display for FieldValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::I8(value) => f.write_fmt(format_args!("{:?}", value)),
+            Self::I16(value) => f.write_fmt(format_args!("{:?}", value)),
+            Self::I32(value) => f.write_fmt(format_args!("{:?}", value)),
+            Self::I64(value) => f.write_fmt(format_args!("{:?}", value)),
+
+            Self::U8(value) => f.write_fmt(format_args!("{:?}", value)),
+            Self::U16(value) => f.write_fmt(format_args!("{:?}", value)),
+            Self::U32(value) => f.write_fmt(format_args!("{:?}", value)),
+            Self::U64(value) => f.write_fmt(format_args!("{:?}", value)),
+
+            Self::Bool(value) => f.write_fmt(format_args!("{:?}", value)),
+            Self::F32(value) => f.write_fmt(format_args!("{:?}", value)),
+
+            Self::Vector(value) => f.write_fmt(format_args!("{:?}", value)),
+            Self::Vector2D(value) => f.write_fmt(format_args!("{:?}", value)),
+            Self::Vector4D(value) => f.write_fmt(format_args!("{:?}", value)),
+            Self::QAngle(value) => f.write_fmt(format_args!("{:?}", value)),
+
+            Self::String(value) => f.write_fmt(format_args!("{:?}", value)),
+        }
+    }
+}
+
 impl std::fmt::Debug for FieldValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

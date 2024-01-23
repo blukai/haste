@@ -86,7 +86,7 @@ impl FieldPath {
 
     #[inline]
     pub fn iter(&self) -> impl Iterator<Item = &u8> {
-        self.data.iter().take(self.last)
+        self.data.iter().take(self.last + 1)
     }
 
     // ----

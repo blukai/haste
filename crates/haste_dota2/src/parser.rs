@@ -129,7 +129,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         }
     }
 
-    pub fn parse_to_end(&mut self) -> Result<()> {
+    pub fn run_to_end(&mut self) -> Result<()> {
         self.run(|_notnotself, _cmd_header| Ok(ControlFlow::HandleCmd))
     }
 
@@ -144,7 +144,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     }
 
     // TODO: rename parse_to_tick to run_to_tick
-    pub fn parse_to_tick(&mut self, target_tick: i32) -> Result<()> {
+    pub fn run_to_tick(&mut self, target_tick: i32) -> Result<()> {
         // TODO: do not allow tick to be less then 0
 
         // TODO: do not allow tick to be greater then total ticks

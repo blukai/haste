@@ -28,9 +28,9 @@ fn main() -> Result<()> {
     let buf_reader = BufReader::new(file);
     let mut parser = Parser::from_reader_with_visitor(buf_reader, MyVisitor)?;
 
-    parser.parse_to_tick(80085)?;
-    parser.parse_to_tick(42)?;
-    parser.parse_to_tick(0)?;
+    parser.run_to_tick(80085)?;
+    parser.run_to_tick(42)?;
+    parser.run_to_tick(0)?;
 
     Ok(())
 }
