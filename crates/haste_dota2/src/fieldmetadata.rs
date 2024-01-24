@@ -22,19 +22,21 @@ pub type Result<T> = std::result::Result<T, Error>;
 // NOTE: Clone is derived because FlattenedSerializerField needs to be clonable.
 #[derive(Debug, Clone)]
 pub enum FieldSpecialDescriptor {
-    // TODO: add element_serializer_name_hash field into Array (to be more
-    // correct); probably don't turn FieldMetadata's decoder into Option, but
-    // instead create a NopDecoder (with unreachable! in body of decode method)
     Array { length: usize },
-    // TODO: add element_serializer_name_hash field into VariableLengthArray (to
-    // be more correct) and remove VariableLengthSerializerArray
-    VariableLengthArray,
-    VariableLengthSerializerArray,
+    Vector,
+    SerializerVector,
     // TODO: make use of the poiter special type (atm it's useless; but it's
     // supposed to be used to determine whether a new "entity" must be created
     // (and deserialized value of the pointer field (/bool) must not be
     // stored)).
     Pointer,
+}
+
+impl FieldSpecialDescriptor {
+    #[inline(always)]
+    pub(crate) fn is_vector(&self) -> bool {
+        matches!(self, Self::Vector | Self::SerializerVector)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -127,12 +129,12 @@ fn visit_ident(ident: &str, field: &FlattenedSerializerField) -> Result<FieldMet
 
         // exceptional specials xd
         "m_SpeechBubbles" => Ok(FieldMetadata {
-            special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
+            special_descriptor: Some(FieldSpecialDescriptor::SerializerVector),
             decoder: Box::<U32Decoder>::default(),
         }),
         // https://github.com/SteamDatabase/GameTracking-CS2/blob/6b3bf6ad44266e3ee4440a0b9b2fee1268812840/game/core/tools/demoinfo2/demoinfo2.txt#L155C83-L155C111
         "DOTA_CombatLogQueryProgress" => Ok(FieldMetadata {
-            special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
+            special_descriptor: Some(FieldSpecialDescriptor::SerializerVector),
             decoder: Box::<U32Decoder>::default(),
         }),
 
@@ -153,20 +155,20 @@ fn visit_template(
     match ident {
         "CNetworkUtlVectorBase" => match field.field_serializer_name.as_ref() {
             Some(_) => Ok(FieldMetadata {
-                special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
+                special_descriptor: Some(FieldSpecialDescriptor::SerializerVector),
                 decoder: Box::<U32Decoder>::default(),
             }),
             None => visit_any(argument, field).map(|field_metadata| FieldMetadata {
-                special_descriptor: Some(FieldSpecialDescriptor::VariableLengthArray),
+                special_descriptor: Some(FieldSpecialDescriptor::Vector),
                 decoder: field_metadata.decoder,
             }),
         },
         "CUtlVectorEmbeddedNetworkVar" => Ok(FieldMetadata {
-            special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
+            special_descriptor: Some(FieldSpecialDescriptor::SerializerVector),
             decoder: Box::<U32Decoder>::default(),
         }),
         "CUtlVector" => Ok(FieldMetadata {
-            special_descriptor: Some(FieldSpecialDescriptor::VariableLengthSerializerArray),
+            special_descriptor: Some(FieldSpecialDescriptor::SerializerVector),
             decoder: Box::<U32Decoder>::default(),
         }),
         _ => visit_ident(ident, field),
