@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 haste_dota2 = { path = "../../crates/haste_dota2" }
+rand = "0.8"

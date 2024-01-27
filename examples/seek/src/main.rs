@@ -1,18 +1,8 @@
-use haste_dota2::parser::{self, Parser, Visitor};
-use std::{fs::File, io::BufReader};
+use haste_dota2::parser::Parser;
+use rand::Rng;
+use std::{fs::File, io::BufReader, time::Instant};
 
-struct MyVisitor;
-
-impl Visitor for MyVisitor {
-    fn visit_cmd(
-        &self,
-        cmd_header: &haste_dota2::demofile::CmdHeader,
-        _data: &[u8],
-    ) -> parser::Result<()> {
-        eprintln!("cmd {:>10} {:?}", cmd_header.tick, cmd_header.command);
-        Ok(())
-    }
-}
+const N_SEEKS: u64 = 1000;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -26,11 +16,27 @@ fn main() -> Result<()> {
 
     let file = File::open(filepath.unwrap())?;
     let buf_reader = BufReader::new(file);
-    let mut parser = Parser::from_reader_with_visitor(buf_reader, MyVisitor)?;
+    let mut parser = Parser::from_reader(buf_reader)?;
 
-    parser.run_to_tick(80085)?;
-    parser.run_to_tick(42)?;
-    parser.run_to_tick(0)?;
+    let mut rng = rand::thread_rng();
+    let rng_range = -1..parser.total_ticks()?;
+
+    let start = Instant::now();
+    for _ in 0..N_SEEKS {
+        let target_tick = rng.gen_range(rng_range.clone());
+        println!("-----------------------------------------------------------");
+        println!("seeking to {}/{}", target_tick, parser.total_ticks()?);
+        let start = Instant::now();
+        parser.run_to_tick(target_tick)?;
+        println!("seek took {:?}", start.elapsed());
+    }
+    let elapsed = start.elapsed().as_millis() as u64;
+    println!(
+        "{} seek operations took {}ms, {}ms/seek",
+        N_SEEKS,
+        elapsed,
+        elapsed / N_SEEKS
+    );
 
     Ok(())
 }

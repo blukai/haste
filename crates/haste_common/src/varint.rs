@@ -45,7 +45,7 @@ pub fn read_uvarint32<R: Read>(rdr: &mut R) -> Result<(u32, usize)> {
         let byte = unsafe { *buf.get_unchecked(0) };
         result |= ((byte & PAYLOAD_BITS) as u32) << (count * 7);
         if (byte & CONTINUE_BIT) == 0 {
-            return Ok((result, count));
+            return Ok((result, count + 1));
         }
     }
     // If we get here it means that the fifth bit had its high bit

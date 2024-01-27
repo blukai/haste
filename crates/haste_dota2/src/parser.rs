@@ -145,7 +145,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
 
     // TODO: rename parse_to_tick to run_to_tick
     pub fn run_to_tick(&mut self, target_tick: i32) -> Result<()> {
-        // TODO: do not allow tick to be less then 0
+        // TODO: do not allow tick to be less then -1
 
         // TODO: do not allow tick to be greater then total ticks
 
@@ -156,10 +156,11 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
 
         // NOTE: EDemoCommands::DemSyncTick is the last command with 4294967295
         // tick (normlized to -1). last "initialization" command.
-        let mut did_reach_first_sync_tick = false;
+        let mut did_handle_first_sync_tick = false;
 
-        // NOTE: EDemoCommands::DemFullPacket contains snapshot of everything
-        let mut did_reach_last_full_packet = false;
+        // NOTE: EDemoCommands::DemFullPacket contains snapshot of everything...
+        // everything? it does not seem like it: string tables must be handled.
+        let mut did_handle_last_full_packet = false;
 
         self.run(|notnotself, cmd_header| {
             if cmd_header.tick > target_tick {
@@ -167,39 +168,42 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             }
 
             // init string tables, flattened serializers and entity classes
-            if !did_reach_first_sync_tick {
-                did_reach_first_sync_tick = cmd_header.command == EDemoCommands::DemSyncTick;
+            if !did_handle_first_sync_tick {
+                did_handle_first_sync_tick = cmd_header.command == EDemoCommands::DemSyncTick;
                 return Ok(ControlFlow::HandleCmd);
             }
 
-            // skip uptil full packet
-            if !did_reach_last_full_packet {
-                let target_tick_distance = target_tick - notnotself.tick;
-                // TODO: what if there's no full packet? maybe dem file is
-                // corrupted or something
-                let is_last_full_packet_close = target_tick_distance < FULL_PACKET_INTERVAL + 100;
-                if !is_last_full_packet_close {
-                    return Ok(ControlFlow::SkipCmd);
+            let is_full_packet = cmd_header.command == EDemoCommands::DemFullPacket;
+            let distance_to_target_tick = target_tick - notnotself.tick;
+            // TODO: what if there's no full packet ahead? maybe dem file is
+            // corrupted or something... scan for full packets before enterint
+            // the "run"?
+            let has_full_packet_ahead = distance_to_target_tick > FULL_PACKET_INTERVAL + 100;
+            if is_full_packet {
+                let cmd_data = notnotself.demo_file.read_cmd(cmd_header)?;
+                notnotself.visitor.visit_cmd(cmd_header, cmd_data)?;
+
+                let mut cmd = CDemoFullPacket::decode(cmd_data)?;
+                if has_full_packet_ahead {
+                    // NOTE: clarity seem to ignore "intermediary" full packet's
+                    // packet
+                    //
+                    // TODO: verify that is okay to ignore "intermediary" full
+                    // packet's packet
+                    cmd.packet = None;
                 }
-
-                let is_full_packet = cmd_header.command == EDemoCommands::DemFullPacket;
-                if !is_full_packet {
-                    return Ok(ControlFlow::SkipCmd);
-                }
-
-                debug_assert!(is_full_packet);
-                did_reach_last_full_packet = true;
-
-                let data = notnotself.demo_file.read_cmd(cmd_header)?;
-                notnotself.visitor.visit_cmd(cmd_header, data)?;
-
-                let cmd = CDemoFullPacket::decode(data)?;
                 notnotself.handle_cmd_full_packet(cmd)?;
+
+                did_handle_last_full_packet = !has_full_packet_ahead;
 
                 return Ok(ControlFlow::IgnoreCmd);
             }
 
-            Ok(ControlFlow::HandleCmd)
+            if did_handle_last_full_packet {
+                Ok(ControlFlow::HandleCmd)
+            } else {
+                Ok(ControlFlow::SkipCmd)
+            }
         })
     }
 

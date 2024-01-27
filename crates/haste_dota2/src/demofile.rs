@@ -64,10 +64,10 @@ pub struct CmdHeader {
     pub is_compressed: bool,
     pub tick: i32,
     pub size: u32,
-    // offset is how many bytes were read. offset can be used to do a backup
-    // (/unread cmd header) - offset is cheaper then calling stream_position
-    // method before reading cmd header.
-    pub offset: usize,
+    // bytes_read is how many bytes were read. bytes_read can be used to do a
+    // backup (/unread cmd header) - calculate bytes_read is cheaper then
+    // calling stream_position method before reading cmd header.
+    pub bytes_read: usize,
 }
 
 // NOTE: you should provide a reader that implements buffering (eg BufReader)
@@ -187,12 +187,12 @@ impl<R: Read + Seek> DemoFile<R> {
             is_compressed,
             tick,
             size,
-            offset: command_ot + tick_ot + size_ot,
+            bytes_read: command_ot + tick_ot + size_ot,
         })
     }
 
     pub fn unread_cmd_header(&mut self, cmd_header: &CmdHeader) -> Result<()> {
-        self.seek(SeekFrom::Current(-(cmd_header.offset as i64)))
+        self.seek(SeekFrom::Current(-(cmd_header.bytes_read as i64)))
             .map(|_| ())
             .map_err(Error::from)
     }
