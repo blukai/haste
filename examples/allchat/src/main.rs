@@ -7,7 +7,7 @@ use std::{fs::File, io::BufReader};
 struct MyVisitor;
 
 impl Visitor for MyVisitor {
-    fn visit_packet(&self, packet_type: u32, data: &[u8]) -> parser::Result<()> {
+    fn on_packet(&self, packet_type: u32, data: &[u8]) -> parser::Result<()> {
         if packet_type == protos::EDotaUserMessages::DotaUmChatMessage as u32 {
             let msg = protos::CdotaUserMsgChatMessage::decode(data)?;
             println!("{:?}", msg);

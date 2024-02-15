@@ -9,7 +9,7 @@ use std::{fs::File, io::BufReader};
 struct MyVisitor;
 
 impl Visitor for MyVisitor {
-    fn visit_entity(
+    fn on_entity(
         &self,
         _update_flags: usize,
         _update_type: UpdateType,

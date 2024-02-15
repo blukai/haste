@@ -22,10 +22,9 @@ const FULL_PACKET_INTERVAL: i32 = 1800;
 pub type Error = Box<dyn std::error::Error>;
 pub type Result<T> = std::result::Result<T, Error>;
 
-// TODO: introduce something like visit_tick_start and/or visit_tick_end
 pub trait Visitor {
     #[allow(unused_variables)]
-    fn visit_entity(
+    fn on_entity(
         &self,
         update_flags: usize,
         update_type: entities::UpdateType,
@@ -36,17 +35,23 @@ pub trait Visitor {
     }
 
     #[allow(unused_variables)]
-    fn visit_cmd(&self, cmd_header: &CmdHeader, data: &[u8]) -> Result<()> {
+    fn on_cmd(&self, cmd_header: &CmdHeader, data: &[u8]) -> Result<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn visit_packet(&self, packet_type: u32, data: &[u8]) -> Result<()> {
+    fn on_packet(&self, packet_type: u32, data: &[u8]) -> Result<()> {
+        Ok(())
+    }
+
+    // TODO: come up with an example that would use / will rely on on_tick_end
+    #[allow(unused_variables)]
+    fn on_tick_end(&self) -> Result<()> {
         Ok(())
     }
 }
 
-// ControlFLow indicates the desired behavior of the run loop.
+// ControlFlow indicates the desired behavior of the run loop.
 pub enum ControlFlow {
     // HandleCmd indicates that the command should be handled by the parser
     HandleCmd,
@@ -72,6 +77,7 @@ pub struct Parser<R: Read + Seek, V: Visitor> {
     serializers: Option<FlattenedSerializerContainer>,
     entity_classes: Option<EntityClasses>,
     entities: EntityContainer,
+    prev_tick: i32,
     tick: i32,
     visitor: V,
 }
@@ -89,6 +95,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             serializers: None,
             entity_classes: None,
             entities: EntityContainer::new(),
+            prev_tick: -1,
             tick: -1,
             visitor,
         })
@@ -103,16 +110,21 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         loop {
             match self.demo_file.read_cmd_header() {
                 Ok(cmd_header) => {
-                    let prev_tick = self.tick;
+                    self.prev_tick = self.tick;
                     self.tick = cmd_header.tick;
                     match handler(self, &cmd_header) {
                         Ok(cf) => match cf {
-                            ControlFlow::HandleCmd => self.handle_cmd(&cmd_header)?,
+                            ControlFlow::HandleCmd => {
+                                self.handle_cmd(&cmd_header)?;
+                                if self.prev_tick != self.tick {
+                                    self.visitor.on_tick_end()?;
+                                }
+                            }
                             ControlFlow::SkipCmd => self.demo_file.skip_cmd(&cmd_header)?,
                             ControlFlow::IgnoreCmd => {}
                             ControlFlow::Break => {
                                 self.demo_file.unread_cmd_header(&cmd_header)?;
-                                self.tick = prev_tick;
+                                self.tick = self.prev_tick;
                                 return Ok(());
                             }
                         },
@@ -139,6 +151,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         self.string_tables.clear();
         self.instance_baseline.clear();
         self.entities.clear();
+        self.prev_tick = -1;
         self.tick = -1;
         Ok(())
     }
@@ -181,7 +194,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             let has_full_packet_ahead = distance_to_target_tick > FULL_PACKET_INTERVAL + 100;
             if is_full_packet {
                 let cmd_data = notnotself.demo_file.read_cmd(cmd_header)?;
-                notnotself.visitor.visit_cmd(cmd_header, cmd_data)?;
+                notnotself.visitor.on_cmd(cmd_header, cmd_data)?;
 
                 let mut cmd = CDemoFullPacket::decode(cmd_data)?;
                 if has_full_packet_ahead {
@@ -195,6 +208,10 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 notnotself.handle_cmd_full_packet(cmd)?;
 
                 did_handle_last_full_packet = !has_full_packet_ahead;
+
+                if notnotself.prev_tick != notnotself.tick {
+                    notnotself.visitor.on_tick_end()?;
+                }
 
                 return Ok(ControlFlow::IgnoreCmd);
             }
@@ -213,7 +230,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     // 3. DemClassInfo (never update)
     fn handle_cmd(&mut self, cmd_header: &CmdHeader) -> Result<()> {
         let data = self.demo_file.read_cmd(cmd_header)?;
-        self.visitor.visit_cmd(cmd_header, data)?;
+        self.visitor.on_cmd(cmd_header, data)?;
 
         match cmd_header.command {
             EDemoCommands::DemPacket | EDemoCommands::DemSignonPacket => {
@@ -276,7 +293,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             br.read_bytes(buf)?;
             let buf: &_ = buf;
 
-            self.visitor.visit_packet(command, buf)?;
+            self.visitor.on_packet(command, buf)?;
 
             match command {
                 c if c == SvcMessages::SvcCreateStringTable as u32 => {
@@ -389,14 +406,12 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                         instance_baseline,
                         serializers,
                     )?;
-                    self.visitor
-                        .visit_entity(update_flags, update_type, entity)?;
+                    self.visitor.on_entity(update_flags, update_type, entity)?;
                 }
                 UpdateType::LeavePVS => {
                     if (update_flags & FHDR_DELETE) != 0 {
                         let entity = unsafe { self.entities.handle_delete_unchecked(entity_index) };
-                        self.visitor
-                            .visit_entity(update_flags, update_type, &entity)?;
+                        self.visitor.on_entity(update_flags, update_type, &entity)?;
                     }
                 }
                 UpdateType::DeltaEnt => {
@@ -404,8 +419,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                         self.entities
                             .handle_update_unchecked(entity_index, &mut br)?
                     };
-                    self.visitor
-                        .visit_entity(update_flags, update_type, entity)?;
+                    self.visitor.on_entity(update_flags, update_type, entity)?;
                 }
             }
         }

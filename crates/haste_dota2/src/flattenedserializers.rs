@@ -36,6 +36,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, Clone, Default)]
 pub struct Symbol {
     pub hash: u64,
+    // TODO: consider renaming str into boxed_str
     #[cfg(feature = "preserve-metadata")]
     pub str: Box<str>,
 }
@@ -169,6 +170,7 @@ impl FlattenedSerializerField {
 pub struct FlattenedSerializer {
     pub serializer_name: Symbol,
 
+    // TODO: figure out serializer version, is it needed?
     pub serializer_version: Option<i32>,
     pub fields: Vec<Rc<FlattenedSerializerField>>,
 }

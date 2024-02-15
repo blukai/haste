@@ -60,6 +60,8 @@ pub struct DemoHeader {
 
 #[derive(Debug, Clone)]
 pub struct CmdHeader {
+    // TODO: do not perform useless work - do not convert command to enum, store
+    // it as i32
     pub command: EDemoCommands,
     pub is_compressed: bool,
     pub tick: i32,
