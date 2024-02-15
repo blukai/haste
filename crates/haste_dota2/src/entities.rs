@@ -87,6 +87,7 @@ struct EntityField {
 // TODO: do not publicly expose Entity's fields
 #[derive(Debug, Clone)]
 pub struct Entity {
+    index: i32,
     fields: HashMap<u64, EntityField, BuildHasherDefault<NoHashHasher<u64>>>,
     serializer: Rc<FlattenedSerializer>,
 }
@@ -181,6 +182,11 @@ impl Entity {
             field.and_then(|f| f.get_child(*i as usize))
         })
     }
+
+    #[inline]
+    pub fn index(&self) -> i32 {
+        self.index
+    }
 }
 
 #[derive(Debug)]
@@ -223,6 +229,7 @@ impl EntityContainer {
             Entry::Occupied(entry) => entry.get().clone(),
             Entry::Vacant(e) => {
                 let mut entity = Entity {
+                    index,
                     fields: HashMap::with_capacity_and_hasher(
                         serializer.fields.len(),
                         BuildHasherDefault::default(),

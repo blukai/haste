@@ -25,7 +25,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub trait Visitor {
     #[allow(unused_variables)]
     fn on_entity(
-        &self,
+        &mut self,
         update_flags: usize,
         update_type: entities::UpdateType,
         // TODO: include updated fields (list of field paths?)
@@ -35,18 +35,18 @@ pub trait Visitor {
     }
 
     #[allow(unused_variables)]
-    fn on_cmd(&self, cmd_header: &CmdHeader, data: &[u8]) -> Result<()> {
+    fn on_cmd(&mut self, cmd_header: &CmdHeader, data: &[u8]) -> Result<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_packet(&self, packet_type: u32, data: &[u8]) -> Result<()> {
+    fn on_packet(&mut self, packet_type: u32, data: &[u8]) -> Result<()> {
         Ok(())
     }
 
     // TODO: come up with an example that would use / will rely on on_tick_end
     #[allow(unused_variables)]
-    fn on_tick_end(&self) -> Result<()> {
+    fn on_tick_end(&mut self) -> Result<()> {
         Ok(())
     }
 }

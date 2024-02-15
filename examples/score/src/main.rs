@@ -10,7 +10,7 @@ struct MyVisitor;
 
 impl Visitor for MyVisitor {
     fn on_entity(
-        &self,
+        &mut self,
         _update_flags: usize,
         _update_type: UpdateType,
         entity: &Entity,
@@ -40,7 +40,7 @@ fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let filepath = args.get(1);
     if filepath.is_none() {
-        eprintln!("usage: allchat <filepath>");
+        eprintln!("usage: score <filepath>");
         std::process::exit(42);
     }
 
