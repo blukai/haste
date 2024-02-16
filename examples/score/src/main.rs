@@ -2,7 +2,7 @@ use haste_dota2::{
     entities::{self, Entity, UpdateType},
     fieldvalue::FieldValue,
     fxhash,
-    parser::{self, Parser, Visitor},
+    parser::{self, Context, Parser, Visitor},
 };
 use std::{fs::File, io::BufReader};
 
@@ -11,6 +11,7 @@ struct MyVisitor;
 impl Visitor for MyVisitor {
     fn on_entity(
         &mut self,
+        _ctx: &Context,
         _update_flags: usize,
         _update_type: UpdateType,
         entity: &Entity,

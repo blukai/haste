@@ -1,7 +1,7 @@
 use haste_dota2::{
     entities::{make_field_key, Entity, UpdateType},
     fieldvalue::FieldValue,
-    parser::{self, Parser, Visitor},
+    parser::{self, Context, Parser, Visitor},
 };
 use std::{collections::HashMap, fs::File, io::BufReader};
 
@@ -17,6 +17,7 @@ struct MyVisitor {
 impl Visitor for MyVisitor {
     fn on_entity(
         &mut self,
+        ctx: &Context,
         _update_flags: usize,
         _update_type: UpdateType,
         entity: &Entity,
@@ -26,15 +27,16 @@ impl Visitor for MyVisitor {
             let prev_life_state = *self.life_states.get(&entity.index()).unwrap_or(&LIFE_DEAD);
             if next_life_state != prev_life_state {
                 self.life_states.insert(entity.index(), next_life_state);
-                // TODO: there's no way to interact with Parser
                 match next_life_state {
                     LIFE_ALIVE => eprintln!(
-                        "{} at index {} has spawned at tick TODO",
+                        "{:>6}: {} at index {} has spawned",
+                        ctx.tick(),
                         entity.get_serializer().serializer_name.str,
                         entity.index(),
                     ),
                     LIFE_DEAD => eprintln!(
-                        "{} at index {} has died at tick TODO",
+                        "{:>6}: {} at index {} has died",
+                        ctx.tick(),
                         entity.get_serializer().serializer_name.str,
                         entity.index(),
                     ),

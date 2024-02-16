@@ -22,10 +22,56 @@ const FULL_PACKET_INTERVAL: i32 = 1800;
 pub type Error = Box<dyn std::error::Error>;
 pub type Result<T> = std::result::Result<T, Error>;
 
+// NOTE: primary purpose of Context is to to be able to expose state to the
+// public; attempts to put parser into arguments of Visitor's method did not
+// result in anything satisfyable.
+pub struct Context {
+    string_tables: StringTableContainer,
+    instance_baseline: InstanceBaseline,
+    serializers: Option<FlattenedSerializerContainer>,
+    entity_classes: Option<EntityClasses>,
+    entities: EntityContainer,
+    tick: i32,
+    prev_tick: i32,
+}
+
+impl Context {
+    // NOTE: following methods are public-facing api; do not use them internally
+
+    #[inline]
+    pub fn tick(&self) -> i32 {
+        self.tick
+    }
+
+    #[inline]
+    pub fn string_tables(&self) -> Option<&StringTableContainer> {
+        if self.string_tables.is_empty() {
+            None
+        } else {
+            Some(&self.string_tables)
+        }
+    }
+
+    #[inline]
+    pub fn serializers(&self) -> Option<&FlattenedSerializerContainer> {
+        self.serializers.as_ref()
+    }
+
+    #[inline]
+    pub fn entities(&self) -> Option<&EntityContainer> {
+        if self.entities.is_empty() {
+            None
+        } else {
+            Some(&self.entities)
+        }
+    }
+}
+
 pub trait Visitor {
     #[allow(unused_variables)]
     fn on_entity(
         &mut self,
+        ctx: &Context,
         update_flags: usize,
         update_type: entities::UpdateType,
         // TODO: include updated fields (list of field paths?)
@@ -35,18 +81,18 @@ pub trait Visitor {
     }
 
     #[allow(unused_variables)]
-    fn on_cmd(&mut self, cmd_header: &CmdHeader, data: &[u8]) -> Result<()> {
+    fn on_cmd(&mut self, ctx: &Context, cmd_header: &CmdHeader, data: &[u8]) -> Result<()> {
         Ok(())
     }
 
     #[allow(unused_variables)]
-    fn on_packet(&mut self, packet_type: u32, data: &[u8]) -> Result<()> {
+    fn on_packet(&mut self, ctx: &Context, packet_type: u32, data: &[u8]) -> Result<()> {
         Ok(())
     }
 
     // TODO: come up with an example that would use / will rely on on_tick_end
     #[allow(unused_variables)]
-    fn on_tick_end(&mut self) -> Result<()> {
+    fn on_tick_end(&mut self, ctx: &Context) -> Result<()> {
         Ok(())
     }
 }
@@ -72,14 +118,8 @@ pub enum ControlFlow {
 pub struct Parser<R: Read + Seek, V: Visitor> {
     demo_file: DemoFile<R>,
     buf: Vec<u8>,
-    string_tables: StringTableContainer,
-    instance_baseline: InstanceBaseline,
-    serializers: Option<FlattenedSerializerContainer>,
-    entity_classes: Option<EntityClasses>,
-    entities: EntityContainer,
-    prev_tick: i32,
-    tick: i32,
     visitor: V,
+    ctx: Context,
 }
 
 impl<R: Read + Seek, V: Visitor> Parser<R, V> {
@@ -90,14 +130,16 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         Ok(Self {
             demo_file,
             buf: vec![0; DEMO_BUFFER_SIZE],
-            string_tables: StringTableContainer::default(),
-            instance_baseline: InstanceBaseline::default(),
-            serializers: None,
-            entity_classes: None,
-            entities: EntityContainer::new(),
-            prev_tick: -1,
-            tick: -1,
             visitor,
+            ctx: Context {
+                entities: EntityContainer::new(),
+                string_tables: StringTableContainer::default(),
+                instance_baseline: InstanceBaseline::default(),
+                serializers: None,
+                entity_classes: None,
+                tick: -1,
+                prev_tick: -1,
+            },
         })
     }
 
@@ -110,21 +152,21 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         loop {
             match self.demo_file.read_cmd_header() {
                 Ok(cmd_header) => {
-                    self.prev_tick = self.tick;
-                    self.tick = cmd_header.tick;
+                    self.ctx.prev_tick = self.ctx.tick;
+                    self.ctx.tick = cmd_header.tick;
                     match handler(self, &cmd_header) {
                         Ok(cf) => match cf {
                             ControlFlow::HandleCmd => {
                                 self.handle_cmd(&cmd_header)?;
-                                if self.prev_tick != self.tick {
-                                    self.visitor.on_tick_end()?;
+                                if self.ctx.prev_tick != self.ctx.tick {
+                                    self.visitor.on_tick_end(&self.ctx)?;
                                 }
                             }
                             ControlFlow::SkipCmd => self.demo_file.skip_cmd(&cmd_header)?,
                             ControlFlow::IgnoreCmd => {}
                             ControlFlow::Break => {
                                 self.demo_file.unread_cmd_header(&cmd_header)?;
-                                self.tick = self.prev_tick;
+                                self.ctx.tick = self.ctx.prev_tick;
                                 return Ok(());
                             }
                         },
@@ -145,14 +187,14 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         self.run(|_notnotself, _cmd_header| Ok(ControlFlow::HandleCmd))
     }
 
-    pub fn reset(&mut self) -> Result<()> {
+    fn reset(&mut self) -> Result<()> {
         self.demo_file
             .seek(SeekFrom::Start(DEMO_HEADER_SIZE as u64))?;
-        self.string_tables.clear();
-        self.instance_baseline.clear();
-        self.entities.clear();
-        self.prev_tick = -1;
-        self.tick = -1;
+        self.ctx.string_tables.clear();
+        self.ctx.instance_baseline.clear();
+        self.ctx.entities.clear();
+        self.ctx.prev_tick = -1;
+        self.ctx.tick = -1;
         Ok(())
     }
 
@@ -187,14 +229,16 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             }
 
             let is_full_packet = cmd_header.command == EDemoCommands::DemFullPacket;
-            let distance_to_target_tick = target_tick - notnotself.tick;
+            let distance_to_target_tick = target_tick - notnotself.ctx.tick;
             // TODO: what if there's no full packet ahead? maybe dem file is
             // corrupted or something... scan for full packets before enterint
             // the "run"?
             let has_full_packet_ahead = distance_to_target_tick > FULL_PACKET_INTERVAL + 100;
             if is_full_packet {
                 let cmd_data = notnotself.demo_file.read_cmd(cmd_header)?;
-                notnotself.visitor.on_cmd(cmd_header, cmd_data)?;
+                notnotself
+                    .visitor
+                    .on_cmd(&notnotself.ctx, cmd_header, cmd_data)?;
 
                 let mut cmd = CDemoFullPacket::decode(cmd_data)?;
                 if has_full_packet_ahead {
@@ -209,8 +253,8 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
 
                 did_handle_last_full_packet = !has_full_packet_ahead;
 
-                if notnotself.prev_tick != notnotself.tick {
-                    notnotself.visitor.on_tick_end()?;
+                if notnotself.ctx.prev_tick != notnotself.ctx.tick {
+                    notnotself.visitor.on_tick_end(&notnotself.ctx)?;
                 }
 
                 return Ok(ControlFlow::IgnoreCmd);
@@ -230,7 +274,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     // 3. DemClassInfo (never update)
     fn handle_cmd(&mut self, cmd_header: &CmdHeader) -> Result<()> {
         let data = self.demo_file.read_cmd(cmd_header)?;
-        self.visitor.on_cmd(cmd_header, data)?;
+        self.visitor.on_cmd(&self.ctx, cmd_header, data)?;
 
         match cmd_header.command {
             EDemoCommands::DemPacket | EDemoCommands::DemSignonPacket => {
@@ -241,35 +285,39 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             EDemoCommands::DemSendTables => {
                 // NOTE: this check exists because seeking exists, there's no
                 // need to re-parse flattened serializers
-                if self.serializers.is_some() {
+                if self.ctx.serializers.is_some() {
                     return Ok(());
                 }
 
                 let cmd = CDemoSendTables::decode(data)?;
-                self.serializers = Some(FlattenedSerializerContainer::parse(cmd)?);
+                self.ctx.serializers = Some(FlattenedSerializerContainer::parse(cmd)?);
             }
 
             EDemoCommands::DemClassInfo => {
                 // NOTE: this check exists because seeking exists, there's no
                 // need to re-parse entity classes
-                if self.entity_classes.is_some() {
+                if self.ctx.entity_classes.is_some() {
                     return Ok(());
                 }
 
                 let cmd = CDemoClassInfo::decode(data)?;
-                self.entity_classes = Some(EntityClasses::parse(cmd));
+                self.ctx.entity_classes = Some(EntityClasses::parse(cmd));
 
                 // NOTE: DemClassInfo message becomes available after
                 // SvcCreateStringTable(which has instancebaselines). to know
                 // how long vec that will contain instancebaseline values needs
                 // to be (to allocate precicely how much we need) we need to
                 // wait for DemClassInfos.
-                if let Some(string_table) =
-                    self.string_tables.find_table(INSTANCE_BASELINE_TABLE_NAME)
+                if let Some(string_table) = self
+                    .ctx
+                    .string_tables
+                    .find_table(INSTANCE_BASELINE_TABLE_NAME)
                 {
                     // SAFETY: entity_classes value was assigned above ^.
-                    let entity_classes = unsafe { self.entity_classes.as_ref().unwrap_unchecked() };
-                    self.instance_baseline
+                    let entity_classes =
+                        unsafe { self.ctx.entity_classes.as_ref().unwrap_unchecked() };
+                    self.ctx
+                        .instance_baseline
                         .update(string_table, entity_classes.classes)?;
                 }
             }
@@ -293,7 +341,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             br.read_bytes(buf)?;
             let buf: &_ = buf;
 
-            self.visitor.on_packet(command, buf)?;
+            self.visitor.on_packet(&self.ctx, command, buf)?;
 
             match command {
                 c if c == SvcMessages::SvcCreateStringTable as u32 => {
@@ -318,7 +366,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     }
 
     fn handle_svc_create_string_table(&mut self, msg: CsvcMsgCreateStringTable) -> Result<()> {
-        let string_table = self.string_tables.create_string_table_mut(
+        let string_table = self.ctx.string_tables.create_string_table_mut(
             msg.name(),
             msg.user_data_fixed_size(),
             msg.user_data_size(),
@@ -338,8 +386,9 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         string_table.parse_update(&mut BitReader::new(string_data), msg.num_entries())?;
 
         if string_table.name().eq(INSTANCE_BASELINE_TABLE_NAME) {
-            if let Some(entity_classes) = self.entity_classes.as_ref() {
-                self.instance_baseline
+            if let Some(entity_classes) = self.ctx.entity_classes.as_ref() {
+                self.ctx
+                    .instance_baseline
                     .update(string_table, entity_classes.classes)?;
             }
         }
@@ -352,11 +401,12 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         let table_id = msg.table_id() as usize;
 
         debug_assert!(
-            self.string_tables.has_table(table_id),
+            self.ctx.string_tables.has_table(table_id),
             "tryting to update non-existent table"
         );
         let string_table = unsafe {
-            self.string_tables
+            self.ctx
+                .string_tables
                 .get_table_mut(table_id)
                 .unwrap_unchecked()
         };
@@ -366,8 +416,9 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         )?;
 
         if string_table.name().eq(INSTANCE_BASELINE_TABLE_NAME) {
-            if let Some(entity_classes) = self.entity_classes.as_ref() {
-                self.instance_baseline
+            if let Some(entity_classes) = self.ctx.entity_classes.as_ref() {
+                self.ctx
+                    .instance_baseline
                     .update(string_table, entity_classes.classes)?;
             }
         }
@@ -383,9 +434,9 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         // SAFETY: safety here can only be guaranteed by the fact that entity
         // classes and flattened serializers become available before packet
         // entities.
-        let entity_classes = unsafe { self.entity_classes.as_ref().unwrap_unchecked() };
-        let serializers = unsafe { self.serializers.as_ref().unwrap_unchecked() };
-        let instance_baseline = &self.instance_baseline;
+        let entity_classes = unsafe { self.ctx.entity_classes.as_ref().unwrap_unchecked() };
+        let serializers = unsafe { self.ctx.serializers.as_ref().unwrap_unchecked() };
+        let instance_baseline = &self.ctx.instance_baseline;
 
         let entity_data = msg.entity_data();
         let mut br = BitReader::new(entity_data);
@@ -399,27 +450,49 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
 
             match update_type {
                 UpdateType::EnterPVS => {
-                    let entity = self.entities.handle_create(
-                        entity_index,
-                        &mut br,
-                        entity_classes,
-                        instance_baseline,
-                        serializers,
-                    )?;
-                    self.visitor.on_entity(update_flags, update_type, entity)?;
+                    // SAFETY: borrow checker is not happy because handle_create
+                    // requires mutable access to entities; rust's borrowing
+                    // rules specify that you cannot have both mutable and
+                    // immutable refs to the same data at the same time.
+                    //
+                    // alternative would be to call .handle_create and then
+                    // .get, but that does not make any sense, that is redundant
+                    // because .get is called inside of .handle_create. i can't
+                    // think of any issues that may arrise because of my raw
+                    // pointer approach.
+                    let entity = unsafe {
+                        let entity = self.ctx.entities.handle_create(
+                            entity_index,
+                            &mut br,
+                            entity_classes,
+                            instance_baseline,
+                            serializers,
+                        )?;
+                        &*(entity as *const Entity)
+                    };
+                    self.visitor
+                        .on_entity(&self.ctx, update_flags, update_type, entity)?;
                 }
                 UpdateType::LeavePVS => {
                     if (update_flags & FHDR_DELETE) != 0 {
-                        let entity = unsafe { self.entities.handle_delete_unchecked(entity_index) };
-                        self.visitor.on_entity(update_flags, update_type, &entity)?;
+                        let entity =
+                            unsafe { self.ctx.entities.handle_delete_unchecked(entity_index) };
+                        self.visitor
+                            .on_entity(&self.ctx, update_flags, update_type, &entity)?;
                     }
                 }
                 UpdateType::DeltaEnt => {
+                    // SAFETY: see comment above for .handle_create call in
+                    // EnterPVS arm; same stuff.
                     let entity = unsafe {
-                        self.entities
-                            .handle_update_unchecked(entity_index, &mut br)?
+                        let entity = self
+                            .ctx
+                            .entities
+                            .handle_update_unchecked(entity_index, &mut br)?;
+                        &*(entity as *const Entity)
                     };
-                    self.visitor.on_entity(update_flags, update_type, entity)?;
+                    self.visitor
+                        .on_entity(&self.ctx, update_flags, update_type, entity)?;
                 }
             }
         }
@@ -428,12 +501,17 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     }
 
     fn handle_cmd_string_tables(&mut self, cmd: CDemoStringTables) -> Result<()> {
-        self.string_tables.do_full_update(cmd);
+        self.ctx.string_tables.do_full_update(cmd);
 
         // SAFETY: entity_classes value is expected to be already assigned
-        let entity_classes = unsafe { self.entity_classes.as_ref().unwrap_unchecked() };
-        if let Some(string_table) = self.string_tables.find_table(INSTANCE_BASELINE_TABLE_NAME) {
-            self.instance_baseline
+        let entity_classes = unsafe { self.ctx.entity_classes.as_ref().unwrap_unchecked() };
+        if let Some(string_table) = self
+            .ctx
+            .string_tables
+            .find_table(INSTANCE_BASELINE_TABLE_NAME)
+        {
+            self.ctx
+                .instance_baseline
                 .update(string_table, entity_classes.classes)?;
         }
 
@@ -486,34 +564,26 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         self.demo_file.total_ticks().map_err(Error::from)
     }
 
-    // ----
+    // NOTE: following methods are public-facing api; do not use them internally
 
     #[inline]
     pub fn tick(&self) -> i32 {
-        self.tick
+        self.ctx.tick()
     }
 
     #[inline]
     pub fn string_tables(&self) -> Option<&StringTableContainer> {
-        if self.string_tables.is_empty() {
-            None
-        } else {
-            Some(&self.string_tables)
-        }
+        self.ctx.string_tables()
     }
 
     #[inline]
     pub fn serializers(&self) -> Option<&FlattenedSerializerContainer> {
-        self.serializers.as_ref()
+        self.ctx.serializers()
     }
 
     #[inline]
     pub fn entities(&self) -> Option<&EntityContainer> {
-        if self.entities.is_empty() {
-            None
-        } else {
-            Some(&self.entities)
-        }
+        self.ctx.entities()
     }
 }
 
