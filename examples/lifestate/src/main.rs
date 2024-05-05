@@ -23,27 +23,34 @@ impl Visitor for MyVisitor {
         entity: &Entity,
     ) -> parser::Result<()> {
         const LIFE_STATE_KEY: u64 = make_field_key(&["m_lifeState"]);
-        if let Some(FieldValue::U8(next_life_state)) = entity.get_value(&LIFE_STATE_KEY).cloned() {
-            let prev_life_state = *self.life_states.get(&entity.index()).unwrap_or(&LIFE_DEAD);
-            if next_life_state != prev_life_state {
-                self.life_states.insert(entity.index(), next_life_state);
-                match next_life_state {
-                    LIFE_ALIVE => eprintln!(
-                        "{:>6}: {} at index {} has spawned",
-                        ctx.tick(),
-                        entity.get_serializer().serializer_name.str,
-                        entity.index(),
-                    ),
-                    LIFE_DEAD => eprintln!(
-                        "{:>6}: {} at index {} has died",
-                        ctx.tick(),
-                        entity.get_serializer().serializer_name.str,
-                        entity.index(),
-                    ),
-                    _ => {}
-                }
-            }
+        let Some(FieldValue::U8(next_life_state)) = entity.get_value(&LIFE_STATE_KEY).cloned()
+        else {
+            return Ok(());
+        };
+
+        let prev_life_state = *self.life_states.get(&entity.index()).unwrap_or(&LIFE_DEAD);
+        if next_life_state == prev_life_state {
+            return Ok(());
         }
+
+        self.life_states.insert(entity.index(), next_life_state);
+
+        match next_life_state {
+            LIFE_ALIVE => eprintln!(
+                "{:>6}: {} at index {} has spawned",
+                ctx.tick(),
+                entity.get_serializer().serializer_name.str,
+                entity.index(),
+            ),
+            LIFE_DEAD => eprintln!(
+                "{:>6}: {} at index {} has died",
+                ctx.tick(),
+                entity.get_serializer().serializer_name.str,
+                entity.index(),
+            ),
+            _ => {}
+        }
+
         Ok(())
     }
 }
