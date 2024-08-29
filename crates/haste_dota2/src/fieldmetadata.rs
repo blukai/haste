@@ -126,7 +126,7 @@ fn visit_ident(ident: &str, field: &FlattenedSerializerField) -> Result<FieldMet
         "Vector4D" => non_special!(Vector4DDecoder::new(field)?),
         // game/shared/econ/econ_item_constants.h
         "itemid_t" => non_special!(U64Decoder::new(field)),
-        "HeroFacetKey_t" => non_special!(U64Decoder),
+        "HeroFacetKey_t" => non_special!(U64Decoder::new(field)),
         "BloodType" => non_special!(U32Decoder),
 
         // exceptional specials xd

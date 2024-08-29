@@ -165,15 +165,6 @@ pub struct U64Decoder {
     decoder: Box<dyn FieldDecode>,
 }
 
-impl Default for U64Decoder {
-    #[inline]
-    fn default() -> Self {
-        Self {
-            decoder: Box::<InternalU64Decoder>::default(),
-        }
-    }
-}
-
 impl U64Decoder {
     pub fn new(field: &FlattenedSerializerField) -> Self {
         if field.is_var_encoder_hash_eq(fxhash::hash_u8(b"fixed64")) {
@@ -181,7 +172,9 @@ impl U64Decoder {
                 decoder: Box::<InternalU64Fixed64Decoder>::default(),
             }
         } else {
-            Self::default()
+            Self {
+                decoder: Box::<InternalU64Decoder>::default(),
+            }
         }
     }
 }
