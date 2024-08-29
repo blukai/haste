@@ -73,7 +73,6 @@ fn visit_ident(ident: &str, field: &FlattenedSerializerField) -> Result<FieldMet
     }
 
     match ident {
-        // TODO: smaller decoders (8 and 16 bit)
         // ints
         "int8" => non_special!(I8Decoder),
         "int16" => non_special!(I16Decoder),

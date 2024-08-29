@@ -32,7 +32,11 @@ fn collect_unique_var_types(serializers: &FlattenedSerializerContainer) -> Vec<S
     let mut tmp: HashSet<String> = HashSet::new();
     serializers.values().for_each(|fs| {
         fs.fields.iter().for_each(|f| {
-            tmp.insert(f.var_type.str.to_string());
+            tmp.insert(format!(
+                "{} ({:?})",
+                f.var_type.str.to_string(),
+                f.metadata.decoder
+            ));
         });
     });
     tmp.into_iter().collect()
@@ -47,6 +51,18 @@ fn collect_unique_var_type_idents(serializers: &FlattenedSerializerContainer) ->
                     tmp.insert(ident.to_string());
                 }
             });
+        });
+    });
+    tmp.into_iter().collect()
+}
+
+fn collect_unique_var_encoders(serializers: &FlattenedSerializerContainer) -> Vec<String> {
+    let mut tmp = HashSet::<String>::new();
+    serializers.values().for_each(|fs| {
+        fs.fields.iter().for_each(|f| {
+            if let Some(var_encoder) = f.var_encoder.as_ref() {
+                tmp.insert(var_encoder.str.to_string());
+            }
         });
     });
     tmp.into_iter().collect()
@@ -86,6 +102,15 @@ fn main() -> Result<()> {
     eprintln!("unique var type idents");
     eprintln!("----------------------");
     let mut var_type_idents = collect_unique_var_type_idents(serializers);
+    var_type_idents.sort();
+    var_type_idents.iter().for_each(|var_type_ident| {
+        eprintln!("{var_type_ident}");
+    });
+
+    eprintln!("----------------------");
+    eprintln!("unique var encoders");
+    eprintln!("----------------------");
+    let mut var_type_idents = collect_unique_var_encoders(serializers);
     var_type_idents.sort();
     var_type_idents.iter().for_each(|var_type_ident| {
         eprintln!("{var_type_ident}");

@@ -265,7 +265,8 @@ struct InternalF32SimulationTimeDecoder {}
 impl InternalF32Decode for InternalF32SimulationTimeDecoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<f32> {
-        const TICK_INTERVAL: f32 = 1.0 / 30.0;
+        // const TICK_INTERVAL: f32 = 1.0 / 30.0;
+        const TICK_INTERVAL: f32 = 1.0 / 60.0;
         br.read_uvarint32()
             .map(|value| value as f32 * TICK_INTERVAL)
             .map_err(Error::from)
@@ -315,7 +316,7 @@ impl InternalF32Decoder {
 
         let bit_count = field.bit_count.unwrap_or_default();
         // why would it be greater than 32? :thinking:
-        if bit_count == 0 || bit_count >= 32 {
+        if bit_count <= 0 || bit_count >= 32 {
             return Ok(Self {
                 decoder: Box::<InternalF32NoScaleDecoder>::default(),
             });
@@ -460,6 +461,32 @@ impl FieldDecode for InternalQAnglePitchYawDecoder {
 }
 
 #[derive(Debug, Clone, Default)]
+struct InternalQAnglePreciseDecoder;
+
+impl FieldDecode for InternalQAnglePreciseDecoder {
+    #[inline]
+    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+        let mut vec3 = [0f32; 3];
+
+        let rx = br.read_bool()?;
+        let ry = br.read_bool()?;
+        let rz = br.read_bool()?;
+
+        if rx {
+            vec3[0] = br.read_bitangle(20)?;
+        }
+        if ry {
+            vec3[1] = br.read_bitangle(20)?;
+        }
+        if rz {
+            vec3[2] = br.read_bitangle(20)?;
+        }
+
+        Ok(FieldValue::QAngle(vec3))
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 struct InternalQAngleNoBitCountDecoder {}
 
 impl FieldDecode for InternalQAngleNoBitCountDecoder {
@@ -514,6 +541,12 @@ impl QAngleDecoder {
         if field.is_var_encoder_hash_eq(fxhash::hash_u8(b"qangle_pitch_yaw")) {
             return Self {
                 decoder: Box::new(InternalQAnglePitchYawDecoder { bit_count }),
+            };
+        }
+
+        if field.is_var_encoder_hash_eq(fxhash::hash_u8(b"qangle_precise")) {
+            return Self {
+                decoder: Box::<InternalQAnglePreciseDecoder>::default(),
             };
         }
 

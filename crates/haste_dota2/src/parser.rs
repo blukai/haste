@@ -1,3 +1,5 @@
+use haste_dota2_protos::CsvcMsgServerInfo;
+
 use crate::{
     bitbuf::BitReader,
     demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_BUFFER_SIZE, DEMO_HEADER_SIZE},
@@ -187,7 +189,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         self.run(|_notnotself, _cmd_header| Ok(ControlFlow::HandleCmd))
     }
 
-    fn reset(&mut self) -> Result<()> {
+    pub fn reset(&mut self) -> Result<()> {
         self.demo_file
             .seek(SeekFrom::Start(DEMO_HEADER_SIZE as u64))?;
         self.ctx.string_tables.clear();
@@ -359,6 +361,13 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                     self.handle_svc_packet_entities(msg)?;
                 }
 
+                // TODO(blukai): figure out how to incorporate tick_interval into simulation time
+                // decoder (InternalF32SimulationTimeDecoder).
+                // c if c == SvcMessages::SvcServerInfo as u32 => {
+                //     let msg = CsvcMsgServerInfo::decode(buf)?;
+                //     dbg!(msg.tick_interval());
+                //     panic!();
+                // }
                 _ => {}
             }
         }

@@ -163,6 +163,10 @@ impl QuantizedFloat {
             decode_mul: 0.0,
         };
 
+        if bit_count == 0 || bit_count >= 32 {
+            return Ok(qf);
+        }
+
         qf.encode_flags = compute_encode_flags(qf.encode_flags, qf.low_value, qf.high_value)?;
         let mut steps = 1 << qf.bit_count;
 
