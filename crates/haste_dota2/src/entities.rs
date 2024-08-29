@@ -94,13 +94,13 @@ pub struct Entity {
 
 impl Entity {
     fn parse(&mut self, br: &mut BitReader) -> Result<()> {
-        // eprintln!("-- {}", self.serializer.serializer_name);
+        // eprintln!("-- {:?}", self.serializer.serializer_name);
 
         fieldpath::FIELD_PATHS.with(|fps| unsafe {
             let mut fps = &mut *fps.get();
             let fps = fieldpath::read_field_paths(br, &mut fps)?;
             for fp in fps {
-                // eprint!("{:?} ", &fp.data[..=fp.position],);
+                // eprint!("{:?} ", &fp.data[..=fp.last]);
 
                 // NOTE: this loop performes much better then the unrolled
                 // version of it, probably because a bunch of ifs cause a bunch
@@ -118,7 +118,7 @@ impl Entity {
                 }
                 let field_key = field_key_hasher.finish();
 
-                // eprint!("{} {} ", field.var_name, field.var_type);
+                // eprint!("{:?} {:?} ", field.var_name, field.var_type);
 
                 // NOTE: a shit ton of time was being spent here in a Try trait.
                 // apparently Result is quite expensive xd. here's an artice
