@@ -274,7 +274,7 @@ impl FlattenedSerializerContainer {
 
                     // TODO: maybe extract arms into separate functions
                     match field.metadata.special_descriptor {
-                        Some(FieldSpecialDescriptor::Array { length }) => {
+                        Some(FieldSpecialDescriptor::FixedArray { length }) => {
                             field.field_serializer = Some(Rc::new(FlattenedSerializer {
                                 fields: {
                                     let mut fields = Vec::with_capacity(length);
@@ -284,13 +284,19 @@ impl FlattenedSerializerContainer {
                                 ..Default::default()
                             }));
                         }
-                        Some(FieldSpecialDescriptor::Vector) => {
+                        Some(FieldSpecialDescriptor::DynamicArray { ref decoder }) => {
                             field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                fields: vec![Rc::new(field.clone())],
+                                fields: vec![Rc::new(FlattenedSerializerField {
+                                    metadata: FieldMetadata {
+                                        decoder: decoder.clone(),
+                                        ..Default::default()
+                                    },
+                                    ..Default::default()
+                                })],
                                 ..Default::default()
                             }));
                         }
-                        Some(FieldSpecialDescriptor::SerializerVector) => {
+                        Some(FieldSpecialDescriptor::DynamicSerializerVector) => {
                             field.field_serializer = Some(Rc::new(FlattenedSerializer {
                                 fields: vec![Rc::new(FlattenedSerializerField {
                                     field_serializer: field

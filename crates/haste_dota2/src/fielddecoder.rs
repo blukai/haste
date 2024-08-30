@@ -485,6 +485,32 @@ impl FieldDecode for InternalQAngleNoBitCountDecoder {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+struct InternalQAnglePreciseDecoder;
+
+impl FieldDecode for InternalQAnglePreciseDecoder {
+    #[inline]
+    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+        let mut vec3 = [0f32; 3];
+
+        let rx = br.read_bool()?;
+        let ry = br.read_bool()?;
+        let rz = br.read_bool()?;
+
+        if rx {
+            vec3[0] = br.read_bitangle(20)?;
+        }
+        if ry {
+            vec3[1] = br.read_bitangle(20)?;
+        }
+        if rz {
+            vec3[2] = br.read_bitangle(20)?;
+        }
+
+        Ok(FieldValue::QAngle(vec3))
+    }
+}
+
 #[derive(Debug, Clone)]
 struct InternalQAngleBitCountDecoder {
     bit_count: usize,
@@ -514,6 +540,12 @@ impl QAngleDecoder {
         if field.is_var_encoder_hash_eq(fxhash::hash_u8(b"qangle_pitch_yaw")) {
             return Self {
                 decoder: Box::new(InternalQAnglePitchYawDecoder { bit_count }),
+            };
+        }
+
+        if field.is_var_encoder_hash_eq(fxhash::hash_u8(b"qangle_precise")) {
+            return Self {
+                decoder: Box::<InternalQAnglePreciseDecoder>::default(),
             };
         }
 

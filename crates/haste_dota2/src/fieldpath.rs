@@ -21,9 +21,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Clone)]
 pub struct FieldPath {
-    data: [u8; 7],
-    last: usize,
-    finished: bool,
+    pub(crate) data: [u8; 7],
+    pub(crate) last: usize,
+    pub(crate) finished: bool,
 }
 
 impl Default for FieldPath {

@@ -11,7 +11,7 @@ use crate::{
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("unknown array length ident: {0}")]
-    UnknownArrayLengthIdent(String),
+    UnknownArrayLenIdent(String),
     // crate
     #[error(transparent)]
     FieldDecoder(#[from] fielddecoder::Error),
@@ -22,9 +22,15 @@ pub type Result<T> = std::result::Result<T, Error>;
 // NOTE: Clone is derived because FlattenedSerializerField needs to be clonable.
 #[derive(Debug, Clone)]
 pub enum FieldSpecialDescriptor {
-    Array { length: usize },
-    Vector,
-    SerializerVector,
+    FixedArray { length: usize },
+    // unlike SerializerVector fields, Vector fields don't always specify field_serializer_name,
+    // thus it should be looked up. Vector's decoder must be used to decode fields of this field.
+    // Vector's own decoder must be length decoder.
+    DynamicArray { decoder: Box<dyn FieldDecode> },
+    // SerializerVector indicates that fields must be deserialized by the decoder withing the
+    // field_serializer_name.
+    // SerializerVector's own decoder must be length decoder.
+    DynamicSerializerVector,
     // TODO: make use of the poiter special type (atm it's useless; but it's
     // supposed to be used to determine whether a new "entity" must be created
     // (and deserialized value of the pointer field (/bool) must not be
@@ -35,7 +41,10 @@ pub enum FieldSpecialDescriptor {
 impl FieldSpecialDescriptor {
     #[inline(always)]
     pub(crate) fn is_vector(&self) -> bool {
-        matches!(self, Self::Vector | Self::SerializerVector)
+        matches!(
+            self,
+            Self::DynamicArray { .. } | Self::DynamicSerializerVector
+        )
     }
 }
 
@@ -131,12 +140,12 @@ fn visit_ident(ident: &str, field: &FlattenedSerializerField) -> Result<FieldMet
 
         // exceptional specials xd
         "m_SpeechBubbles" => Ok(FieldMetadata {
-            special_descriptor: Some(FieldSpecialDescriptor::SerializerVector),
+            special_descriptor: Some(FieldSpecialDescriptor::DynamicSerializerVector),
             decoder: Box::<U32Decoder>::default(),
         }),
         // https://github.com/SteamDatabase/GameTracking-CS2/blob/6b3bf6ad44266e3ee4440a0b9b2fee1268812840/game/core/tools/demoinfo2/demoinfo2.txt#L155C83-L155C111
         "DOTA_CombatLogQueryProgress" => Ok(FieldMetadata {
-            special_descriptor: Some(FieldSpecialDescriptor::SerializerVector),
+            special_descriptor: Some(FieldSpecialDescriptor::DynamicSerializerVector),
             decoder: Box::<U32Decoder>::default(),
         }),
 
@@ -158,34 +167,26 @@ fn visit_template(
         unreachable!();
     };
 
-    match ident {
-        // TODO: CNetworkUtlVectorBase must be a SerializerVector. a SerializerVector's decoder
-        // must be U32Decoder, but base decode must not be used to decode its items, only length.
-        //
-        // for example field path [25] of CNetworkUtlVectorBase< Vector > is length, which must be
-        // decoded using u32 decoder; [25, 0] is Vector that must be decoded with Vector decoder.
-        //
-        // same probably must happen to other vector'y fields.
-        "CNetworkUtlVectorBase" => match field.field_serializer_name.as_ref() {
-            Some(_) => Ok(FieldMetadata {
-                special_descriptor: Some(FieldSpecialDescriptor::SerializerVector),
+    if matches!(
+        ident,
+        "CNetworkUtlVectorBase" | "CUtlVectorEmbeddedNetworkVar" | "CUtlVector"
+    ) {
+        if field.field_serializer_name.is_some() {
+            return Ok(FieldMetadata {
+                special_descriptor: Some(FieldSpecialDescriptor::DynamicSerializerVector),
                 decoder: Box::<U32Decoder>::default(),
-            }),
-            None => visit_any(arg, field).map(|field_metadata| FieldMetadata {
-                special_descriptor: Some(FieldSpecialDescriptor::Vector),
+            });
+        }
+
+        return visit_any(arg, field).map(|field_metadata| FieldMetadata {
+            special_descriptor: Some(FieldSpecialDescriptor::DynamicArray {
                 decoder: field_metadata.decoder,
             }),
-        },
-        "CUtlVectorEmbeddedNetworkVar" => Ok(FieldMetadata {
-            special_descriptor: Some(FieldSpecialDescriptor::SerializerVector),
             decoder: Box::<U32Decoder>::default(),
-        }),
-        "CUtlVector" => Ok(FieldMetadata {
-            special_descriptor: Some(FieldSpecialDescriptor::SerializerVector),
-            decoder: Box::<U32Decoder>::default(),
-        }),
-        _ => visit_ident(ident, field),
+        });
     }
+
+    return visit_ident(ident, field);
 }
 
 #[inline]
@@ -205,24 +206,24 @@ fn visit_array(expr: Expr, len: Expr, field: &FlattenedSerializerField) -> Resul
             // https://github.com/SteamDatabase/GameTracking-CS2/blob/6b3bf6ad44266e3ee4440a0b9b2fee1268812840/game/core/tools/demoinfo2/demoinfo2.txt#L160
             // TODO: test ability draft game
             "MAX_ABILITY_DRAFT_ABILITIES" => Ok(48),
-            _ => Err(Error::UnknownArrayLengthIdent(ident.to_owned())),
+            _ => Err(Error::UnknownArrayLenIdent(ident.to_owned())),
         },
         Expr::Lit(Lit::Num(length)) => Ok(length),
         _ => unreachable!(),
     }?;
 
     visit_any(expr, field).map(|field_metadata| FieldMetadata {
-        special_descriptor: Some(FieldSpecialDescriptor::Array { length }),
+        special_descriptor: Some(FieldSpecialDescriptor::FixedArray { length }),
         decoder: field_metadata.decoder,
     })
 }
 
 #[inline]
-fn visit_pointer() -> FieldMetadata {
-    FieldMetadata {
+fn visit_pointer() -> Result<FieldMetadata> {
+    Ok(FieldMetadata {
         special_descriptor: Some(FieldSpecialDescriptor::Pointer),
         decoder: Box::<BoolDecoder>::default(),
-    }
+    })
 }
 
 #[inline]
@@ -231,7 +232,7 @@ fn visit_any(expr: Expr, field: &FlattenedSerializerField) -> Result<FieldMetada
         Expr::Ident(ident) => visit_ident(ident, field),
         Expr::Template { expr, arg } => visit_template(*expr, *arg, field),
         Expr::Array { expr, len } => visit_array(*expr, *len, field),
-        Expr::Pointer(_) => Ok(visit_pointer()),
+        Expr::Pointer(_) => visit_pointer(),
         _ => unreachable!(),
     }
 }
