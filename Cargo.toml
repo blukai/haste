@@ -11,8 +11,20 @@ edition = "2021"
 
 [workspace.dependencies]
 # internal
+haste_common = { path = "crates/haste_common" }
+haste_dota2 = { path = "crates/haste_dota2" }
+haste_dota2_protos = { path = "crates/haste_dota2_protos" }
 haste_vartype = { path = "crates/haste_vartype" }
 # external
+anyhow = "1.0.86"
 dungers_charsor = { git = "https://github.com/blukai/dungers.git", rev = "09ade72623e74298d688402f7d007466499a83e6" }
+dyn-clone = "1.0.17"
 expect-test = "1.5.0"
+hashbrown = { version = "0.14.5", default-features = false, features = ["inline-more"]  }
+nohash = "0.2.0"
+prost = "0.13.2"
+prost-build = "0.13.2"
+protobuf-src = "2.1.0"
+rand = "0.8.5"
+snap = "1.1.1"
 thiserror = "1.0.63"

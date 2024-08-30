@@ -4,14 +4,16 @@ version = "0.0.0"
 edition.workspace = true
 
 [dependencies]
-haste_common = { path = "../haste_common" }
-haste_dota2_protos = { path = "../haste_dota2_protos" }
-thiserror.workspace = true
-snap = "1.1"
-hashbrown = { version = "0.14", default-features = false, features = ["inline-more"] }
-nohash = "0.2"
-dyn-clone = "1.0"
+dyn-clone.workspace = true
+hashbrown.workspace = true
+haste_common.workspace = true
+haste_dota2_protos.workspace = true
 haste_vartype.workspace = true
+nohash.workspace = true
+snap.workspace = true
+thiserror.workspace = true
 
 [features]
+# TODO(blukai): rename preserve-metadata feature into something more meaningful,
+# or get rid of it all together and preserve symbols only in debug builds.
 preserve-metadata = []

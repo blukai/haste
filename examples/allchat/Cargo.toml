@@ -4,4 +4,4 @@ version = "0.0.0"
 edition.workspace = true
 
 [dependencies]
-haste_dota2 = { path = "../../crates/haste_dota2" }
+haste_dota2.workspace = true
