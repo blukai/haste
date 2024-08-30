@@ -1,2 +1,6 @@
 /target
 /Cargo.lock
+
+# NOTE(blukai): a somewhat okay visual debuger (CodeLLDB + rust-analyzer
+# extensions).
+/.vscode

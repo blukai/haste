@@ -187,7 +187,8 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         self.run(|_notnotself, _cmd_header| Ok(ControlFlow::HandleCmd))
     }
 
-    fn reset(&mut self) -> Result<()> {
+    // TODO: this probably has to be private?
+    pub fn reset(&mut self) -> Result<()> {
         self.demo_file
             .seek(SeekFrom::Start(DEMO_HEADER_SIZE as u64))?;
         self.ctx.string_tables.clear();
@@ -359,7 +360,15 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                     self.handle_svc_packet_entities(msg)?;
                 }
 
-                _ => {}
+                c if c == SvcMessages::SvcServerInfo as u32 => {
+                    // TODO(blukai): figure out how to incorporate tick_interval into simulation time
+                    // decoder (InternalF32SimulationTimeDecoder).
+                    // dota2's tick interval is 1 / 30; deadlocks 1 / 60.
+                }
+
+                _ => {
+                    // ignore
+                }
             }
         }
         Ok(())

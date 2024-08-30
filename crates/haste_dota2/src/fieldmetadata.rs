@@ -155,6 +155,13 @@ fn visit_template(
     field: &FlattenedSerializerField,
 ) -> Result<FieldMetadata> {
     match ident {
+        // TODO: CNetworkUtlVectorBase must be a SerializerVector. a SerializerVector's decoder
+        // must be U32Decoder, but base decode must not be used to decode its items, only length.
+        //
+        // for example field path [25] of CNetworkUtlVectorBase< Vector > is length, which must be
+        // decoded using u32 decoder; [25, 0] is Vector that must be decoded with Vector decoder.
+        //
+        // same probably must happen to other vector'y fields.
         "CNetworkUtlVectorBase" => match field.field_serializer_name.as_ref() {
             Some(_) => Ok(FieldMetadata {
                 special_descriptor: Some(FieldSpecialDescriptor::SerializerVector),
