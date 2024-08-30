@@ -1,8 +1,7 @@
 [package]
 name = "haste_common"
 version = "0.0.0"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
-# TODO: maybe switch to onlyerror
-thiserror = "1.0"
+thiserror.workspace = true

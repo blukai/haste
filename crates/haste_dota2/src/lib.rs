@@ -9,8 +9,8 @@
 pub use haste_common::bitbuf;
 pub use haste_common::fxhash;
 pub use haste_common::varint;
-pub use haste_dota2_deflat as deflat;
 pub use haste_dota2_protos as protos;
+pub use haste_vartype as vartype;
 
 // TODO: figure pub scopes for all the things
 pub mod demofile;

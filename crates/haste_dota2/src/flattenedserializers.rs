@@ -6,7 +6,7 @@ use crate::{
         CDemoSendTables, CsvcMsgFlattenedSerializer, ProtoFlattenedSerializerFieldT,
         ProtoFlattenedSerializerT,
     },
-    varint,
+    varint, vartype,
 };
 use hashbrown::{hash_map::Values, HashMap};
 use nohash::NoHashHasher;
@@ -22,6 +22,8 @@ pub enum Error {
     Varint(#[from] varint::Error),
     #[error(transparent)]
     FieldMetadata(#[from] fieldmetadata::Error),
+    #[error(transparent)]
+    Vartype(#[from] vartype::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -101,7 +103,7 @@ impl FlattenedSerializerField {
                 .map(resolve_sym_unchecked)
                 .unwrap_unchecked()
         };
-        let var_type_decl = haste_dota2_deflat::var_type::parse(var_type.as_str());
+        let var_type_expr = vartype::parse(var_type.as_str())?;
 
         let var_name = unsafe {
             field
@@ -129,7 +131,7 @@ impl FlattenedSerializerField {
 
             metadata: Default::default(),
         };
-        ret.metadata = get_field_metadata(var_type_decl, &ret)?;
+        ret.metadata = get_field_metadata(var_type_expr, &ret)?;
         Ok(ret)
     }
 

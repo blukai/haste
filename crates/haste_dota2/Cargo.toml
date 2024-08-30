@@ -1,19 +1,17 @@
 [package]
 name = "haste_dota2"
 version = "0.0.0"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 haste_common = { path = "../haste_common" }
-haste_dota2_deflat = { path = "../haste_dota2_deflat" }
 haste_dota2_protos = { path = "../haste_dota2_protos" }
-# TODO: maybe switch to onlyerror (to achieve faster comp times)
-thiserror = "1.0"
+thiserror.workspace = true
 snap = "1.1"
-# NOTE: hashbrown::HashMap is noticeably faster then std::collections::hashMap
 hashbrown = { version = "0.14", default-features = false, features = ["inline-more"] }
 nohash = "0.2"
 dyn-clone = "1.0"
+haste_vartype.workspace = true
 
 [features]
 preserve-metadata = []

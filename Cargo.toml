@@ -1,8 +1,18 @@
 [workspace]
 resolver = "2"
-
 members = [
-    "crates/*",
-    "examples/*",
-    "tools/*"
+  "crates/*",
+  "examples/*",
+  "tools/*"
 ]
+
+[workspace.package]
+edition = "2021"
+
+[workspace.dependencies]
+# internal
+haste_vartype = { path = "crates/haste_vartype" }
+# external
+dungers_charsor = { git = "https://github.com/blukai/dungers.git", rev = "09ade72623e74298d688402f7d007466499a83e6" }
+expect-test = "1.5.0"
+thiserror = "1.0.63"

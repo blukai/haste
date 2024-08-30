@@ -1,11 +1,11 @@
 use crate::{
-    deflat::var_type::{ArrayLength, Decl},
     fielddecoder::{
         self, BoolDecoder, F32Decoder, FieldDecode, I16Decoder, I32Decoder, I64Decoder, I8Decoder,
         NopDecoder, QAngleDecoder, QuantizedFloatDecoder, StringDecoder, U16Decoder, U32Decoder,
         U64Decoder, U8Decoder, Vector2DDecoder, Vector4DDecoder, VectorDecoder,
     },
     flattenedserializers::FlattenedSerializerField,
+    vartype::{Expr, Lit},
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -150,10 +150,14 @@ fn visit_ident(ident: &str, field: &FlattenedSerializerField) -> Result<FieldMet
 
 #[inline]
 fn visit_template(
-    ident: &str,
-    argument: Decl,
+    expr: Expr,
+    arg: Expr,
     field: &FlattenedSerializerField,
 ) -> Result<FieldMetadata> {
+    let Expr::Ident(ident) = expr else {
+        unreachable!();
+    };
+
     match ident {
         // TODO: CNetworkUtlVectorBase must be a SerializerVector. a SerializerVector's decoder
         // must be U32Decoder, but base decode must not be used to decode its items, only length.
@@ -167,7 +171,7 @@ fn visit_template(
                 special_descriptor: Some(FieldSpecialDescriptor::SerializerVector),
                 decoder: Box::<U32Decoder>::default(),
             }),
-            None => visit_any(argument, field).map(|field_metadata| FieldMetadata {
+            None => visit_any(arg, field).map(|field_metadata| FieldMetadata {
                 special_descriptor: Some(FieldSpecialDescriptor::Vector),
                 decoder: field_metadata.decoder,
             }),
@@ -185,12 +189,8 @@ fn visit_template(
 }
 
 #[inline]
-fn visit_array(
-    decl: Decl,
-    length: ArrayLength,
-    field: &FlattenedSerializerField,
-) -> Result<FieldMetadata> {
-    if let Decl::Ident(ident) = decl {
+fn visit_array(expr: Expr, len: Expr, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
+    if let Expr::Ident(ident) = expr {
         if ident == "char" {
             return Ok(FieldMetadata {
                 special_descriptor: None,
@@ -199,18 +199,19 @@ fn visit_array(
         }
     }
 
-    let length = match length {
-        ArrayLength::Ident(ident) => match ident {
+    let length = match len {
+        Expr::Ident(ident) => match ident {
             // NOTE: it seems like this was changed from array to vec, see
             // https://github.com/SteamDatabase/GameTracking-CS2/blob/6b3bf6ad44266e3ee4440a0b9b2fee1268812840/game/core/tools/demoinfo2/demoinfo2.txt#L160
             // TODO: test ability draft game
             "MAX_ABILITY_DRAFT_ABILITIES" => Ok(48),
             _ => Err(Error::UnknownArrayLengthIdent(ident.to_owned())),
         },
-        ArrayLength::Number(length) => Ok(length),
+        Expr::Lit(Lit::Num(length)) => Ok(length),
+        _ => unreachable!(),
     }?;
 
-    visit_any(decl, field).map(|field_metadata| FieldMetadata {
+    visit_any(expr, field).map(|field_metadata| FieldMetadata {
         special_descriptor: Some(FieldSpecialDescriptor::Array { length }),
         decoder: field_metadata.decoder,
     })
@@ -225,20 +226,18 @@ fn visit_pointer() -> FieldMetadata {
 }
 
 #[inline]
-fn visit_any(decl: Decl, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
-    match decl {
-        Decl::Ident(ident) => visit_ident(ident, field),
-        Decl::Template { ident, argument } => visit_template(ident, *argument, field),
-        Decl::Array { decl, length } => visit_array(*decl, length, field),
-        Decl::Pointer(_) => Ok(visit_pointer()),
+fn visit_any(expr: Expr, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
+    match expr {
+        Expr::Ident(ident) => visit_ident(ident, field),
+        Expr::Template { expr, arg } => visit_template(*expr, *arg, field),
+        Expr::Array { expr, len } => visit_array(*expr, *len, field),
+        Expr::Pointer(_) => Ok(visit_pointer()),
+        _ => unreachable!(),
     }
 }
 
-pub fn get_field_metadata(
-    var_type_decl: Decl,
-    field: &FlattenedSerializerField,
-) -> Result<FieldMetadata> {
-    visit_any(var_type_decl, field)
+pub fn get_field_metadata(expr: Expr, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
+    visit_any(expr, field)
 }
 
 // NOTE: a lot of values are enums, some were discovered in ocratine thing,

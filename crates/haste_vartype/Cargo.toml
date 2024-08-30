@@ -1,0 +1,11 @@
+[package]
+name = "haste_vartype"
+version = "0.0.0"
+edition.workspace = true
+
+[dependencies]
+dungers_charsor.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+expect-test.workspace = true
