@@ -22,8 +22,8 @@ impl Visitor for MyVisitor {
         _update_type: UpdateType,
         entity: &Entity,
     ) -> parser::Result<()> {
-        const LIFE_STATE_KEY: u64 = make_field_key(&["m_lifeState"]);
-        let Some(FieldValue::U8(next_life_state)) = entity.get_value(&LIFE_STATE_KEY).cloned()
+        let life_state_key = make_field_key(&["m_lifeState"]);
+        let Some(FieldValue::U8(next_life_state)) = entity.get_value(&life_state_key).cloned()
         else {
             return Ok(());
         };

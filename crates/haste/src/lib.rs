@@ -1,6 +1,4 @@
 #![feature(core_intrinsics)]
-#![feature(maybe_uninit_uninit_array)]
-#![feature(const_mut_refs)]
 #![deny(clippy::unwrap_used)]
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]

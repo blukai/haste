@@ -27,6 +27,8 @@ pub enum FieldSpecialDescriptor {
     // thus it should be looked up. Vector's decoder must be used to decode fields of this field.
     // Vector's own decoder must be length decoder.
     DynamicArray { decoder: Box<dyn FieldDecode> },
+    // TODO(blukai): rename DynamicSerializerVector to DynamicSerializerArray
+    //
     // SerializerVector indicates that fields must be deserialized by the decoder withing the
     // field_serializer_name.
     // SerializerVector's own decoder must be length decoder.

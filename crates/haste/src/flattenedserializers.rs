@@ -47,7 +47,7 @@ impl From<&String> for Symbol {
     #[inline(always)]
     fn from(value: &String) -> Self {
         Self {
-            hash: fxhash::hash_u8(value.as_bytes()),
+            hash: fxhash::hash_bytes(value.as_bytes()),
             #[cfg(feature = "preserve-metadata")]
             str: value.clone().into_boxed_str(),
         }
@@ -163,6 +163,7 @@ impl FlattenedSerializerField {
         self.var_encoder.as_ref().is_some_and(|lhs| lhs.hash == rhs)
     }
 
+    // TODO(blukai): rename is_vector to is_dynamic_array or something
     #[inline(always)]
     pub fn is_vector(&self) -> bool {
         self.metadata

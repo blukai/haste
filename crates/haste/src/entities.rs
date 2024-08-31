@@ -106,17 +106,24 @@ impl Entity {
                 // version of it, probably because a bunch of ifs cause a bunch
                 // of branch misses and branch missles are disasterous.
                 let mut field = self.serializer.get_child_unchecked(fp.get_unchecked(0));
-                let mut field_key_hasher = fxhash::Hasher::with_seed(field.var_name.hash);
+                // NOTE: field.var_name.hash is a "seed" for field_key_hash.
+                let mut field_key = field.var_name.hash;
                 for i in 1..=fp.last() {
                     if field.is_vector() {
                         field = field.get_child_unchecked(0);
-                        field_key_hasher.write_u64(fxhash::hash_u8(&[fp.get_unchecked(i) as u8]));
+                        // NOTE: it's sort of weird to hash index, yup. but it simplifies things
+                        // when "user" builds a key that has numbers / it makes it so that there's
+                        // no need to check whether part of a key needs to be hashed or not - just
+                        // hash all parts.
+                        field_key = fxhash::add_u64_to_hash(
+                            field_key,
+                            fxhash::add_u64_to_hash(0, fp.get_unchecked(i) as u64),
+                        );
                     } else {
                         field = field.get_child_unchecked(fp.get_unchecked(i));
-                        field_key_hasher.write_u64(field.var_name.hash);
+                        field_key = fxhash::add_u64_to_hash(field_key, field.var_name.hash);
                     };
                 }
-                let field_key = field_key_hasher.finish();
 
                 // eprint!("{:?} {:?} ", field.var_name, field.var_type);
 
@@ -302,13 +309,16 @@ impl EntityContainer {
 
 pub const fn make_field_key(path: &[&str]) -> u64 {
     assert!(path.len() > 0, "invalid path");
-    let first = fxhash::hash_u8(path[0].as_bytes());
-    let mut hasher = fxhash::Hasher::with_seed(first);
+
+    let seed = fxhash::hash_bytes(path[0].as_bytes());
+    let mut hash = seed;
+
     let mut i = 1;
     while i < path.len() {
-        let part = fxhash::hash_u8(path[i].as_bytes());
-        hasher.write_u64(part);
+        let part = fxhash::hash_bytes(path[i].as_bytes());
+        hash = fxhash::add_u64_to_hash(hash, part);
         i += 1;
     }
-    hasher.finish()
+
+    hash
 }
