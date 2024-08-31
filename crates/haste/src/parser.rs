@@ -8,7 +8,7 @@ use crate::{
     protos::{
         prost::Message, CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoPacket,
         CDemoSendTables, CDemoStringTables, CsvcMsgCreateStringTable, CsvcMsgPacketEntities,
-        CsvcMsgUpdateStringTable, EDemoCommands, SvcMessages,
+        CsvcMsgServerInfo, CsvcMsgUpdateStringTable, EDemoCommands, SvcMessages,
     },
     stringtables::StringTableContainer,
 };
@@ -17,7 +17,13 @@ use std::io::{Read, Seek, SeekFrom};
 // as can be observed when dumping commands. also as specified in clarity
 // (src/main/java/skadistats/clarity/model/engine/AbstractDotaEngineType.java)
 // and documented in manta (string_table.go).
-const FULL_PACKET_INTERVAL: i32 = 1800;
+//
+// NOTE: full packet interval is 1800 only if tick interval is 1 / 30 - this is true for dota2, but
+// deaclock's tick interval is x 2.
+const DEFAULT_FULL_PACKET_INTERVAL: i32 = 1800;
+// NOTE: tick interval is needed to be able to correctly decide simulation time values.
+// dota2's tick interval is 1 / 30; deadlock's 1 / 60 - they are constant.
+const DEFAULT_TICK_INTERVAL: f32 = 1.0 / 30.0;
 
 pub type Error = Box<dyn std::error::Error>;
 pub type Result<T> = std::result::Result<T, Error>;
@@ -33,6 +39,10 @@ pub struct Context {
     entities: EntityContainer,
     tick: i32,
     prev_tick: i32,
+    // TODO: pass tick_interval down into simulation time decoder
+    // (InternalF32SimulationTimeDecoder).
+    tick_interval: f32,
+    full_packet_interval: i32,
 }
 
 impl Context {
@@ -139,6 +149,8 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 entity_classes: None,
                 tick: -1,
                 prev_tick: -1,
+                tick_interval: DEFAULT_TICK_INTERVAL,
+                full_packet_interval: DEFAULT_FULL_PACKET_INTERVAL,
             },
         })
     }
@@ -234,7 +246,8 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             // TODO: what if there's no full packet ahead? maybe dem file is
             // corrupted or something... scan for full packets before enterint
             // the "run"?
-            let has_full_packet_ahead = distance_to_target_tick > FULL_PACKET_INTERVAL + 100;
+            let has_full_packet_ahead =
+                distance_to_target_tick > notnotself.ctx.full_packet_interval + 100;
             if is_full_packet {
                 let cmd_data = notnotself.demo_file.read_cmd(cmd_header)?;
                 notnotself
@@ -361,9 +374,12 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 }
 
                 c if c == SvcMessages::SvcServerInfo as u32 => {
-                    // TODO(blukai): figure out how to incorporate tick_interval into simulation time
-                    // decoder (InternalF32SimulationTimeDecoder).
-                    // dota2's tick interval is 1 / 30; deadlocks 1 / 60.
+                    let msg = CsvcMsgServerInfo::decode(buf)?;
+                    if let Some(tick_interval) = msg.tick_interval {
+                        self.ctx.tick_interval = tick_interval;
+                        self.ctx.full_packet_interval = DEFAULT_FULL_PACKET_INTERVAL
+                            * (DEFAULT_TICK_INTERVAL / tick_interval) as i32;
+                    }
                 }
 
                 _ => {
