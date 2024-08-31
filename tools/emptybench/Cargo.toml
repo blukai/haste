@@ -5,3 +5,4 @@ edition.workspace = true
 
 [dependencies]
 haste.workspace = true
+

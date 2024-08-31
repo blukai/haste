@@ -4,13 +4,7 @@ use crate::{
 };
 use hashbrown::HashMap;
 use nohash::NoHashHasher;
-use std::{
-    cell::UnsafeCell,
-    hash::BuildHasherDefault,
-    intrinsics::{likely, unlikely},
-    mem::MaybeUninit,
-    rc::Rc,
-};
+use std::{cell::UnsafeCell, hash::BuildHasherDefault, mem::MaybeUninit, rc::Rc};
 
 // NOTE: some info about string tables is available at
 // https://developer.valvesoftware.com/wiki/Networking_Events_%26_Messages#String_Tables
@@ -214,7 +208,7 @@ impl StringTable {
                     // NOTE: using_varint_bitcounts bool was introduced in the
                     // new frontiers update on smaypril twemmieth of 2023,
                     // https://github.com/SteamDatabase/GameTracking-Dota2/commit/8851e24f0e3ef0b618e3a60d276a3b0baf88568c#diff-79c9dd229c77c85f462d6d85e29a65f5daf6bf31f199554438d42bd643e89448R405
-                    let size = if likely(self.using_varint_bitcounts) {
+                    let size = if self.using_varint_bitcounts {
                         br.read_ubitvar()
                     } else {
                         br.read_ubitlong(MAX_USERDATA_BITS)
@@ -327,7 +321,7 @@ impl StringTableContainer {
     ) -> Result<&mut StringTable> {
         let table = self.find_table(name);
         // TODO: should this check exist?
-        if unlikely(table.is_some()) {
+        if table.is_some() {
             return Err(Error::DuplicateStringTable(name.to_string()));
         }
 
