@@ -1,4 +1,4 @@
-use haste_dota2::{
+use haste::{
     parser::{self, Context, Parser, Visitor},
     protos::{self, prost::Message},
 };

@@ -1,4 +1,4 @@
-use haste_dota2::{
+use haste::{
     entities::{make_field_key, Entity, UpdateType},
     fieldvalue::FieldValue,
     parser::{self, Context, Parser, Visitor},

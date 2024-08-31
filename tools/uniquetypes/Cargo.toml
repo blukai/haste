@@ -5,4 +5,5 @@ edition.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-haste_dota2 = { workspace = true, features = ["preserve-metadata"] }
+haste = { workspace = true, features = ["preserve-metadata"] }
+haste_vartype.workspace = true

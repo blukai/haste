@@ -11,9 +11,8 @@ edition = "2021"
 
 [workspace.dependencies]
 # internal
-haste_common = { path = "crates/haste_common" }
-haste_dota2 = { path = "crates/haste_dota2" }
-haste_dota2_protos = { path = "crates/haste_dota2_protos" }
+haste = { path = "crates/haste" }
+haste_protos = { path = "crates/haste_protos" }
 haste_vartype = { path = "crates/haste_vartype" }
 # external
 anyhow = "1.0.86"

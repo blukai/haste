@@ -4,4 +4,4 @@ version = "0.0.0"
 edition.workspace = true
 
 [dependencies]
-haste_dota2 = { workspace = true, features = ["preserve-metadata"] }
+haste = { workspace = true, features = ["preserve-metadata"] }

@@ -1,4 +1,4 @@
-use haste_dota2::parser::Parser;
+use haste::parser::Parser;
 use std::{fs::File, io::BufReader};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;

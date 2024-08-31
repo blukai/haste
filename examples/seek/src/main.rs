@@ -1,4 +1,4 @@
-use haste_dota2::parser::Parser;
+use haste::parser::Parser;
 use rand::Rng;
 use std::{fs::File, io::BufReader, time::Instant};
 

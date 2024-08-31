@@ -396,7 +396,7 @@ impl<'d> BitReader<'d> {
     //              int64                   ReadLongLong( void );
 
     // NOTE: read_uvarint32 and read_uvarint64 are pretty much the same as
-    // read_uvarint32 in haste_common::varint. yes, it is possible to have only
+    // read_uvarint32 in varint.rs. yes, it is possible to have only
     // one, BUT implementing a Read trait for BitReader degrades performance
     // quite significantly.
 

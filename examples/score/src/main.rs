@@ -1,4 +1,4 @@
-use haste_dota2::{
+use haste::{
     entities::{self, Entity, UpdateType},
     fieldvalue::FieldValue,
     fxhash,

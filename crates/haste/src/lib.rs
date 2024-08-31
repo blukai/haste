@@ -5,29 +5,26 @@
 #![deny(clippy::expect_used)]
 #![deny(clippy::panic)]
 
-// own crate re-exports
-pub use haste_common::bitbuf;
-pub use haste_common::fxhash;
-pub use haste_common::varint;
-pub use haste_dota2_protos as protos;
-pub use haste_vartype as vartype;
-
 // TODO: figure pub scopes for all the things
+pub(crate) mod bitbuf;
 pub mod demofile;
 pub mod entities;
 pub mod entityclasses;
-// TODO: try to not publicly expose fielddecoder
-pub mod fielddecoder;
-// TODO: try to not publicly expose fieldmetadata
-pub mod fieldmetadata;
+pub mod fielddecoder; // TODO: try to not publicly expose fielddecoder
+pub mod fieldmetadata; // TODO: try to not publicly expose fieldmetadata
 pub mod fieldpath;
 pub mod fieldvalue;
 pub mod flattenedserializers;
+pub mod fxhash;
 pub mod instancebaseline;
 pub mod parser;
-// TODO: try to not publicly expose quantizedfloat
-pub mod quantizedfloat;
+pub mod quantizedfloat; // TODO: try to not publicly expose quantizedfloat
 pub mod stringtables;
+pub(crate) mod varint;
+
+// own crate re-exports
+pub use haste_protos as protos;
+pub(crate) use haste_vartype as vartype;
 
 // TOOD: more optimizations, specifically look into
 // https://agourlay.github.io/rust-performance-retrospective-part2/

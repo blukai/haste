@@ -5,12 +5,12 @@ use std::{
 };
 
 use anyhow::anyhow;
-use haste_dota2::{
+use haste::{
     flattenedserializers::FlattenedSerializerContainer,
     parser::{ControlFlow, NopVisitor, Parser, Result},
     protos::EDemoCommands,
-    vartype::{TokenKind, Tokenizer},
 };
+use haste_vartype::{TokenKind, Tokenizer};
 
 fn parse_to_serializers<R: Read + Seek>(parser: &mut Parser<R, NopVisitor>) -> Result<()> {
     parser.reset()?;
