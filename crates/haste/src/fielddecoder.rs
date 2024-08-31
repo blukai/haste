@@ -1,7 +1,7 @@
 use crate::{
     bitbuf::{self, BitReader},
     fieldvalue::FieldValue,
-    flattenedserializers::FlattenedSerializerField,
+    flattenedserializers::{FlattenedSerializerContext, FlattenedSerializerField},
     fxhash,
     quantizedfloat::{self, QuantizedFloat},
 };
@@ -260,14 +260,22 @@ impl FieldDecode for QuantizedFloatDecoder {
 // ----
 
 #[derive(Debug, Clone, Default)]
-struct InternalF32SimulationTimeDecoder {}
+struct InternalF32SimulationTimeDecoder {
+    tick_interval: f32,
+}
+
+impl InternalF32SimulationTimeDecoder {
+    #[inline]
+    pub fn new(tick_interval: f32) -> Self {
+        Self { tick_interval }
+    }
+}
 
 impl InternalF32Decode for InternalF32SimulationTimeDecoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<f32> {
-        const TICK_INTERVAL: f32 = 1.0 / 30.0;
         br.read_uvarint32()
-            .map(|value| value as f32 * TICK_INTERVAL)
+            .map(|value| value as f32 * self.tick_interval)
             .map_err(Error::from)
     }
 }
@@ -298,12 +306,12 @@ pub struct InternalF32Decoder {
 }
 
 impl InternalF32Decoder {
-    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
+    pub fn new(field: &FlattenedSerializerField, ctx: &FlattenedSerializerContext) -> Result<Self> {
         if field.var_name.hash == fxhash::hash_u8(b"m_flSimulationTime")
             || field.var_name.hash == fxhash::hash_u8(b"m_flAnimTime")
         {
             return Ok(Self {
-                decoder: Box::<InternalF32SimulationTimeDecoder>::default(),
+                decoder: Box::new(InternalF32SimulationTimeDecoder::new(ctx.tick_interval)),
             });
         }
 
@@ -341,9 +349,9 @@ pub struct F32Decoder {
 
 impl F32Decoder {
     #[inline]
-    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
+    pub fn new(field: &FlattenedSerializerField, ctx: &FlattenedSerializerContext) -> Result<Self> {
         Ok(Self {
-            decoder: Box::new(InternalF32Decoder::new(field)?),
+            decoder: Box::new(InternalF32Decoder::new(field, ctx)?),
         })
     }
 }
@@ -366,9 +374,9 @@ pub struct VectorDecoder {
 }
 
 impl VectorDecoder {
-    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
+    pub fn new(field: &FlattenedSerializerField, ctx: &FlattenedSerializerContext) -> Result<Self> {
         Ok(Self {
-            inner_decoder: Box::new(InternalF32Decoder::new(field)?),
+            inner_decoder: Box::new(InternalF32Decoder::new(field, ctx)?),
         })
     }
 }
@@ -394,9 +402,9 @@ pub struct Vector2DDecoder {
 
 impl Vector2DDecoder {
     #[inline]
-    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
+    pub fn new(field: &FlattenedSerializerField, ctx: &FlattenedSerializerContext) -> Result<Self> {
         Ok(Self {
-            inner_decoder: Box::new(InternalF32Decoder::new(field)?),
+            inner_decoder: Box::new(InternalF32Decoder::new(field, ctx)?),
         })
     }
 }
@@ -420,9 +428,9 @@ pub struct Vector4DDecoder {
 }
 
 impl Vector4DDecoder {
-    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
+    pub fn new(field: &FlattenedSerializerField, ctx: &FlattenedSerializerContext) -> Result<Self> {
         Ok(Self {
-            inner_decoder: Box::new(InternalF32Decoder::new(field)?),
+            inner_decoder: Box::new(InternalF32Decoder::new(field, ctx)?),
         })
     }
 }

@@ -54,6 +54,11 @@ impl From<&String> for Symbol {
     }
 }
 
+#[derive(Debug)]
+pub struct FlattenedSerializerContext {
+    pub tick_interval: f32,
+}
+
 // some info about string tables
 // https://developer.valvesoftware.com/wiki/Networking_Events_%26_Messages
 // https://developer.valvesoftware.com/wiki/Networking_Entities
@@ -91,6 +96,7 @@ impl FlattenedSerializerField {
     fn new(
         msg: &CsvcMsgFlattenedSerializer,
         field: &ProtoFlattenedSerializerFieldT,
+        ctx: &FlattenedSerializerContext,
     ) -> Result<Self> {
         // SAFETY: some symbols are cricual, if they don't exist - fail early
         // and loudly.
@@ -131,7 +137,7 @@ impl FlattenedSerializerField {
 
             metadata: Default::default(),
         };
-        ret.metadata = get_field_metadata(var_type_expr, &ret)?;
+        ret.metadata = get_field_metadata(var_type_expr, &ret, ctx)?;
         Ok(ret)
     }
 
@@ -223,7 +229,7 @@ pub struct FlattenedSerializerContainer {
 }
 
 impl FlattenedSerializerContainer {
-    pub fn parse(cmd: CDemoSendTables) -> Result<Self> {
+    pub fn parse(cmd: CDemoSendTables, ctx: FlattenedSerializerContext) -> Result<Self> {
         let msg = {
             // TODO: make prost work with ByteString and turn data into Bytes
             //
@@ -264,8 +270,11 @@ impl FlattenedSerializerContainer {
                     // hood which adds a branch!
                     Rc::clone(field)
                 } else {
-                    let mut field =
-                        FlattenedSerializerField::new(&msg, &msg.fields[*field_index as usize])?;
+                    let mut field = FlattenedSerializerField::new(
+                        &msg,
+                        &msg.fields[*field_index as usize],
+                        &ctx,
+                    )?;
 
                     if let Some(field_serializer_name) = field.field_serializer_name.as_ref() {
                         field.field_serializer =

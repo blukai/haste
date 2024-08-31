@@ -4,7 +4,7 @@ use crate::{
         NopDecoder, QAngleDecoder, QuantizedFloatDecoder, StringDecoder, U16Decoder, U32Decoder,
         U64Decoder, U8Decoder, Vector2DDecoder, Vector4DDecoder, VectorDecoder,
     },
-    flattenedserializers::FlattenedSerializerField,
+    flattenedserializers::{FlattenedSerializerContext, FlattenedSerializerField},
     vartype::{Expr, Lit},
 };
 
@@ -65,7 +65,11 @@ impl Default for FieldMetadata {
 }
 
 #[inline]
-fn visit_ident(ident: &str, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
+fn visit_ident(
+    ident: &str,
+    field: &FlattenedSerializerField,
+    ctx: &FlattenedSerializerContext,
+) -> Result<FieldMetadata> {
     macro_rules! non_special {
         ($decoder:ident) => {
             Ok(FieldMetadata {
@@ -97,7 +101,7 @@ fn visit_ident(ident: &str, field: &FlattenedSerializerField) -> Result<FieldMet
 
         // other primitives
         "bool" => non_special!(BoolDecoder),
-        "float32" => non_special!(F32Decoder::new(field)?),
+        "float32" => non_special!(F32Decoder::new(field, ctx)?),
 
         // templates
         "CHandle" => non_special!(U32Decoder),
@@ -125,14 +129,14 @@ fn visit_ident(ident: &str, field: &FlattenedSerializerField) -> Result<FieldMet
         "CNetworkedQuantizedFloat" => {
             non_special!(QuantizedFloatDecoder::new(field)?)
         }
-        "GameTime_t" => non_special!(F32Decoder::new(field)?),
+        "GameTime_t" => non_special!(F32Decoder::new(field, ctx)?),
         "MatchID_t" => non_special!(U64Decoder::new(field)),
         // public/mathlib/vector.h
-        "Vector" => non_special!(VectorDecoder::new(field)?),
+        "Vector" => non_special!(VectorDecoder::new(field, ctx)?),
         // public/mathlib/vector2d.h
-        "Vector2D" => non_special!(Vector2DDecoder::new(field)?),
+        "Vector2D" => non_special!(Vector2DDecoder::new(field, ctx)?),
         // public/mathlib/vector4d.h
-        "Vector4D" => non_special!(Vector4DDecoder::new(field)?),
+        "Vector4D" => non_special!(Vector4DDecoder::new(field, ctx)?),
         // game/shared/econ/econ_item_constants.h
         "itemid_t" => non_special!(U64Decoder::new(field)),
         "HeroFacetKey_t" => non_special!(U64Decoder::new(field)),
@@ -162,6 +166,7 @@ fn visit_template(
     expr: Expr,
     arg: Expr,
     field: &FlattenedSerializerField,
+    ctx: &FlattenedSerializerContext,
 ) -> Result<FieldMetadata> {
     let Expr::Ident(ident) = expr else {
         unreachable!();
@@ -178,7 +183,7 @@ fn visit_template(
             });
         }
 
-        return visit_any(arg, field).map(|field_metadata| FieldMetadata {
+        return visit_any(arg, field, ctx).map(|field_metadata| FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::DynamicArray {
                 decoder: field_metadata.decoder,
             }),
@@ -186,11 +191,16 @@ fn visit_template(
         });
     }
 
-    return visit_ident(ident, field);
+    return visit_ident(ident, field, ctx);
 }
 
 #[inline]
-fn visit_array(expr: Expr, len: Expr, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
+fn visit_array(
+    expr: Expr,
+    len: Expr,
+    field: &FlattenedSerializerField,
+    ctx: &FlattenedSerializerContext,
+) -> Result<FieldMetadata> {
     if let Expr::Ident(ident) = expr {
         if ident == "char" {
             return Ok(FieldMetadata {
@@ -212,7 +222,7 @@ fn visit_array(expr: Expr, len: Expr, field: &FlattenedSerializerField) -> Resul
         _ => unreachable!(),
     }?;
 
-    visit_any(expr, field).map(|field_metadata| FieldMetadata {
+    visit_any(expr, field, ctx).map(|field_metadata| FieldMetadata {
         special_descriptor: Some(FieldSpecialDescriptor::FixedArray { length }),
         decoder: field_metadata.decoder,
     })
@@ -227,18 +237,26 @@ fn visit_pointer() -> Result<FieldMetadata> {
 }
 
 #[inline]
-fn visit_any(expr: Expr, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
+fn visit_any(
+    expr: Expr,
+    field: &FlattenedSerializerField,
+    ctx: &FlattenedSerializerContext,
+) -> Result<FieldMetadata> {
     match expr {
-        Expr::Ident(ident) => visit_ident(ident, field),
-        Expr::Template { expr, arg } => visit_template(*expr, *arg, field),
-        Expr::Array { expr, len } => visit_array(*expr, *len, field),
+        Expr::Ident(ident) => visit_ident(ident, field, ctx),
+        Expr::Template { expr, arg } => visit_template(*expr, *arg, field, ctx),
+        Expr::Array { expr, len } => visit_array(*expr, *len, field, ctx),
         Expr::Pointer(_) => visit_pointer(),
         _ => unreachable!(),
     }
 }
 
-pub fn get_field_metadata(expr: Expr, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
-    visit_any(expr, field)
+pub fn get_field_metadata(
+    expr: Expr,
+    field: &FlattenedSerializerField,
+    ctx: &FlattenedSerializerContext,
+) -> Result<FieldMetadata> {
+    visit_any(expr, field, ctx)
 }
 
 // NOTE: a lot of values are enums, some were discovered in ocratine thing,

@@ -3,7 +3,7 @@ use crate::{
     demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_BUFFER_SIZE, DEMO_HEADER_SIZE},
     entities::{self, EntityContainer},
     entityclasses::EntityClasses,
-    flattenedserializers::FlattenedSerializerContainer,
+    flattenedserializers::{FlattenedSerializerContainer, FlattenedSerializerContext},
     instancebaseline::{InstanceBaseline, INSTANCE_BASELINE_TABLE_NAME},
     protos::{
         prost::Message, CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoPacket,
@@ -39,8 +39,6 @@ pub struct Context {
     entities: EntityContainer,
     tick: i32,
     prev_tick: i32,
-    // TODO: pass tick_interval down into simulation time decoder
-    // (InternalF32SimulationTimeDecoder).
     tick_interval: f32,
     full_packet_interval: i32,
 }
@@ -304,7 +302,12 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 }
 
                 let cmd = CDemoSendTables::decode(data)?;
-                self.ctx.serializers = Some(FlattenedSerializerContainer::parse(cmd)?);
+                self.ctx.serializers = Some(FlattenedSerializerContainer::parse(
+                    cmd,
+                    FlattenedSerializerContext {
+                        tick_interval: self.ctx.tick_interval,
+                    },
+                )?);
             }
 
             EDemoCommands::DemClassInfo => {
@@ -377,8 +380,9 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                     let msg = CsvcMsgServerInfo::decode(buf)?;
                     if let Some(tick_interval) = msg.tick_interval {
                         self.ctx.tick_interval = tick_interval;
-                        self.ctx.full_packet_interval = DEFAULT_FULL_PACKET_INTERVAL
-                            * (DEFAULT_TICK_INTERVAL / tick_interval) as i32;
+
+                        let ratio = DEFAULT_TICK_INTERVAL / tick_interval;
+                        self.ctx.full_packet_interval = DEFAULT_FULL_PACKET_INTERVAL * ratio as i32;
                     }
                 }
 
