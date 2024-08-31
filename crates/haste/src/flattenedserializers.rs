@@ -163,13 +163,12 @@ impl FlattenedSerializerField {
         self.var_encoder.as_ref().is_some_and(|lhs| lhs.hash == rhs)
     }
 
-    // TODO(blukai): rename is_vector to is_dynamic_array or something
     #[inline(always)]
-    pub fn is_vector(&self) -> bool {
+    pub fn is_dynamic_array(&self) -> bool {
         self.metadata
             .special_descriptor
             .as_ref()
-            .is_some_and(|sd| sd.is_vector())
+            .is_some_and(|sd| sd.is_dynamic_array())
     }
 }
 
@@ -306,7 +305,7 @@ impl FlattenedSerializerContainer {
                                 ..Default::default()
                             }));
                         }
-                        Some(FieldSpecialDescriptor::DynamicSerializerVector) => {
+                        Some(FieldSpecialDescriptor::DynamicSerializerArray) => {
                             field.field_serializer = Some(Rc::new(FlattenedSerializer {
                                 fields: vec![Rc::new(FlattenedSerializerField {
                                     field_serializer: field

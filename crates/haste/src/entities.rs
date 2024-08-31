@@ -109,7 +109,7 @@ impl Entity {
                 // NOTE: field.var_name.hash is a "seed" for field_key_hash.
                 let mut field_key = field.var_name.hash;
                 for i in 1..=fp.last() {
-                    if field.is_vector() {
+                    if field.is_dynamic_array() {
                         field = field.get_child_unchecked(0);
                         // NOTE: it's sort of weird to hash index, yup. but it simplifies things
                         // when "user" builds a key that has numbers / it makes it so that there's
