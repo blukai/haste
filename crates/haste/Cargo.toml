@@ -14,6 +14,7 @@ snap.workspace = true
 thiserror.workspace = true
 
 [features]
+deadlock = ["haste_protos/deadlock"]
 dota2 = ["haste_protos/dota2"]
 # TODO(blukai): rename preserve-metadata feature into something more meaningful,
 # or get rid of it all together and preserve symbols only in debug builds.
