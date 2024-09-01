@@ -261,14 +261,10 @@ impl FlattenedSerializerContainer {
             let mut flattened_serializer = FlattenedSerializer::new(&msg, serializer)?;
 
             for field_index in serializer.fields_index.iter() {
-                let field = if fields.contains_key(field_index) {
-                    // SAFETY: we already know that hashmap has the key!
-                    let field = unsafe { fields.get(field_index).unwrap_unchecked() };
-                    // NOTE: it is more efficient to clone outside instead of
-                    // using .cloned() because we're doing unsafe unwrap which
-                    // removes the branch, but .cloned() uses match under the
-                    // hood which adds a branch!
-                    Rc::clone(field)
+                let field = if let Some(field) = fields.get(field_index) {
+                    // NOTE: do not chain .cloned() after calling .get(), because .cloned() uses
+                    // match under the hood which adds a branch; that is redunant.
+                    field.clone()
                 } else {
                     let mut field = FlattenedSerializerField::new(
                         &msg,
@@ -354,8 +350,10 @@ impl FlattenedSerializerContainer {
     ) -> Rc<FlattenedSerializer> {
         self.serializer_map
             .get(&serializer_name_hash)
-            .cloned()
             .unwrap_unchecked()
+            // NOTE: do not chain .cloned() after calling .get(), because .cloned() uses match
+            // under the hood which adds a branch; that is redunant.
+            .clone()
     }
 
     #[inline]
