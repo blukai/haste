@@ -26,7 +26,7 @@ pub enum FieldSpecialDescriptor {
         length: usize,
     },
 
-    /// this variant differs from [`FieldSpecialDescriptor::DynamicSerializerArray`] in that it can
+    /// this variant differs from [FieldSpecialDescriptor::DynamicSerializerArray] in that it can
     /// contain primitive values (e.g., u8, bool) and more complex types (e.g., Vector4D, Vector),
     /// but it can not contain other serializers.
     ///
@@ -48,7 +48,7 @@ pub enum FieldSpecialDescriptor {
     /// represents a dynamic array of fields that must be deserialized by the serializer specified
     /// by `field_serializer_name`.
     ///
-    /// this variant differs from [`FieldSpecialDescriptor::DynamicArray`] in that it houses other
+    /// this variant differs from [FieldSpecialDescriptor::DynamicArray] in that it houses other
     /// serializers.
     ///
     /// example entity fields:
@@ -117,6 +117,15 @@ fn visit_ident(
         };
     }
 
+    macro_rules! pointer {
+        () => {
+            Ok(FieldMetadata {
+                special_descriptor: Some(FieldSpecialDescriptor::Pointer),
+                decoder: Box::<BoolDecoder>::default(),
+            })
+        };
+    }
+
     match ident {
         // TODO: smaller decoders (8 and 16 bit)
         // ints
@@ -140,18 +149,20 @@ fn visit_ident(
         "CStrongHandle" => non_special!(U64Decoder::new(field)),
 
         // pointers (?)
-        "CBodyComponent" => Ok(FieldMetadata {
-            special_descriptor: Some(FieldSpecialDescriptor::Pointer),
-            decoder: Box::<BoolDecoder>::default(),
-        }),
-        "CLightComponent" => Ok(FieldMetadata {
-            special_descriptor: Some(FieldSpecialDescriptor::Pointer),
-            decoder: Box::<BoolDecoder>::default(),
-        }),
-        "CRenderComponent" => Ok(FieldMetadata {
-            special_descriptor: Some(FieldSpecialDescriptor::Pointer),
-            decoder: Box::<BoolDecoder>::default(),
-        }),
+        // https://github.com/SteamDatabase/GameTracking-Deadlock/blob/master/game/core/tools/demoinfo2/demoinfo2.txt#L130
+        "CBodyComponentDCGBaseAnimating" => pointer!(),
+        "CBodyComponentBaseAnimating" => pointer!(),
+        "CBodyComponentBaseAnimatingOverlay" => pointer!(),
+        "CBodyComponentBaseModelEntity" => pointer!(),
+        "CBodyComponent" => pointer!(),
+        "CBodyComponentSkeletonInstance" => pointer!(),
+        "CBodyComponentPoint" => pointer!(),
+        "CLightComponent" => pointer!(),
+        "CRenderComponent" => pointer!(),
+        // https://github.com/SteamDatabase/GameTracking-Deadlock/blob/1e09d0e1289914e776b8d5783834478782a67468/game/core/pak01_dir/scripts/replay_compatability_settings.txt#L56
+        "C_BodyComponentBaseAnimating" => pointer!(),
+        "C_BodyComponentBaseAnimatingOverlay" => pointer!(),
+        "CPhysicsComponent" => pointer!(),
 
         // other custom types
         "CUtlSymbolLarge" => non_special!(StringDecoder),

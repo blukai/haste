@@ -21,6 +21,11 @@ const COORD_FRACTIONAL_BITS: usize = 5;
 const COORD_DENOMINATOR: f32 = (1 << COORD_FRACTIONAL_BITS) as f32;
 const COORD_RESOLUTION: f32 = 1.0 / COORD_DENOMINATOR;
 
+// public/coordsize.h
+const NORMAL_FRACTIONAL_BITS: usize = 11;
+const NORMAL_DENOMINATOR: f32 = ((1 << (NORMAL_FRACTIONAL_BITS)) - 1) as f32;
+const NORMAL_RESOLUTION: f32 = 1.0 / (NORMAL_DENOMINATOR);
+
 // (1 << i) - 1
 // also see CBitWriteMasksInit in tier1/bitbuf.cpp
 static EXTRA_MASKS: [u32; 33] = [
@@ -257,9 +262,76 @@ impl<'d> BitReader<'d> {
 
     //              float                   ReadBitCoordMP( EBitCoordType coordType );
     //              float                   ReadBitCellCoord( int bits, EBitCoordType coordType );
+
     //              float                   ReadBitNormal();
+    pub fn read_bitnormal(&mut self) -> Result<f32> {
+        // read the sign bit
+        let signbit = self.read_bool()?;
+
+        // read the fractional part
+        let fractval = self.read_ubitlong(NORMAL_FRACTIONAL_BITS)?;
+
+        // calculate the correct floating point value
+        let mut value = fractval as f32 * NORMAL_RESOLUTION;
+
+        // fixup the sign if negative.
+        if signbit {
+            value = -value;
+        }
+
+        return Ok(value);
+    }
+
     //              void                    ReadBitVec3Coord( Vector& fa );
+    pub fn read_bitvec3coord(&mut self) -> Result<[f32; 3]> {
+        let mut fa = [0f32; 3];
+
+        let xflag = self.read_bool()?;
+        let yflag = self.read_bool()?;
+        let zflag = self.read_bool()?;
+
+        if xflag {
+            fa[0] = self.read_bitcoord()?;
+        }
+        if yflag {
+            fa[1] = self.read_bitcoord()?;
+        }
+        if zflag {
+            fa[2] = self.read_bitcoord()?;
+        }
+
+        Ok(fa)
+    }
+
     //              void                    ReadBitVec3Normal( Vector& fa );
+    pub fn read_bitvec3normal(&mut self) -> Result<[f32; 3]> {
+        let mut fa = [0f32; 3];
+
+        let xflag = self.read_bool()?;
+        let yflag = self.read_bool()?;
+
+        if xflag {
+            fa[0] = self.read_bitnormal()?;
+        }
+        if yflag {
+            fa[1] = self.read_bitnormal()?;
+        }
+
+        // the first two imply the third (but not its sign)
+        let znegative = self.read_bool()?;
+
+        let fafafbfb = fa[0] * fa[0] + fa[1] * fa[1];
+        if fafafbfb < 1.0 {
+            fa[2] = (1.0 - fafafbfb).sqrt();
+        }
+
+        if znegative {
+            fa[2] = -fa[2];
+        }
+
+        Ok(fa)
+    }
+
     //              void                    ReadBitAngles( QAngle& fa );
 
     //              bool                    ReadBytes(void *pOut, int nBytes);

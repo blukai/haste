@@ -68,27 +68,27 @@ pub struct FlattenedSerializerContext {
 // TODO: do not clone strings, but reference them instead -> introduce lifetimes
 // or build a symbol table from symbols (string cache?)
 
+/// note about missing `field_serializer_version` field (from
+/// [crate::protos::ProtoFlattenedSerializerField_t]): i did not find any evidence of it being used
+/// nor any breakage or data corruptions. it is possible that i missed something. but unless proven
+/// otherwise i don't see a reason for incorporating it. field serializers always reference
+/// "highest" version of serializer.
+///
+/// it might be reasonable to actually incorporate it if there will be a need to run this parser in
+/// an environment that processes high volumes of replays. theoretically flattened serializers can
+/// be parsed once and then reused for future parse passes.
 #[derive(Debug, Clone, Default)]
 pub struct FlattenedSerializerField {
     pub var_type: Symbol,
     pub var_name: Symbol,
-
     pub bit_count: Option<i32>,
     pub low_value: Option<f32>,
     pub high_value: Option<f32>,
     pub encode_flags: Option<i32>,
-
     pub field_serializer_name: Option<Symbol>,
-    pub field_serializer: Option<Rc<FlattenedSerializer>>,
-
-    // NOTE: field_serializer_version and send_node are not being used anywhere
-    // (obviously duh).
-    //
-    // pub field_serializer_version: Option<i32>, pub
-    // send_node: Option<Box<str>>,
-    //
     pub var_encoder: Option<Symbol>,
 
+    pub field_serializer: Option<Rc<FlattenedSerializer>>,
     pub metadata: FieldMetadata,
 }
 
@@ -121,20 +121,17 @@ impl FlattenedSerializerField {
         let mut ret = Self {
             var_type: Symbol::from(var_type),
             var_name: Symbol::from(var_name),
-
             bit_count: field.bit_count,
             low_value: field.low_value,
             high_value: field.high_value,
             encode_flags: field.encode_flags,
-
             field_serializer_name: field
                 .field_serializer_name_sym
                 .map(resolve_sym)
                 .map(Symbol::from),
-            field_serializer: None,
-
             var_encoder: field.var_encoder_sym.map(resolve_sym).map(Symbol::from),
 
+            field_serializer: None,
             metadata: Default::default(),
         };
         ret.metadata = get_field_metadata(var_type_expr, &ret, ctx)?;
@@ -172,14 +169,19 @@ impl FlattenedSerializerField {
     }
 }
 
-// NOTE: Clone derive is needed here because Entity in entities.rs needs to be
-// clonable which means that all members of it also should be clonable.
+/// note about missing `serializer_version` field (from
+/// [crate::protos::ProtoFlattenedSerializerT]): entities resolve their serializers by looking up
+/// their class info within the [crate::entityclasses::EntityClasses] struct (which i parse out of
+/// [crate::protos::CDemoClassInfo] proto). [crate::protos::CDemoClassInfo] carries absolutely no
+/// info about serializer version thus i don't see any need to preserve it.
+//
+// NOTE: Clone is derived because Entity in entities.rs needs to be clonable which means that all
+// members of it also should be clonable.
+//
+// TODO: why does FlattnedeSerializer need to derive Default?
 #[derive(Debug, Clone, Default)]
 pub struct FlattenedSerializer {
     pub serializer_name: Symbol,
-
-    // TODO: figure out serializer version, is it needed?
-    pub serializer_version: Option<i32>,
     pub fields: Vec<Rc<FlattenedSerializerField>>,
 }
 
@@ -197,8 +199,6 @@ impl FlattenedSerializer {
 
         Ok(Self {
             serializer_name: Symbol::from(serializer_name),
-
-            serializer_version: fs.serializer_version,
             fields: Vec::with_capacity(fs.fields_index.len()),
         })
     }
@@ -265,8 +265,8 @@ impl FlattenedSerializerContainer {
                     // SAFETY: we already know that hashmap has the key!
                     let field = unsafe { fields.get(field_index).unwrap_unchecked() };
                     // NOTE: it is more efficient to clone outside instead of
-                    // using .clonned() because we're doing unsafe unwrap which
-                    // removes the branch, but .clonned() uses match under the
+                    // using .cloned() because we're doing unsafe unwrap which
+                    // removes the branch, but .cloned() uses match under the
                     // hood which adds a branch!
                     Rc::clone(field)
                 } else {

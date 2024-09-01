@@ -9,14 +9,14 @@ than comically fast. very unsafe.
 [haste-inspector](https://github.com/blukai/haste-inspector) is a supplementary
 project; think of it as replay dev tools.
 
-## performance tools
+## performance profiling tools
 
 - https://github.com/KDAB/hotspot
 - https://github.com/KDE/heaptrack
 - https://perf.wiki.kernel.org/index.php/Main_Page
 - https://github.com/sharkdp/hyperfine
 
-## credits
+## credits / references
 
 - https://github.com/skadistats/clarity
 - https://github.com/ButterflyStats/butterfly
@@ -24,4 +24,5 @@ project; think of it as replay dev tools.
 - https://github.com/ValveSoftware/source-sdk-2013
 - https://github.com/SwagSoftware/Kisak-Strike
 - https://github.com/markus-wa/demoinfocs-golang
+- https://github.com/asheplyakov/branchmiss
 

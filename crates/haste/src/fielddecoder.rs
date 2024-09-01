@@ -291,6 +291,16 @@ impl InternalF32Decode for InternalF32CoordDecoder {
 }
 
 #[derive(Debug, Clone, Default)]
+struct InternalF32NormalDecoder {}
+
+impl InternalF32Decode for InternalF32NormalDecoder {
+    #[inline]
+    fn decode(&self, br: &mut BitReader) -> Result<f32> {
+        br.read_bitnormal().map_err(Error::from)
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 struct InternalF32NoScaleDecoder {}
 
 impl InternalF32Decode for InternalF32NoScaleDecoder {
@@ -315,15 +325,29 @@ impl InternalF32Decoder {
             });
         }
 
-        if field.is_var_encoder_hash_eq(fxhash::hash_bytes(b"coord")) {
-            return Ok(Self {
-                decoder: Box::<InternalF32CoordDecoder>::default(),
-            });
+        if let Some(var_encoder) = field.var_encoder.as_ref() {
+            match var_encoder.hash {
+                hash if hash == fxhash::hash_bytes(b"coord") => {
+                    return Ok(Self {
+                        decoder: Box::<InternalF32CoordDecoder>::default(),
+                    })
+                }
+                hash if hash == fxhash::hash_bytes(b"normal") => {
+                    return Ok(Self {
+                        decoder: Box::<InternalF32NormalDecoder>::default(),
+                    })
+                }
+                _ => unimplemented!("{:?}", var_encoder),
+            }
         }
 
         let bit_count = field.bit_count.unwrap_or_default();
-        // why would it be greater than 32? :thinking:
-        if bit_count == 0 || bit_count >= 32 {
+
+        // NOTE: that would mean that something is seriously wrong - in that case yell at me
+        // loudly.
+        debug_assert!(bit_count >= 0 && bit_count <= 32);
+
+        if bit_count == 0 || bit_count == 32 {
             return Ok(Self {
                 decoder: Box::<InternalF32NoScaleDecoder>::default(),
             });
@@ -369,19 +393,11 @@ impl FieldDecode for F32Decoder {
 // ----
 
 #[derive(Debug, Clone)]
-pub struct VectorDecoder {
+struct InternalVectorDefaultDecoder {
     inner_decoder: Box<dyn InternalF32Decode>,
 }
 
-impl VectorDecoder {
-    pub fn new(field: &FlattenedSerializerField, ctx: &FlattenedSerializerContext) -> Result<Self> {
-        Ok(Self {
-            inner_decoder: Box::new(InternalF32Decoder::new(field, ctx)?),
-        })
-    }
-}
-
-impl FieldDecode for VectorDecoder {
+impl FieldDecode for InternalVectorDefaultDecoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
         let vec3 = [
@@ -390,6 +406,46 @@ impl FieldDecode for VectorDecoder {
             self.inner_decoder.decode(br)?,
         ];
         Ok(FieldValue::Vector(vec3))
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct InternalVectorNormalDecoder;
+
+impl FieldDecode for InternalVectorNormalDecoder {
+    #[inline]
+    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+        br.read_bitvec3normal()
+            .map(FieldValue::Vector)
+            .map_err(Error::from)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct VectorDecoder {
+    decoder: Box<dyn FieldDecode>,
+}
+
+impl VectorDecoder {
+    pub fn new(field: &FlattenedSerializerField, ctx: &FlattenedSerializerContext) -> Result<Self> {
+        if field.is_var_encoder_hash_eq(fxhash::hash_bytes(b"normal")) {
+            Ok(Self {
+                decoder: Box::<InternalVectorNormalDecoder>::default(),
+            })
+        } else {
+            Ok(Self {
+                decoder: Box::new(InternalVectorDefaultDecoder {
+                    inner_decoder: Box::new(InternalF32Decoder::new(field, ctx)?),
+                }),
+            })
+        }
+    }
+}
+
+impl FieldDecode for VectorDecoder {
+    #[inline]
+    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+        self.decoder.decode(br)
     }
 }
 
@@ -473,23 +529,9 @@ struct InternalQAngleNoBitCountDecoder {}
 impl FieldDecode for InternalQAngleNoBitCountDecoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        let mut vec3 = [0f32; 3];
-
-        let rx = br.read_bool()?;
-        let ry = br.read_bool()?;
-        let rz = br.read_bool()?;
-
-        if rx {
-            vec3[0] = br.read_bitcoord()?;
-        }
-        if ry {
-            vec3[1] = br.read_bitcoord()?;
-        }
-        if rz {
-            vec3[2] = br.read_bitcoord()?;
-        }
-
-        Ok(FieldValue::QAngle(vec3))
+        br.read_bitvec3coord()
+            .map(FieldValue::QAngle)
+            .map_err(Error::from)
     }
 }
 
@@ -545,16 +587,26 @@ impl QAngleDecoder {
     pub fn new(field: &FlattenedSerializerField) -> Self {
         let bit_count = field.bit_count.unwrap_or_default() as usize;
 
-        if field.is_var_encoder_hash_eq(fxhash::hash_bytes(b"qangle_pitch_yaw")) {
-            return Self {
-                decoder: Box::new(InternalQAnglePitchYawDecoder { bit_count }),
-            };
-        }
+        if let Some(var_encoder) = field.var_encoder.as_ref() {
+            match var_encoder.hash {
+                hash if hash == fxhash::hash_bytes(b"qangle_pitch_yaw") => {
+                    return Self {
+                        decoder: Box::new(InternalQAnglePitchYawDecoder { bit_count }),
+                    }
+                }
+                hash if hash == fxhash::hash_bytes(b"qangle_precise") => {
+                    return Self {
+                        decoder: Box::<InternalQAnglePreciseDecoder>::default(),
+                    }
+                }
 
-        if field.is_var_encoder_hash_eq(fxhash::hash_bytes(b"qangle_precise")) {
-            return Self {
-                decoder: Box::<InternalQAnglePreciseDecoder>::default(),
-            };
+                hash if hash == fxhash::hash_bytes(b"qangle") => {}
+                // NOTE(blukai): naming of var encoders seem inconsistent. found this pascal cased
+                // name in dota 2 replay from 2018.
+                hash if hash == fxhash::hash_bytes(b"QAngle") => {}
+
+                _ => unimplemented!("{:?}", var_encoder),
+            }
         }
 
         if bit_count == 0 {
