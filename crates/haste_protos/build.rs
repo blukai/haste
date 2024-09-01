@@ -1,4 +1,7 @@
 fn main() -> std::io::Result<()> {
+    // TODO: do not force people to compile protoc. see if they've got one and attempt to compile
+    // if not.
+    // ref: https://discord.com/channels/1275127765879754874/1275127766228009139/1279892327439007784
     std::env::set_var("PROTOC", protobuf_src::protoc());
 
     let shared_protos = vec![
