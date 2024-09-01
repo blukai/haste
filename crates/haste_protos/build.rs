@@ -1,5 +1,10 @@
+// TODO(blukai): document how to fetch new protos
+// $ cd crates/haste-protos/protos
+// $ or file in *; curl -LO "https://raw.githubusercontent.com/SteamDatabase/GameTracking-Dota2/master/Protobufs/$file"
+// ref: https://discord.com/channels/1275127765879754874/1275127766228009139/1279881501588197377
+
 fn main() -> std::io::Result<()> {
-    // TODO: do not force people to compile protoc. see if they've got one and attempt to compile
+    // TODO(bluaki): do not force people to compile protoc. see if they've got one and attempt to compile
     // if not.
     // ref: https://discord.com/channels/1275127765879754874/1275127766228009139/1279892327439007784
     std::env::set_var("PROTOC", protobuf_src::protoc());
