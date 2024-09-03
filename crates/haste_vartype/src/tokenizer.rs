@@ -1,4 +1,4 @@
-use dungers_charsor::Charsor;
+use dungers::charsor::Charsor;
 
 use crate::{Error, Result, Span};
 
