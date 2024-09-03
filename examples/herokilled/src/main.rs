@@ -1,13 +1,12 @@
 use haste::{
     entities::{self, Entity},
     fieldvalue::FieldValue,
-    parser::{self, Context, Parser, Visitor},
-    protos::{self, prost::Message},
+    handler::HandlerVisitor,
+    parser::{self, Context, Parser},
+    protos::{self, CCitadelUserMsgHeroKilled},
     stringtables::StringTable,
 };
-use std::{fs::File, io::BufReader};
-
-struct MyVisitor;
+use std::{collections::HashMap, fs::File, io::BufReader};
 
 fn get_entity_name<'a>(entity: &'a Entity, entity_names: &'a StringTable) -> Option<&'a str> {
     let name_si_key = entities::make_field_key(&["m_pEntity", "m_nameStringableIndex"]);
@@ -15,38 +14,67 @@ fn get_entity_name<'a>(entity: &'a Entity, entity_names: &'a StringTable) -> Opt
         return None;
     };
 
-    let Some((_, name_st_item)) = entity_names.items().find(|(i, _)| i.eq(&name_si)) else {
-        return None;
-    };
+    let (_, name_st_item) = entity_names.items().find(|(i, _)| i.eq(&name_si))?;
 
-    let Some(raw_string) = name_st_item.string.as_ref() else {
-        return None;
-    };
+    let raw_string = name_st_item.string.as_ref()?;
 
     std::str::from_utf8(raw_string).ok()
 }
 
-impl Visitor for MyVisitor {
-    fn on_packet(&mut self, ctx: &Context, packet_type: u32, data: &[u8]) -> parser::Result<()> {
-        if packet_type == protos::CitadelUserMessageIds::KEUserMsgHeroKilled as u32 {
-            let msg = protos::CCitadelUserMsgHeroKilled::decode(data)?;
+#[derive(Default)]
+struct Score {
+    kills: usize,
+    deaths: usize,
+}
 
-            let entities = ctx.entities().unwrap();
+#[derive(Default)]
+struct State {
+    hero_scores: HashMap<String, Score>,
+}
 
-            let string_tables = ctx.string_tables().unwrap();
-            let entity_names = string_tables.find_table("EntityNames").unwrap();
+fn hero_killed(
+    state: &mut State,
+    ctx: &Context,
+    msg: &CCitadelUserMsgHeroKilled,
+) -> parser::Result<()> {
+    let entities = ctx.entities().unwrap();
 
-            let scorer = entities.get(&msg.entindex_scorer()).unwrap();
-            let scorer_name = get_entity_name(scorer, entity_names).unwrap();
+    let string_tables = ctx.string_tables().unwrap();
+    let entity_names = string_tables.find_table("EntityNames").unwrap();
 
-            let victim = entities.get(&msg.entindex_victim()).unwrap();
-            let victim_name = get_entity_name(victim, entity_names).unwrap();
+    let scorer = entities.get(&msg.entindex_scorer()).unwrap();
+    let scorer_name = get_entity_name(scorer, entity_names).unwrap();
 
-            println!("{} killed {}", scorer_name, victim_name);
-        }
+    let victim = entities.get(&msg.entindex_victim()).unwrap();
+    let victim_name = get_entity_name(victim, entity_names).unwrap();
 
-        Ok(())
+    println!("{} killed {}", scorer_name, victim_name);
+
+    if let Some(score) = state.hero_scores.get_mut(scorer_name) {
+        score.kills += 1;
+    } else {
+        state.hero_scores.insert(
+            scorer_name.to_string(),
+            Score {
+                kills: 1,
+                deaths: 0,
+            },
+        );
     }
+
+    if let Some(score) = state.hero_scores.get_mut(victim_name) {
+        score.deaths += 1;
+    } else {
+        state.hero_scores.insert(
+            victim_name.to_string(),
+            Score {
+                kills: 0,
+                deaths: 1,
+            },
+        );
+    }
+
+    Ok(())
 }
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -61,6 +89,22 @@ fn main() -> Result<()> {
 
     let file = File::open(filepath.unwrap())?;
     let buf_reader = BufReader::new(file);
-    let mut parser = Parser::from_reader_with_visitor(buf_reader, MyVisitor)?;
-    parser.run_to_end()
+    let state = State::default();
+    let mut visitor = HandlerVisitor::with_state(state).with(
+        protos::CitadelUserMessageIds::KEUserMsgHeroKilled as u32,
+        hero_killed,
+    );
+    let mut parser = Parser::from_reader_with_visitor(buf_reader, &mut visitor)?;
+    parser.run_to_end()?;
+
+    println!();
+
+    for (hero, score) in visitor.state().hero_scores.iter() {
+        println!(
+            "{} got {} kills and died {} times",
+            hero, score.kills, score.deaths
+        );
+    }
+
+    Ok(())
 }

@@ -13,6 +13,7 @@ pub mod fieldpath;
 pub mod fieldvalue;
 pub mod flattenedserializers;
 pub mod fxhash;
+pub mod handler;
 pub mod instancebaseline;
 pub mod parser;
 pub mod quantizedfloat; // TODO: try to not publicly expose quantizedfloat
