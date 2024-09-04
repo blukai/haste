@@ -17,6 +17,8 @@ fn main() -> std::io::Result<()> {
     // tell cargo that if the given file changes, to rerun this build script.
     println!("cargo::rerun-if-changed=protos");
 
+    // TODO(blukai): document protoc stuff (readme.me?).
+    //
     // do not force people to compile protoc. see if they've got one and attempt to compile if not.
     // refs:
     // - https://discord.com/channels/1275127765879754874/1275127766228009139/1279892327439007784
