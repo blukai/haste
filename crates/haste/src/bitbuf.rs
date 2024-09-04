@@ -1,4 +1,4 @@
-use crate::varint;
+use dungers::varint;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -474,7 +474,7 @@ impl<'d> BitReader<'d> {
     //              uint32                  ReadVarInt32();
     pub fn read_uvarint32(&mut self) -> Result<u32> {
         let mut result = 0;
-        for count in 0..=varint::MAX_VARINT32_BYTES {
+        for count in 0..=varint::max_varint_size::<u32>() {
             let byte = self.read_byte()?;
             result |= ((byte & varint::PAYLOAD_BITS) as u32) << (count * 7);
             if (byte & varint::CONTINUE_BIT) == 0 {
@@ -487,7 +487,7 @@ impl<'d> BitReader<'d> {
     //              uint64                  ReadVarInt64();
     pub fn read_uvarint64(&mut self) -> Result<u64> {
         let mut result = 0;
-        for count in 0..=varint::MAX_VARINT64_BYTES {
+        for count in 0..=varint::max_varint_size::<u64>() {
             let byte = self.read_byte()?;
             result |= ((byte & varint::PAYLOAD_BITS) as u64) << (count * 7);
             if (byte & varint::CONTINUE_BIT) == 0 {

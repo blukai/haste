@@ -17,7 +17,6 @@ pub mod instancebaseline;
 pub mod parser;
 pub mod quantizedfloat; // TODO: try to not publicly expose quantizedfloat
 pub mod stringtables;
-pub(crate) mod varint;
 
 // own crate re-exports
 pub use haste_protos as protos;

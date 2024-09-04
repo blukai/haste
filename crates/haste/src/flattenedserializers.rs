@@ -6,20 +6,21 @@ use crate::{
         CDemoSendTables, CsvcMsgFlattenedSerializer, ProtoFlattenedSerializerFieldT,
         ProtoFlattenedSerializerT,
     },
-    varint, vartype,
+    vartype,
 };
+use dungers::varint;
 use hashbrown::{hash_map::Values, HashMap};
 use nohash::NoHashHasher;
 use std::{hash::BuildHasherDefault, rc::Rc};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    // 3rd party crates
+    // external
     #[error(transparent)]
     Prost(#[from] prost::DecodeError),
-    // crate
     #[error(transparent)]
     Varint(#[from] varint::Error),
+    // crate
     #[error(transparent)]
     FieldMetadata(#[from] fieldmetadata::Error),
     #[error(transparent)]
@@ -244,7 +245,7 @@ impl FlattenedSerializerContainer {
             // may optimize them away. but if this will be affecting performance
             // -> createa a function that will be capable of reading varint from
             // &[u8] without multiple levels of indirection.
-            let (_size, _count) = varint::read_uvarint32(&mut data)?;
+            let (_size, _count) = varint::read_uvarint64(&mut data)?;
             CsvcMsgFlattenedSerializer::decode(data)?
         };
 

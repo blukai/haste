@@ -1,10 +1,8 @@
-use crate::{
-    protos::{
-        prost::{self, Message},
-        CDemoFileInfo, EDemoCommands,
-    },
-    varint,
+use crate::protos::{
+    prost::{self, Message},
+    CDemoFileInfo, EDemoCommands,
 };
+use dungers::varint;
 use std::io::{Read, Seek, SeekFrom};
 
 #[derive(thiserror::Error, Debug)]
@@ -12,12 +10,11 @@ pub enum Error {
     // std
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    // 3rd party crates
+    // external
     #[error(transparent)]
     Snap(#[from] snap::Error),
     #[error(transparent)]
     Prost(#[from] prost::DecodeError),
-    // crate
     #[error(transparent)]
     Varint(#[from] varint::Error),
     // mod
@@ -177,6 +174,7 @@ impl<R: Read + Seek> DemoFile<R> {
 
         let (tick, tick_ot) = {
             let (t, ot) = varint::read_uvarint32(&mut self.rdr)?;
+
             // before the first tick / pre-game initialization messages
             let tick = if t == u32::MAX { -1 } else { t as i32 };
             (tick, ot)
