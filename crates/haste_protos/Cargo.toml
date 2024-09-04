@@ -12,6 +12,7 @@ prost.workspace = true
 [build-dependencies]
 prost-build.workspace = true
 protobuf-src.workspace = true
+which.workspace = true
 
 [features]
 deadlock = []
