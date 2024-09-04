@@ -1,10 +1,5 @@
 use dungers::bitbuf;
 
-// NOCOMMIT
-pub type Error = bitbuf::Error;
-
-pub type Result<T> = std::result::Result<T, Error>;
-
 // public/coordsize.h
 const COORD_INTEGER_BITS: usize = 14;
 const COORD_FRACTIONAL_BITS: usize = 5;
@@ -22,6 +17,7 @@ pub struct BitReader<'d> {
 }
 
 impl<'d> BitReader<'d> {
+    #[inline]
     pub fn new(data: &'d [u8]) -> Self {
         Self {
             inner: bitbuf::BitReader::new(data),
@@ -34,19 +30,42 @@ impl<'d> BitReader<'d> {
     }
 
     #[inline(always)]
-    pub fn num_bytes_left(&self) -> usize {
-        self.inner.num_bytes_left()
+    pub fn read_ubit64(&mut self, num_bits: usize) -> u64 {
+        unsafe { self.inner.read_ubit64_unchecked(num_bits) }
     }
 
     #[inline(always)]
-    pub fn read_ubitlong(&mut self, num_bits: usize) -> Result<u32> {
-        debug_assert!(num_bits < 33, "trying to read more than 32 bits");
+    pub fn read_bool(&mut self) -> bool {
+        unsafe { self.inner.read_bool_unchecked() }
+    }
 
-        // NOCOMMIT
-        self.inner
-            .read_ubit64(num_bits)
-            .map(|v| v as u32)
-            .map_err(Error::from)
+    #[inline(always)]
+    pub fn read_byte(&mut self) -> u8 {
+        unsafe { self.inner.read_byte_unchecked() }
+    }
+
+    pub fn read_bits(&mut self, buf: &mut [u8], num_bits: usize) {
+        unsafe { self.inner.read_bits_unchecked(buf, num_bits) }
+    }
+
+    pub fn read_bytes(&mut self, buf: &mut [u8]) {
+        unsafe { self.inner.read_bytes_unchecked(buf) }
+    }
+
+    pub fn read_uvarint32(&mut self) -> u32 {
+        unsafe { self.inner.read_uvarint32_unchecked() }
+    }
+
+    pub fn read_uvarint64(&mut self) -> u64 {
+        unsafe { self.inner.read_uvarint64_unchecked() }
+    }
+
+    pub fn read_varint32(&mut self) -> i32 {
+        unsafe { self.inner.read_varint32_unchecked() }
+    }
+
+    pub fn read_varint64(&mut self) -> i64 {
+        unsafe { self.inner.read_varint64_unchecked() }
     }
 
     // ubitvar is "valve's own variable-length integer encoding" (c) butterfly.
@@ -65,45 +84,45 @@ impl<'d> BitReader<'d> {
     // X set -> read 8
     // X + Y set -> read 28
     #[inline(always)]
-    pub fn read_ubitvar(&mut self) -> Result<u32> {
-        let ret = self.read_ubitlong(6)?;
-        let v = match ret & (16 | 32) {
-            16 => (ret & 15) | (self.read_ubitlong(4)? << 4),
-            32 => (ret & 15) | (self.read_ubitlong(8)? << 4),
-            48 => (ret & 15) | (self.read_ubitlong(32 - 4)? << 4),
+    pub fn read_ubitvar(&mut self) -> u32 {
+        let ret = self.read_ubit64(6);
+        let ret = match ret & (16 | 32) {
+            16 => (ret & 15) | (self.read_ubit64(4) << 4),
+            32 => (ret & 15) | (self.read_ubit64(8) << 4),
+            48 => (ret & 15) | (self.read_ubit64(32 - 4) << 4),
             _ => ret,
         };
-        Ok(v)
+        ret as u32
     }
 
     #[inline(always)]
-    pub fn read_bitfloat(&mut self) -> Result<f32> {
-        self.read_ubitlong(32).map(f32::from_bits)
+    pub fn read_bitfloat(&mut self) -> f32 {
+        f32::from_bits(self.read_ubit64(32) as u32)
     }
 
-    pub fn read_bitcoord(&mut self) -> Result<f32> {
+    pub fn read_bitcoord(&mut self) -> f32 {
         let mut value: f32 = 0.0;
 
         // Read the required integer and fraction flags
-        let has_intval = self.read_bool()?;
-        let has_fractval = self.read_bool()?;
+        let has_intval = self.read_bool();
+        let has_fractval = self.read_bool();
 
         // If we got either parse them, otherwise it's a zero.
         if has_intval || has_fractval {
             // Read the sign bit
-            let signbit = self.read_bool()?;
+            let signbit = self.read_bool();
 
             // If there's an integer, read it in
             let mut intval = 0;
             if has_intval {
                 // Adjust the integers from [0..MAX_COORD_VALUE-1] to [1..MAX_COORD_VALUE]
-                intval = self.read_ubitlong(COORD_INTEGER_BITS)? + 1;
+                intval = self.read_ubit64(COORD_INTEGER_BITS) + 1;
             }
 
             // If there's a fraction, read it in
             let mut fractval = 0;
             if has_fractval {
-                fractval = self.read_ubitlong(COORD_FRACTIONAL_BITS)?;
+                fractval = self.read_ubit64(COORD_FRACTIONAL_BITS);
             }
 
             // Calculate the correct floating point value
@@ -115,15 +134,15 @@ impl<'d> BitReader<'d> {
             }
         }
 
-        Ok(value)
+        value
     }
 
-    pub fn read_bitnormal(&mut self) -> Result<f32> {
+    pub fn read_bitnormal(&mut self) -> f32 {
         // read the sign bit
-        let signbit = self.read_bool()?;
+        let signbit = self.read_bool();
 
         // read the fractional part
-        let fractval = self.read_ubitlong(NORMAL_FRACTIONAL_BITS)?;
+        let fractval = self.read_ubit64(NORMAL_FRACTIONAL_BITS);
 
         // calculate the correct floating point value
         let mut value = fractval as f32 * NORMAL_RESOLUTION;
@@ -133,44 +152,44 @@ impl<'d> BitReader<'d> {
             value = -value;
         }
 
-        return Ok(value);
+        value
     }
 
-    pub fn read_bitvec3coord(&mut self) -> Result<[f32; 3]> {
+    pub fn read_bitvec3coord(&mut self) -> [f32; 3] {
         let mut fa = [0f32; 3];
 
-        let xflag = self.read_bool()?;
-        let yflag = self.read_bool()?;
-        let zflag = self.read_bool()?;
+        let xflag = self.read_bool();
+        let yflag = self.read_bool();
+        let zflag = self.read_bool();
 
         if xflag {
-            fa[0] = self.read_bitcoord()?;
+            fa[0] = self.read_bitcoord();
         }
         if yflag {
-            fa[1] = self.read_bitcoord()?;
+            fa[1] = self.read_bitcoord();
         }
         if zflag {
-            fa[2] = self.read_bitcoord()?;
+            fa[2] = self.read_bitcoord();
         }
 
-        Ok(fa)
+        fa
     }
 
-    pub fn read_bitvec3normal(&mut self) -> Result<[f32; 3]> {
+    pub fn read_bitvec3normal(&mut self) -> [f32; 3] {
         let mut fa = [0f32; 3];
 
-        let xflag = self.read_bool()?;
-        let yflag = self.read_bool()?;
+        let xflag = self.read_bool();
+        let yflag = self.read_bool();
 
         if xflag {
-            fa[0] = self.read_bitnormal()?;
+            fa[0] = self.read_bitnormal();
         }
         if yflag {
-            fa[1] = self.read_bitnormal()?;
+            fa[1] = self.read_bitnormal();
         }
 
         // the first two imply the third (but not its sign)
-        let znegative = self.read_bool()?;
+        let znegative = self.read_bool();
 
         let fafafbfb = fa[0] * fa[0] + fa[1] * fa[1];
         if fafafbfb < 1.0 {
@@ -181,39 +200,18 @@ impl<'d> BitReader<'d> {
             fa[2] = -fa[2];
         }
 
-        Ok(fa)
+        fa
     }
 
-    pub fn read_bytes(&mut self, buf: &mut [u8]) -> Result<()> {
-        self.inner.read_bytes(buf)
-    }
-
-    pub fn read_bitangle(&mut self, num_bits: usize) -> Result<f32> {
+    pub fn read_bitangle(&mut self, num_bits: usize) -> f32 {
         let shift = bitbuf::get_bit_for_bit_num(num_bits) as f32;
 
-        let u = self.read_ubitlong(num_bits)?;
+        let u = self.read_ubit64(num_bits);
         let ret = (u as f32) * (360.0 / shift);
 
-        Ok(ret)
+        ret
     }
 
-    #[inline(always)]
-    pub fn read_bool(&mut self) -> Result<bool> {
-        self.inner.read_bool()
-    }
-
-    #[inline(always)]
-    pub fn read_byte(&mut self) -> Result<u8> {
-        self.inner.read_byte()
-    }
-
-    pub fn read_bits(&mut self, buf: &mut [u8], num_bits: usize) -> Result<()> {
-        self.inner.read_bits(buf, num_bits)
-    }
-
-    // Returns [dungers::varint::Error::BufferTooSmall] if buf isn't large enough to hold the
-    // string.
-    //
     // Always reads to the end of the string (so you can read the next piece of data waiting).
     //
     // If line is true, it stops when it reaches a '\n' or a null-terminator.
@@ -222,13 +220,13 @@ impl<'d> BitReader<'d> {
     //
     // Returns the number of characters left in out when the routine is complete (this will never
     // exceed buf.len()-1).
-    pub fn read_string(&mut self, buf: &mut [u8], line: bool) -> Result<usize> {
+    pub fn read_string(&mut self, buf: &mut [u8], line: bool) -> usize {
         debug_assert!(!buf.is_empty());
 
         let mut too_small = false;
         let mut num_chars = 0;
         loop {
-            let val = self.read_byte()?;
+            let val = self.read_byte();
             if val == 0 || (line && val == b'\n') {
                 break;
             }
@@ -241,60 +239,44 @@ impl<'d> BitReader<'d> {
             }
         }
 
-        // Make sure it's null-terminated.
+        // make sure it's null-terminated.
         debug_assert!(num_chars < buf.len());
         buf[num_chars] = 0;
 
-        if too_small {
-            Err(Error::BufferTooSmall)
+        // did it fit?
+        debug_assert!(!too_small);
+
+        num_chars
+    }
+
+    pub fn read_ubitvarfp(&mut self) -> u32 {
+        let ret = if self.read_bool() {
+            self.read_ubit64(2)
+        } else if self.read_bool() {
+            self.read_ubit64(4)
+        } else if self.read_bool() {
+            self.read_ubit64(10)
+        } else if self.read_bool() {
+            self.read_ubit64(17)
         } else {
-            Ok(num_chars)
-        }
-    }
-
-    pub fn read_uvarint32(&mut self) -> Result<u32> {
-        self.inner.read_uvarint32()
-    }
-
-    pub fn read_uvarint64(&mut self) -> Result<u64> {
-        self.inner.read_uvarint64()
-    }
-
-    pub fn read_varint32(&mut self) -> Result<i32> {
-        self.inner.read_varint32()
-    }
-
-    pub fn read_varint64(&mut self) -> Result<i64> {
-        self.inner.read_varint64()
-    }
-
-    pub fn read_ubitvarfp(&mut self) -> Result<u32> {
-        if self.read_bool()? {
-            self.read_ubitlong(2)
-        } else if self.read_bool()? {
-            self.read_ubitlong(4)
-        } else if self.read_bool()? {
-            self.read_ubitlong(10)
-        } else if self.read_bool()? {
-            self.read_ubitlong(17)
-        } else {
-            self.read_ubitlong(31)
-        }
+            self.read_ubit64(31)
+        };
+        ret as u32
     }
 }
 
 #[cfg(test)]
 mod test {
+    use super::*;
+
     #[test]
-    fn test_read_string() -> super::Result<()> {
+    fn test_read_string() {
         let buf = b"Life's but a walking shadow, a poor player.\0";
-        let mut br = super::BitReader::new(buf);
+        let mut br = BitReader::new(buf);
 
         let mut out = vec![0u8; buf.len()];
-        let num_chars = br.read_string(&mut out, false)?;
+        let num_chars = br.read_string(&mut out, false);
         assert_eq!(&out, &buf);
         assert_eq!(num_chars, buf.len() - 1);
-
-        Ok(())
     }
 }

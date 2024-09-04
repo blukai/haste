@@ -1,5 +1,5 @@
 use crate::{
-    bitreader::{self, BitReader},
+    bitreader::BitReader,
     fieldvalue::FieldValue,
     flattenedserializers::{FlattenedSerializerContext, FlattenedSerializerField},
     fxhash,
@@ -11,8 +11,6 @@ use std::{fmt::Debug, mem::MaybeUninit};
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     // crate
-    #[error(transparent)]
-    BitReader(#[from] bitreader::Error),
     #[error(transparent)]
     QuantizedFloat(#[from] quantizedfloat::Error),
 }
@@ -50,9 +48,7 @@ pub struct I8Decoder {}
 impl FieldDecode for I8Decoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        br.read_varint32()
-            .map(|v| FieldValue::I8(v as i8))
-            .map_err(Error::from)
+        Ok(FieldValue::I8(br.read_varint32() as i8))
     }
 }
 
@@ -64,9 +60,7 @@ pub struct I16Decoder {}
 impl FieldDecode for I16Decoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        br.read_varint32()
-            .map(|v| FieldValue::I16(v as i16))
-            .map_err(Error::from)
+        Ok(FieldValue::I16(br.read_varint32() as i16))
     }
 }
 
@@ -78,7 +72,7 @@ pub struct I32Decoder {}
 impl FieldDecode for I32Decoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        br.read_varint32().map(FieldValue::I32).map_err(Error::from)
+        Ok(FieldValue::I32(br.read_varint32()))
     }
 }
 
@@ -90,7 +84,7 @@ pub struct I64Decoder {}
 impl FieldDecode for I64Decoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        br.read_varint64().map(FieldValue::I64).map_err(Error::from)
+        Ok(FieldValue::I64(br.read_varint64()))
     }
 }
 
@@ -102,9 +96,7 @@ pub struct U8Decoder {}
 impl FieldDecode for U8Decoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        br.read_uvarint32()
-            .map(|v| FieldValue::U8(v as u8))
-            .map_err(Error::from)
+        Ok(FieldValue::U8(br.read_uvarint32() as u8))
     }
 }
 // ----
@@ -115,9 +107,7 @@ pub struct U16Decoder {}
 impl FieldDecode for U16Decoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        br.read_uvarint32()
-            .map(|v| FieldValue::U16(v as u16))
-            .map_err(Error::from)
+        Ok(FieldValue::U16(br.read_uvarint32() as u16))
     }
 }
 // ----
@@ -128,9 +118,7 @@ pub struct U32Decoder {}
 impl FieldDecode for U32Decoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        br.read_uvarint32()
-            .map(FieldValue::U32)
-            .map_err(Error::from)
+        Ok(FieldValue::U32(br.read_uvarint32()))
     }
 }
 
@@ -142,9 +130,7 @@ struct InternalU64Decoder {}
 impl FieldDecode for InternalU64Decoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        br.read_uvarint64()
-            .map(FieldValue::U64)
-            .map_err(Error::from)
+        Ok(FieldValue::U64(br.read_uvarint64()))
     }
 }
 
@@ -155,7 +141,7 @@ impl FieldDecode for InternalU64Fixed64Decoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
         let mut buf = [0u8; 8];
-        br.read_bytes(&mut buf)?;
+        br.read_bytes(&mut buf);
         Ok(FieldValue::U64(u64::from_le_bytes(buf)))
     }
 }
@@ -194,7 +180,7 @@ pub struct BoolDecoder {}
 impl FieldDecode for BoolDecoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        br.read_bool().map(FieldValue::Bool).map_err(Error::from)
+        Ok(FieldValue::Bool(br.read_bool()))
     }
 }
 
@@ -250,9 +236,7 @@ impl InternalF32SimulationTimeDecoder {
 impl InternalF32Decode for InternalF32SimulationTimeDecoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<f32> {
-        br.read_uvarint32()
-            .map(|value| value as f32 * self.tick_interval)
-            .map_err(Error::from)
+        Ok(br.read_uvarint32() as f32 * self.tick_interval)
     }
 }
 
@@ -262,7 +246,7 @@ struct InternalF32CoordDecoder {}
 impl InternalF32Decode for InternalF32CoordDecoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<f32> {
-        br.read_bitcoord().map_err(Error::from)
+        Ok(br.read_bitcoord())
     }
 }
 
@@ -272,7 +256,7 @@ struct InternalF32NormalDecoder {}
 impl InternalF32Decode for InternalF32NormalDecoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<f32> {
-        br.read_bitnormal().map_err(Error::from)
+        Ok(br.read_bitnormal())
     }
 }
 
@@ -282,7 +266,7 @@ struct InternalF32NoScaleDecoder {}
 impl InternalF32Decode for InternalF32NoScaleDecoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<f32> {
-        br.read_bitfloat().map_err(Error::from)
+        Ok(br.read_bitfloat())
     }
 }
 
@@ -391,9 +375,7 @@ struct InternalVectorNormalDecoder;
 impl FieldDecode for InternalVectorNormalDecoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        br.read_bitvec3normal()
-            .map(FieldValue::Vector)
-            .map_err(Error::from)
+        Ok(FieldValue::Vector(br.read_bitvec3normal()))
     }
 }
 
@@ -491,8 +473,8 @@ impl FieldDecode for InternalQAnglePitchYawDecoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
         let vec3 = [
-            br.read_bitangle(self.bit_count)?,
-            br.read_bitangle(self.bit_count)?,
+            br.read_bitangle(self.bit_count),
+            br.read_bitangle(self.bit_count),
             0.0,
         ];
         Ok(FieldValue::QAngle(vec3))
@@ -505,9 +487,7 @@ struct InternalQAngleNoBitCountDecoder {}
 impl FieldDecode for InternalQAngleNoBitCountDecoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        br.read_bitvec3coord()
-            .map(FieldValue::QAngle)
-            .map_err(Error::from)
+        Ok(FieldValue::QAngle(br.read_bitvec3coord()))
     }
 }
 
@@ -519,18 +499,18 @@ impl FieldDecode for InternalQAnglePreciseDecoder {
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
         let mut vec3 = [0f32; 3];
 
-        let rx = br.read_bool()?;
-        let ry = br.read_bool()?;
-        let rz = br.read_bool()?;
+        let rx = br.read_bool();
+        let ry = br.read_bool();
+        let rz = br.read_bool();
 
         if rx {
-            vec3[0] = br.read_bitangle(20)?;
+            vec3[0] = br.read_bitangle(20);
         }
         if ry {
-            vec3[1] = br.read_bitangle(20)?;
+            vec3[1] = br.read_bitangle(20);
         }
         if rz {
-            vec3[2] = br.read_bitangle(20)?;
+            vec3[2] = br.read_bitangle(20);
         }
 
         Ok(FieldValue::QAngle(vec3))
@@ -546,9 +526,9 @@ impl FieldDecode for InternalQAngleBitCountDecoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
         let vec3 = [
-            br.read_bitangle(self.bit_count)?,
-            br.read_bitangle(self.bit_count)?,
-            br.read_bitangle(self.bit_count)?,
+            br.read_bitangle(self.bit_count),
+            br.read_bitangle(self.bit_count),
+            br.read_bitangle(self.bit_count),
         ];
         Ok(FieldValue::QAngle(vec3))
     }
@@ -615,7 +595,7 @@ impl FieldDecode for StringDecoder {
         // just don't read uninit memory.
         #[allow(invalid_value)]
         let mut buf: [u8; 1024] = unsafe { MaybeUninit::uninit().assume_init() };
-        let n = br.read_string(&mut buf, false)?;
+        let n = br.read_string(&mut buf, false);
         Ok(FieldValue::String(Box::<str>::from(unsafe {
             std::str::from_utf8_unchecked(&buf[..n])
         })))

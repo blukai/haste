@@ -1,5 +1,5 @@
 use crate::{
-    bitreader::{self, BitReader},
+    bitreader::BitReader,
     entityclasses::EntityClasses,
     fielddecoder,
     fieldpath::{self, FieldPath},
@@ -17,8 +17,6 @@ use std::{hash::BuildHasherDefault, rc::Rc};
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     // crate
-    #[error(transparent)]
-    BitReader(#[from] bitreader::Error),
     #[error(transparent)]
     FieldPath(#[from] fieldpath::Error),
     #[error(transparent)]
@@ -77,14 +75,14 @@ pub const FHDR_ENTERPVS: usize = 0x0004;
 pub(crate) fn parse_delta_header(br: &mut BitReader) -> Result<usize> {
     let mut update_flags = FHDR_ZERO;
     // NOTE: read_bool is equivalent to ReadOneBit() == 1
-    if !br.read_bool()? {
-        if br.read_bool()? {
+    if !br.read_bool() {
+        if br.read_bool() {
             update_flags |= FHDR_ENTERPVS;
         }
     } else {
         update_flags |= FHDR_LEAVEPVS;
 
-        if br.read_bool()? {
+        if br.read_bool() {
             update_flags |= FHDR_DELETE;
         }
     }

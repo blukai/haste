@@ -374,11 +374,11 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         let data = cmd.data.unwrap_or_default();
         let mut br = BitReader::new(&data);
         while br.num_bits_left() > 8 {
-            let command = br.read_ubitvar()?;
-            let size = br.read_uvarint32()? as usize;
+            let command = br.read_ubitvar();
+            let size = br.read_uvarint32() as usize;
 
             let buf = &mut self.buf[..size];
-            br.read_bytes(buf)?;
+            br.read_bytes(buf);
             let buf: &_ = buf;
 
             self.visitor.on_packet(&self.ctx, command, buf)?;
@@ -498,7 +498,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             // TODO(blukai): maybe try to make naming consistent with valve; see
             // https://github.com/taylorfinnell/csgo-demoinfo/blob/74960c07c387b080a0965c4fc33d69ccf9bfe6c8/demoinfogo/demofiledump.cpp#L1153C18-L1153C29
             // and CL_ParseDeltaHeader in engine/client.cpp
-            entity_index += br.read_ubitvar()? as i32 + 1;
+            entity_index += br.read_ubitvar() as i32 + 1;
 
             let update_flags = parse_delta_header(&mut br)?;
             let update_type = determine_update_type(update_flags);
