@@ -1,13 +1,10 @@
-use crate::bitbuf::{self, BitReader};
+use crate::bitreader::BitReader;
 
 // NOTE: this is composite of stuff from butterfly, clarity, manta and leaked
 // csgo.
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    // crate
-    #[error(transparent)]
-    BitBuf(#[from] bitbuf::Error),
     // mod
     #[error("encode flags are both round up and down, these flags are mutually exclusive")]
     InvalidEncodeFlags,
@@ -226,20 +223,20 @@ impl QuantizedFloat {
     }
 
     pub fn decode(&self, br: &mut BitReader) -> Result<f32> {
-        if (self.encode_flags & QFE_ROUNDDOWN) != 0 && br.read_bool()? {
+        if (self.encode_flags & QFE_ROUNDDOWN) != 0 && br.read_bool() {
             return Ok(self.low_value);
         }
 
-        if (self.encode_flags & QFE_ROUNDUP) != 0 && br.read_bool()? {
+        if (self.encode_flags & QFE_ROUNDUP) != 0 && br.read_bool() {
             return Ok(self.high_value);
         }
 
-        if (self.encode_flags & QFE_ENCODE_ZERO_EXACTLY) != 0 && br.read_bool()? {
+        if (self.encode_flags & QFE_ENCODE_ZERO_EXACTLY) != 0 && br.read_bool() {
             return Ok(0.0);
         }
 
         let range = self.high_value - self.low_value;
-        let value = br.read_ubitlong(self.bit_count as usize)?;
+        let value = br.read_ubit64(self.bit_count as usize);
         Ok(self.low_value + range * (value as f32 * self.decode_mul))
     }
 }

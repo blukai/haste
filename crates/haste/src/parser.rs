@@ -1,5 +1,5 @@
 use crate::{
-    bitbuf::BitReader,
+    bitreader::BitReader,
     demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_BUFFER_SIZE, DEMO_HEADER_SIZE},
     entities::{self, EntityContainer},
     entityclasses::EntityClasses,
@@ -373,12 +373,13 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     fn handle_cmd_packet(&mut self, cmd: CDemoPacket) -> Result<()> {
         let data = cmd.data.unwrap_or_default();
         let mut br = BitReader::new(&data);
-        while br.get_num_bits_left() > 8 {
-            let command = br.read_ubitvar()?;
-            let size = br.read_uvarint32()? as usize;
+
+        while br.num_bits_left() > 8 {
+            let command = br.read_ubitvar();
+            let size = br.read_uvarint32() as usize;
 
             let buf = &mut self.buf[..size];
-            br.read_bytes(buf)?;
+            br.read_bytes(buf);
             let buf: &_ = buf;
 
             self.visitor.on_packet(&self.ctx, command, buf)?;
@@ -414,6 +415,8 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 }
             }
         }
+
+        br.is_overflowed()?;
         Ok(())
     }
 
@@ -435,7 +438,10 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         } else {
             msg.string_data()
         };
-        string_table.parse_update(&mut BitReader::new(string_data), msg.num_entries())?;
+
+        let mut br = BitReader::new(string_data);
+        string_table.parse_update(&mut br, msg.num_entries())?;
+        br.is_overflowed()?;
 
         if string_table.name().eq(INSTANCE_BASELINE_TABLE_NAME) {
             if let Some(entity_classes) = self.ctx.entity_classes.as_ref() {
@@ -462,10 +468,10 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 .get_table_mut(table_id)
                 .unwrap_unchecked()
         };
-        string_table.parse_update(
-            &mut BitReader::new(msg.string_data()),
-            msg.num_changed_entries(),
-        )?;
+
+        let mut br = BitReader::new(msg.string_data());
+        string_table.parse_update(&mut br, msg.num_changed_entries())?;
+        br.is_overflowed()?;
 
         if string_table.name().eq(INSTANCE_BASELINE_TABLE_NAME) {
             if let Some(entity_classes) = self.ctx.entity_classes.as_ref() {
@@ -498,7 +504,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             // TODO(blukai): maybe try to make naming consistent with valve; see
             // https://github.com/taylorfinnell/csgo-demoinfo/blob/74960c07c387b080a0965c4fc33d69ccf9bfe6c8/demoinfogo/demofiledump.cpp#L1153C18-L1153C29
             // and CL_ParseDeltaHeader in engine/client.cpp
-            entity_index += br.read_ubitvar()? as i32 + 1;
+            entity_index += br.read_ubitvar() as i32 + 1;
 
             let update_flags = parse_delta_header(&mut br)?;
             let update_type = determine_update_type(update_flags);
@@ -552,6 +558,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             }
         }
 
+        br.is_overflowed()?;
         Ok(())
     }
 
