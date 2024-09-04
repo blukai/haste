@@ -1,11 +1,11 @@
-use crate::bitbuf::{self, BitReader};
+use crate::bitreader::{self, BitReader};
 use std::cell::UnsafeCell;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     // crate
     #[error(transparent)]
-    BitBuf(#[from] bitbuf::Error),
+    BitReader(#[from] bitreader::Error),
     // mod
     #[error("exhausted max operation bits")]
     ExhaustedMaxOpBits,

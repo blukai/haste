@@ -3,7 +3,7 @@
 #![deny(clippy::panic)]
 
 // TODO: figure pub scopes for all the things
-pub(crate) mod bitbuf;
+pub(crate) mod bitreader;
 pub mod demofile;
 pub mod entities;
 pub mod entityclasses;
@@ -52,8 +52,6 @@ pub(crate) use haste_vartype as vartype;
 // public/tier1/utlstringtoken.h
 
 // TODO: figure out combat log
-
-// TODO: wasm! make this whole thing run in a browser
 
 // NOTE: preserve-metadata feature is enabled in haste_dota2_atoms_codegen
 // crate, but it's disabled everywhere else. command `cargo build --release

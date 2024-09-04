@@ -1,5 +1,5 @@
 use crate::{
-    bitbuf::{self, BitReader},
+    bitreader::{self, BitReader},
     protos::{c_demo_string_tables, CDemoStringTables},
 };
 use hashbrown::HashMap;
@@ -16,7 +16,7 @@ pub enum Error {
     Snap(#[from] snap::Error),
     // crate
     #[error(transparent)]
-    BitBuf(#[from] bitbuf::Error),
+    BitReader(#[from] bitreader::Error),
     // mod
     #[error("tried to create string table '{0}' twice")]
     DuplicateStringTable(String),

@@ -1,4 +1,4 @@
-use crate::bitbuf::{self, BitReader};
+use crate::bitreader::{self, BitReader};
 
 // NOTE: this is composite of stuff from butterfly, clarity, manta and leaked
 // csgo.
@@ -7,7 +7,7 @@ use crate::bitbuf::{self, BitReader};
 pub enum Error {
     // crate
     #[error(transparent)]
-    BitBuf(#[from] bitbuf::Error),
+    BitReader(#[from] bitreader::Error),
     // mod
     #[error("encode flags are both round up and down, these flags are mutually exclusive")]
     InvalidEncodeFlags,

@@ -1,5 +1,5 @@
 use crate::{
-    bitbuf::{self, BitReader},
+    bitreader::{self, BitReader},
     entityclasses::EntityClasses,
     fielddecoder,
     fieldpath::{self, FieldPath},
@@ -18,7 +18,7 @@ use std::{hash::BuildHasherDefault, rc::Rc};
 pub enum Error {
     // crate
     #[error(transparent)]
-    BitBuf(#[from] bitbuf::Error),
+    BitReader(#[from] bitreader::Error),
     #[error(transparent)]
     FieldPath(#[from] fieldpath::Error),
     #[error(transparent)]

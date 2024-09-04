@@ -1,5 +1,5 @@
 use crate::{
-    bitbuf::BitReader,
+    bitreader::BitReader,
     demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_BUFFER_SIZE, DEMO_HEADER_SIZE},
     entities::{self, EntityContainer},
     entityclasses::EntityClasses,
@@ -373,7 +373,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     fn handle_cmd_packet(&mut self, cmd: CDemoPacket) -> Result<()> {
         let data = cmd.data.unwrap_or_default();
         let mut br = BitReader::new(&data);
-        while br.get_num_bits_left() > 8 {
+        while br.num_bits_left() > 8 {
             let command = br.read_ubitvar()?;
             let size = br.read_uvarint32()? as usize;
 

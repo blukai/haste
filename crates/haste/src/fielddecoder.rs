@@ -1,5 +1,5 @@
 use crate::{
-    bitbuf::{self, BitReader},
+    bitreader::{self, BitReader},
     fieldvalue::FieldValue,
     flattenedserializers::{FlattenedSerializerContext, FlattenedSerializerField},
     fxhash,
@@ -12,7 +12,7 @@ use std::{fmt::Debug, mem::MaybeUninit};
 pub enum Error {
     // crate
     #[error(transparent)]
-    BitBuf(#[from] bitbuf::Error),
+    BitReader(#[from] bitreader::Error),
     #[error(transparent)]
     QuantizedFloat(#[from] quantizedfloat::Error),
 }
