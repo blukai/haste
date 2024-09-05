@@ -28,3 +28,4 @@ rand = "0.8.5"
 snap = "1.1.1"
 thiserror = "1.0.63"
 which = "6.0.3"
+

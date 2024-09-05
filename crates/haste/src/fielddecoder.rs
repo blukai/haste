@@ -233,30 +233,6 @@ impl InternalF32Decode for InternalQuantizedFloatDecoder {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct QuantizedFloatDecoder {
-    decoder: Box<dyn InternalF32Decode>,
-}
-
-impl QuantizedFloatDecoder {
-    #[inline]
-    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
-        Ok(Self {
-            decoder: Box::new(InternalQuantizedFloatDecoder::new(field)?),
-        })
-    }
-}
-
-impl FieldDecode for QuantizedFloatDecoder {
-    #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        self.decoder
-            .decode(br)
-            .map(FieldValue::F32)
-            .map_err(Error::from)
-    }
-}
-
 // ----
 
 #[derive(Debug, Clone, Default)]

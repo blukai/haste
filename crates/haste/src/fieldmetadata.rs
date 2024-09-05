@@ -1,8 +1,8 @@
 use crate::{
     fielddecoder::{
         self, BoolDecoder, F32Decoder, FieldDecode, I16Decoder, I32Decoder, I64Decoder, I8Decoder,
-        NopDecoder, QAngleDecoder, QuantizedFloatDecoder, StringDecoder, U16Decoder, U32Decoder,
-        U64Decoder, U8Decoder, Vector2DDecoder, Vector4DDecoder, VectorDecoder,
+        NopDecoder, QAngleDecoder, StringDecoder, U16Decoder, U32Decoder, U64Decoder, U8Decoder,
+        Vector2DDecoder, Vector4DDecoder, VectorDecoder,
     },
     flattenedserializers::{FlattenedSerializerContext, FlattenedSerializerField},
     vartype::{Expr, Lit},
@@ -169,9 +169,9 @@ fn visit_ident(
         "CUtlString" => non_special!(StringDecoder),
         // public/mathlib/vector.h
         "QAngle" => non_special!(QAngleDecoder::new(field)),
-        "CNetworkedQuantizedFloat" => {
-            non_special!(QuantizedFloatDecoder::new(field)?)
-        }
+        // NOTE: not all quantized floats are actually quantized (if bit_count is 0 or 32 it's
+        // not!) F32Decoder will determine which kind of f32 decoder to use.
+        "CNetworkedQuantizedFloat" => non_special!(F32Decoder::new(field, ctx)?),
         "GameTime_t" => non_special!(F32Decoder::new(field, ctx)?),
         "MatchID_t" => non_special!(U64Decoder::new(field)),
         // public/mathlib/vector.h
