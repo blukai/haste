@@ -472,6 +472,9 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
 
         let mut entity_index: i32 = -1;
         for _ in (0..msg.updated_entries()).rev() {
+            // TODO(blukai): maybe try to make naming consistent with valve; see
+            // https://github.com/taylorfinnell/csgo-demoinfo/blob/74960c07c387b080a0965c4fc33d69ccf9bfe6c8/demoinfogo/demofiledump.cpp#L1153C18-L1153C29
+            // and CL_ParseDeltaHeader in engine/client.cpp
             entity_index += br.read_ubitvar()? as i32 + 1;
 
             let update_flags = parse_delta_header(&mut br)?;

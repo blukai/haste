@@ -27,9 +27,44 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+// public/const.h (adjusted)
+
+const MAX_EDICT_BITS: u32 = 14;
+const MAX_EDICTS: u32 = 1 << MAX_EDICT_BITS;
+
+const NUM_ENT_ENTRY_BITS: u32 = MAX_EDICT_BITS + 1;
+const NUM_SERIAL_NUM_BITS: u32 = 32 - NUM_ENT_ENTRY_BITS;
+
+const NUM_NETWORKED_EHANDLE_SERIAL_NUMBER_BITS: u32 = 10;
+const NUM_NETWORKED_EHANDLE_BITS: u32 = MAX_EDICT_BITS + NUM_NETWORKED_EHANDLE_SERIAL_NUMBER_BITS;
+const INVALID_NETWORKED_EHANDLE_VALUE: u32 = (1 << NUM_NETWORKED_EHANDLE_BITS) - 1;
+
+// TODO: maybe introduce CHandle variant of FieldValue?
+
+pub fn is_handle_valid(handle: u32) -> bool {
+    handle != INVALID_NETWORKED_EHANDLE_VALUE
+}
+
+// game/client/recvproxy.cpp
+// RecvProxy_IntToEHandle
+// int iEntity = pData->m_Value.m_Int & ((1 << MAX_EDICT_BITS) - 1);
+// int iSerialNum = pData->m_Value.m_Int >> MAX_EDICT_BITS;
+
+pub fn handle_to_index(handle: u32) -> usize {
+    (handle & ((1 << MAX_EDICT_BITS) - 1)) as usize
+}
+
+// TODO(blukai): investigate this (from public/basehandle.h):
+// > The low NUM_SERIAL_BITS hold the index. If this value is less than MAX_EDICTS, then the entity is networkable.
+// > The high NUM_SERIAL_NUM_BITS bits are the serial number.
+
+// NOTE(blukai): idk, maybe to convert index and serial to handle do what CBaseHandle::Init (in
+// public/basehandle.h) does:
+// m_Index = iEntry | (iSerialNumber << NUM_SERIAL_NUM_SHIFT_BITS);
+
 // NOTE: PVS is potentially visible set,
 // see more on https://developer.valvesoftware.com/wiki/PVS
-
+//
 // Flags for delta encoding header
 // csgo src: engine/ents_shared.h
 pub const FHDR_ZERO: usize = 0x0000;
@@ -206,9 +241,11 @@ pub struct EntityContainer {
 impl EntityContainer {
     pub(crate) fn new() -> Self {
         Self {
-            // NOTE: clarity (and possibly manta) specify 1 << 14 as the max
-            // count of entries; butterfly uses number 20480.
-            entities: HashMap::with_capacity_and_hasher(20480, BuildHasherDefault::default()),
+            entities: HashMap::with_capacity_and_hasher(
+                // NOTE(blukai): in dota this value can be actually higher.
+                MAX_EDICTS as usize,
+                BuildHasherDefault::default(),
+            ),
             baseline_entities: HashMap::with_capacity_and_hasher(
                 1024,
                 BuildHasherDefault::default(),
@@ -225,7 +262,7 @@ impl EntityContainer {
         serializers: &FlattenedSerializerContainer,
     ) -> Result<&Entity> {
         let class_id = br.read_ubitlong(entity_classes.bits)? as i32;
-        let _serial = br.read_ubitlong(17)?;
+        let _serial = br.read_ubitlong(NUM_SERIAL_NUM_BITS as usize)?;
         let _unknown = br.read_uvarint32()?;
 
         let class_info = unsafe { entity_classes.by_id_unckecked(class_id) };
