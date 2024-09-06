@@ -50,29 +50,8 @@ fn hero_killed(
 
     println!("{} killed {}", scorer_name, victim_name);
 
-    if let Some(score) = state.hero_scores.get_mut(scorer_name) {
-        score.kills += 1;
-    } else {
-        state.hero_scores.insert(
-            scorer_name.to_string(),
-            Score {
-                kills: 1,
-                deaths: 0,
-            },
-        );
-    }
-
-    if let Some(score) = state.hero_scores.get_mut(victim_name) {
-        score.deaths += 1;
-    } else {
-        state.hero_scores.insert(
-            victim_name.to_string(),
-            Score {
-                kills: 0,
-                deaths: 1,
-            },
-        );
-    }
+    state.hero_scores.entry(scorer_name.to_string()).or_default().kills += 1;
+    state.hero_scores.entry(victim_name.to_string()).or_default().deaths += 1;
 
     Ok(())
 }
