@@ -64,23 +64,22 @@ pub const fn add_u64_to_hash(hash: u64, value: u64) -> u64 {
     (hash.rotate_left(ROTATION_LENGTH) ^ value).wrapping_mul(GOLDEN_RATIO)
 }
 
-/// hash some number of bytes. this hash function transmutes u8s into u64s and hashes as many u64s
-/// as possible, and then remaining u8s if any.
+// TODO(blukai): figure out comptime alignment when issues when transmuting &[u8] into &[u64]. note
+// that relying on core::ptr::copy won't help as its const impl is unstable / requires nightly.
+
+/// hash some number of bytes.
 ///
 /// original implementation:
 /// <https://searchfox.org/mozilla-central/rev/e0a62f1391f7d58fab20418adc9310b23708a792/mfbt/HashFunctions.cpp#16>
+///
+/// note that this functions is not as fast as it could be due to not yet figured out rust comptile
+/// issues with mem alignment. ultimately it would transmute u8s into u64s and hashe as many u64s
+/// as possible, and then remaining u8s if any.
 #[inline]
 pub const fn hash_bytes(bytes: &[u8]) -> u64 {
     let mut hash = 0;
 
     let mut i = 0;
-
-    let blocks: &[u64] = unsafe { core::mem::transmute(bytes) };
-    while i < bytes.len() - (bytes.len() % size_of::<u64>()) {
-        hash = add_u64_to_hash(hash, blocks[i >> 3]);
-        i += size_of::<u64>();
-    }
-
     while i < bytes.len() {
         hash = add_u64_to_hash(hash, bytes[i] as u64);
         i += 1;
