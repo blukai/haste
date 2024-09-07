@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use haste::fieldvalue::FieldValue;
+use haste::{entities::UpdateType, fieldvalue::FieldValue, fxhash};
 
 use crate::{
     entities,
@@ -126,16 +126,22 @@ impl<S: PlayerState> Visitor for &mut HandlerVisitor<S> {
         // TODO: include updated fields (list of field paths?)
         entity: &crate::entities::Entity,
     ) -> parser::Result<()> {
+        if let UpdateType::EnterPVS = update_type {
+            return Ok(())
+        }
+
+        let ser_key: u64 = fxhash::hash_bytes(b"CCitadelPlayerController");
+
+        let ser = entity.get_serializer().serializer_name.hash;
+
+        if ser != ser_key {
+            return Ok(());
+        }
+
         let team_key: u64 = entities::make_field_key(&["m_iTeamNum"]);
         let teamname_key: u64 = entities::make_field_key(&["m_szTeamname"]);
         let playername_key: u64 = entities::make_field_key(&["m_iszPlayerName"]);
         let playerslot_key: u64 = entities::make_field_key(&["m_unLobbyPlayerSlot"]);
-
-        let ser = entity.get_serializer().serializer_name.str.to_string();
-
-        if ser != "CCitadelPlayerController" {
-            return Ok(());
-        }
 
         if let (
             Some(FieldValue::U8(team_id)),
