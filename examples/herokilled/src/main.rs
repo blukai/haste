@@ -1,12 +1,14 @@
+use handler::{HandlerVisitor, Player, PlayerState};
 use haste::{
     entities::{self, Entity},
     fieldvalue::FieldValue,
-    handler::HandlerVisitor,
     parser::{self, Context, Parser},
-    protos::{self, CCitadelUserMsgHeroKilled},
+    protos::{self, CCitadelUserMsgChatMsg, CCitadelUserMsgHeroKilled},
     stringtables::StringTable,
 };
 use std::{collections::HashMap, fs::File, io::BufReader};
+
+mod handler;
 
 fn get_entity_name<'a>(entity: &'a Entity, entity_names: &'a StringTable) -> Option<&'a str> {
     let name_si_key = entities::make_field_key(&["m_pEntity", "m_nameStringableIndex"]);
@@ -30,6 +32,17 @@ struct Score {
 #[derive(Default)]
 struct State {
     hero_scores: HashMap<String, Score>,
+    players: HashMap<i32, Player>,
+}
+
+impl PlayerState for State {
+    fn set_player(&mut self, player: Player) {
+        self.players.insert(player.slot, player);
+    }
+
+    fn get_player(&self, slot: &i32) -> Option<&Player> {
+        self.players.get(slot)
+    }
 }
 
 fn hero_killed(
@@ -50,8 +63,30 @@ fn hero_killed(
 
     println!("{} killed {}", scorer_name, victim_name);
 
-    state.hero_scores.entry(scorer_name.to_string()).or_default().kills += 1;
-    state.hero_scores.entry(victim_name.to_string()).or_default().deaths += 1;
+    state
+        .hero_scores
+        .entry(scorer_name.to_string())
+        .or_default()
+        .kills += 1;
+    state
+        .hero_scores
+        .entry(victim_name.to_string())
+        .or_default()
+        .deaths += 1;
+
+    Ok(())
+}
+
+fn chat(state: &mut State, ctx: &Context, msg: &CCitadelUserMsgChatMsg) -> parser::Result<()> {
+    let player = state
+        .get_player(&msg.player_slot())
+        .ok_or(parser::Error::from("unknown player"))?;
+    let channel = if msg.all_chat() {
+        format!("(all ) {}>", player.name)
+    } else {
+        format!("({}  ) {}>", player.team_id, player.name)
+    };
+    println!("{} {}", channel, msg.text());
 
     Ok(())
 }
@@ -69,10 +104,12 @@ fn main() -> Result<()> {
     let file = File::open(filepath.unwrap())?;
     let buf_reader = BufReader::new(file);
     let state = State::default();
-    let mut visitor = HandlerVisitor::with_state(state).with(
-        protos::CitadelUserMessageIds::KEUserMsgHeroKilled as u32,
-        hero_killed,
-    );
+    let mut visitor = HandlerVisitor::with_state(state)
+        .with(
+            protos::CitadelUserMessageIds::KEUserMsgHeroKilled as u32,
+            hero_killed,
+        )
+        .with(protos::CitadelUserMessageIds::KEUserMsgChatMsg as u32, chat);
     let mut parser = Parser::from_reader_with_visitor(buf_reader, &mut visitor)?;
     parser.run_to_end()?;
 
