@@ -25,12 +25,20 @@ const DEFAULT_FULL_PACKET_INTERVAL: i32 = 1800;
 // dota2's tick interval is 1 / 30; deadlock's 1 / 60 - they are constant.
 const DEFAULT_TICK_INTERVAL: f32 = 1.0 / 30.0;
 
+// TODO: unfuck result and error types; make them public-friendly. consider definint all possible
+// errors in one place (possibly similar to hyper?
+// https://github.com/hyperium/hyper/blob/master/src/error.rs).
 pub type Error = Box<dyn std::error::Error>;
 pub type Result<T> = std::result::Result<T, Error>;
 
 // NOTE: primary purpose of Context is to to be able to expose state to the
 // public; attempts to put parser into arguments of Visitor's method did not
 // result in anything satisfyable.
+//
+// TODO: consider turing Context into an enum with Initialized and Uninitialized variants. though
+// there also must be an intermediary variant (or maybe stuff can be piled into Uninitialized
+// variant) for incremental initialization. this may improve public api because string_tables,
+// serializer, and other methods will not have to return Option when context is initialized.
 pub struct Context {
     string_tables: StringTableContainer,
     instance_baseline: InstanceBaseline,
@@ -47,11 +55,6 @@ impl Context {
     // NOTE: following methods are public-facing api; do not use them internally
 
     #[inline]
-    pub fn tick(&self) -> i32 {
-        self.tick
-    }
-
-    #[inline]
     pub fn string_tables(&self) -> Option<&StringTableContainer> {
         if self.string_tables.is_empty() {
             None
@@ -66,6 +69,11 @@ impl Context {
     }
 
     #[inline]
+    pub fn entity_classes(&self) -> Option<&EntityClasses> {
+        self.entity_classes.as_ref()
+    }
+
+    #[inline]
     pub fn entities(&self) -> Option<&EntityContainer> {
         if self.entities.is_empty() {
             None
@@ -73,16 +81,26 @@ impl Context {
             Some(&self.entities)
         }
     }
+
+    #[inline]
+    pub fn tick(&self) -> i32 {
+        self.tick
+    }
+
+    #[inline]
+    pub fn tick_interval(&self) -> f32 {
+        self.tick_interval
+    }
 }
 
 pub trait Visitor {
+    // TODO: include updated fields (list of field paths?)
     #[allow(unused_variables)]
     fn on_entity(
         &mut self,
         ctx: &Context,
         update_flags: usize,
         update_type: entities::UpdateType,
-        // TODO: include updated fields (list of field paths?)
         entity: &entities::Entity,
     ) -> Result<()> {
         Ok(())
@@ -98,27 +116,24 @@ pub trait Visitor {
         Ok(())
     }
 
-    // TODO: come up with an example that would use / will rely on on_tick_end
     #[allow(unused_variables)]
     fn on_tick_end(&mut self, ctx: &Context) -> Result<()> {
         Ok(())
     }
 }
 
-// ControlFlow indicates the desired behavior of the run loop.
-pub enum ControlFlow {
-    // HandleCmd indicates that the command should be handled by the parser
+/// ControlFlow indicates the desired behavior of the run loop.
+enum ControlFlow {
+    /// indicates that the command should be handled by the parser.
     HandleCmd,
-    // SkipCmd indicates that the command should be skipped; the stream position
-    // will be advanced by the size of the command using
-    // `SeekFrom::Current(cmd_header.size)`.
+    /// indicates that the command should be skipped; the stream position will be advanced by the
+    /// size of the command using `SeekFrom::Current(cmd_header.size)`.
     SkipCmd,
-    // IgnoreCmd indicates that the command should not be handled nor skipped,
-    // suggesting that it has been handled in a different manner outside the
-    // regular flow.
+    /// indicates that the command should not be handled nor skipped, suggesting that it has been
+    /// handled in a different manner outside the regular flow.
     IgnoreCmd,
-    // Break stops further processing and indicates that any work performed
-    // during the current cycle must be undone.
+    /// stops further processing and indicates that any work performed during the current cycle
+    /// must be undone.
     Break,
 }
 
@@ -153,9 +168,16 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         })
     }
 
-    // ----
-
-    pub fn run<F>(&mut self, mut handler: F) -> Result<()>
+    // TODO(blukai): what if parse_to_end and parse_to_tick will not be Parser's direct
+    // "responsibility", but instead they will be implemented as "extensions" or something?
+    //
+    // why? for example dota 2 allows to record replays in real time (not anymore in matchmaking,
+    // but in lobbies). those replays can be parsed in real time, but the process requires some
+    // special handling (watch fs events (and in some cases poll) of demo file that is being
+    // recorded).
+    //
+    // must be publicly exposed for this to be actually useful.
+    fn run<F>(&mut self, mut handler: F) -> Result<()>
     where
         F: FnMut(&mut Self, &CmdHeader) -> Result<ControlFlow>,
     {
@@ -197,15 +219,16 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         self.run(|_notnotself, _cmd_header| Ok(ControlFlow::HandleCmd))
     }
 
-    // TODO: this probably has to be private?
-    pub fn reset(&mut self) -> Result<()> {
+    fn reset(&mut self) -> Result<()> {
         self.demo_file
             .seek(SeekFrom::Start(DEMO_HEADER_SIZE as u64))?;
+
+        self.ctx.entities.clear();
         self.ctx.string_tables.clear();
         self.ctx.instance_baseline.clear();
-        self.ctx.entities.clear();
-        self.ctx.prev_tick = -1;
         self.ctx.tick = -1;
+        self.ctx.prev_tick = -1;
+
         Ok(())
     }
 
@@ -563,12 +586,13 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         Ok(())
     }
 
-    // ----
+    // NOTE: following methods are public-facing api; do not use them internally
 
     // NOTE: it wouldn't be very nice to expose DemoFile that is owned by Parser
     // because it'll violate encapsulation; parser will lack control over the
     // DemoFile's internal state which may lead to to unintended consequences.
 
+    /// delegated from [`DemoFile`].
     #[inline]
     pub fn demo_header(&self) -> &DemoHeader {
         // SAFETY: it is safe to call unchecked method here becuase Self's
@@ -577,46 +601,64 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         unsafe { self.demo_file.demo_header_unchecked() }
     }
 
+    /// delegated from [`DemoFile`].
     #[inline]
     pub fn file_info(&mut self) -> Result<&CDemoFileInfo> {
         self.demo_file.file_info().map_err(Error::from)
     }
 
+    /// delegated from [`DemoFile`].
     #[inline]
     pub fn ticks_per_second(&mut self) -> Result<f32> {
         self.demo_file.ticks_per_second().map_err(Error::from)
     }
 
+    /// delegated from [`DemoFile`].
     #[inline]
     pub fn ticks_per_frame(&mut self) -> Result<f32> {
         self.demo_file.ticks_per_frame().map_err(Error::from)
     }
 
+    /// delegated from [`DemoFile`].
     #[inline]
     pub fn total_ticks(&mut self) -> Result<i32> {
         self.demo_file.total_ticks().map_err(Error::from)
     }
 
-    // NOTE: following methods are public-facing api; do not use them internally
-
-    #[inline]
-    pub fn tick(&self) -> i32 {
-        self.ctx.tick()
-    }
-
+    /// delegated from [`Context`].
     #[inline]
     pub fn string_tables(&self) -> Option<&StringTableContainer> {
         self.ctx.string_tables()
     }
 
+    /// delegated from [`Context`].
     #[inline]
     pub fn serializers(&self) -> Option<&FlattenedSerializerContainer> {
         self.ctx.serializers()
     }
 
+    /// delegated from [`Context`].
+    #[inline]
+    pub fn entity_classes(&self) -> Option<&EntityClasses> {
+        self.ctx.entity_classes()
+    }
+
+    /// delegated from [`Context`].
     #[inline]
     pub fn entities(&self) -> Option<&EntityContainer> {
         self.ctx.entities()
+    }
+
+    /// delegated from [`Context`].
+    #[inline]
+    pub fn tick(&self) -> i32 {
+        self.ctx.tick()
+    }
+
+    /// delegated from [`Context`].
+    #[inline]
+    pub fn tick_interval(&self) -> f32 {
+        self.ctx.tick_interval()
     }
 }
 

@@ -166,7 +166,7 @@ impl<R: Read + Seek> DemoFile<R> {
             };
 
             (
-                EDemoCommands::from_i32(command as i32).ok_or(Error::UnknownCmd(command))?,
+                EDemoCommands::try_from(command as i32).map_err(|_| Error::UnknownCmd(command))?,
                 ot,
                 is_compressed,
             )

@@ -167,7 +167,7 @@ pub struct U64Decoder {
 
 impl U64Decoder {
     pub fn new(field: &FlattenedSerializerField) -> Self {
-        if field.is_var_encoder_hash_eq(fxhash::hash_bytes(b"fixed64")) {
+        if field.var_encoder_heq(fxhash::hash_bytes(b"fixed64")) {
             Self {
                 decoder: Box::<InternalU64Fixed64Decoder>::default(),
             }
@@ -404,7 +404,7 @@ pub struct VectorDecoder {
 
 impl VectorDecoder {
     pub fn new(field: &FlattenedSerializerField, ctx: &FlattenedSerializerContext) -> Result<Self> {
-        if field.is_var_encoder_hash_eq(fxhash::hash_bytes(b"normal")) {
+        if field.var_encoder_heq(fxhash::hash_bytes(b"normal")) {
             Ok(Self {
                 decoder: Box::<InternalVectorNormalDecoder>::default(),
             })

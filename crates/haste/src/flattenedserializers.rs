@@ -157,7 +157,7 @@ impl FlattenedSerializerField {
     }
 
     #[inline(always)]
-    pub(crate) fn is_var_encoder_hash_eq(&self, rhs: u64) -> bool {
+    pub(crate) fn var_encoder_heq(&self, rhs: u64) -> bool {
         self.var_encoder.as_ref().is_some_and(|lhs| lhs.hash == rhs)
     }
 

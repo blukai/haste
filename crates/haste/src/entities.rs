@@ -212,9 +212,15 @@ impl Entity {
         self.fields.get(key).map(|ef| &ef.path)
     }
 
+    // TODO: consider renaming this into just `serializer`.
     #[inline]
     pub fn get_serializer(&self) -> &FlattenedSerializer {
         self.serializer.as_ref()
+    }
+
+    #[inline]
+    pub fn serializer_name_heq(&self, rhs: u64) -> bool {
+        self.serializer.serializer_name.hash == rhs
     }
 
     #[inline]
