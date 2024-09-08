@@ -276,7 +276,11 @@ impl EntityContainer {
             unsafe { serializers.by_name_hash_unckecked(class_info.network_name_hash) };
 
         let mut entity = match self.baseline_entities.entry(class_id) {
-            Entry::Occupied(entry) => entry.get().clone(),
+            Entry::Occupied(entry) => {
+                let mut entity = entry.get().clone();
+                entity.index = index;
+                entity
+            }
             Entry::Vacant(e) => {
                 let mut entity = Entity {
                     index,

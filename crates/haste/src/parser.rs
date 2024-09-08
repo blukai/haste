@@ -546,7 +546,6 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                             .handle_update_unchecked(entity_index, &mut br)?;
                         &*(entity as *const Entity)
                     };
-
                     self.visitor
                         .on_entity(&self.ctx, update_flags, update_type, entity)?;
                 }
