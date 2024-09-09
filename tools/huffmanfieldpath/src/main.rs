@@ -302,11 +302,11 @@ fn print_table(huffman: &Huffman<&'static Op>) {
 
     walk(huffman, &mut leafs, 0, 0);
 
-    println!("{:>38} | weight |     id | depth", "name");
+    println!("{:>38} | weight |      id (op bits) | depth", "name");
     leafs.sort_by(|a, b| a.id.partial_cmp(&b.id).unwrap());
     leafs.iter().for_each(|leaf| {
         println!(
-            "{:>38} | {:>6} | {:>6} | {:>5}",
+            "{:>38} | {:>6} | {:017b} | {:>5}",
             leaf.op.name, leaf.op.weight, leaf.id, leaf.depth
         );
     });

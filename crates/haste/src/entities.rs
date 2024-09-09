@@ -128,12 +128,11 @@ pub struct Entity {
 }
 
 impl Entity {
-    fn parse(&mut self, br: &mut BitReader) -> Result<()> {
+    fn parse(&mut self, br: &mut BitReader, fps: &mut [FieldPath]) -> Result<()> {
         // eprintln!("-- {:?}", self.serializer.serializer_name);
 
-        fieldpath::FIELD_PATHS.with(|fps| unsafe {
-            let mut fps = &mut *fps.get();
-            let fps = fieldpath::read_field_paths(br, &mut fps)?;
+        unsafe {
+            let fps = fieldpath::read_field_paths(br, fps)?;
             for fp in fps {
                 // eprint!("{:?} ", &fp.data[..=fp.last]);
 
@@ -189,9 +188,9 @@ impl Entity {
 
             // dbg!(&self.field_values);
             // panic!();
+        }
 
-            Ok(())
-        })
+        Ok(())
     }
 
     // ----
@@ -242,6 +241,14 @@ pub struct EntityContainer {
     // NOTE: hashbrown hashmap with no hash performs better then Vec.
     entities: HashMap<i32, Entity, BuildHasherDefault<NoHashHasher<i32>>>,
     baseline_entities: HashMap<i32, Entity, BuildHasherDefault<NoHashHasher<i32>>>,
+
+    // NOTE: it might be tempting to introduce a "wrapper" struct, something like FieldPathReader
+    // and turn read_field_path function into a method, but that's just suggar with no practical
+    // benefit and extra indirection.
+    // atm pointer to field_paths vec is being passed arround - that's 1 level. with theoretical
+    // FieldPathsReader there would be 2 levels of indirection (at least as i imagine it right
+    // now).
+    field_paths: Vec<FieldPath>,
 }
 
 impl EntityContainer {
@@ -256,6 +263,9 @@ impl EntityContainer {
                 1024,
                 BuildHasherDefault::default(),
             ),
+            // NOTE: 4096 is an arbitrary value that is large enough that that came out of printing
+            // out count of fps collected per "run". (sort -nr can be handy)
+            field_paths: vec![FieldPath::default(); 4096],
         }
     }
 
@@ -293,14 +303,14 @@ impl EntityContainer {
                 let baseline_data = unsafe { instance_baseline.by_id_unchecked(class_id) };
 
                 let mut baseline_br = BitReader::new(baseline_data.as_ref());
-                entity.parse(&mut baseline_br)?;
+                entity.parse(&mut baseline_br, &mut self.field_paths)?;
                 baseline_br.is_overflowed()?;
 
                 e.insert(entity).clone()
             }
         };
 
-        entity.parse(br)?;
+        entity.parse(br, &mut self.field_paths)?;
 
         self.entities.insert(index, entity);
         // SAFETY: the entity was just inserted ^, it's safe.
@@ -323,7 +333,7 @@ impl EntityContainer {
         br: &mut BitReader,
     ) -> Result<&Entity> {
         let entity = unsafe { self.entities.get_mut(&index).unwrap_unchecked() };
-        entity.parse(br)?;
+        entity.parse(br, &mut self.field_paths)?;
         Ok(entity)
     }
 
