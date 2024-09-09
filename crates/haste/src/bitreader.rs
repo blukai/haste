@@ -1,5 +1,7 @@
 use dungers::bitbuf;
 
+pub use bitbuf::Error as BitReaderError;
+
 // public/coordsize.h
 const COORD_INTEGER_BITS: usize = 14;
 const COORD_FRACTIONAL_BITS: usize = 5;
@@ -12,58 +14,97 @@ const NORMAL_DENOMINATOR: f32 = ((1 << (NORMAL_FRACTIONAL_BITS)) - 1) as f32;
 const NORMAL_RESOLUTION: f32 = 1.0 / (NORMAL_DENOMINATOR);
 
 // BitRead is a port of valve's CBitRead(or/and old_bf_read) from valve's tier1 lib.
-pub struct BitReader<'d> {
-    inner: bitbuf::BitReader<'d>,
+pub struct BitReader<'a> {
+    inner: bitbuf::BitReader<'a>,
+    did_check_overflow: bool,
 }
 
-impl<'d> BitReader<'d> {
+impl<'a> Drop for BitReader<'a> {
     #[inline]
-    pub fn new(data: &'d [u8]) -> Self {
+    fn drop(&mut self) {
+        assert!(self.did_check_overflow, "when you are done reading, you must call `is_overflowed` to ensure that there were no out of bounds reads");
+    }
+}
+
+/// rationale for using "unsafe" `_unchecked` methods of the underlying
+/// [dungers::bitbuf::BitReader]:
+///
+/// what makes safe methods of [dungers::bitbuf::BitReader] safe is overflow checks.
+///
+/// bounds checking is not omitted, it is "deferred". custom [Drop] impl helps to ensure that it is
+/// performed.
+///
+/// [BitReader]'s methods are being called very frequently, there's absolutely no value in
+/// performing bounds checking each time something is needed to be read because that is not going
+/// to help detect corrupt data.
+///
+/// deferred bounds checking allows to eliminate a very significant amout of branches which very
+/// noticeably improves performance.
+impl<'a> BitReader<'a> {
+    #[inline]
+    pub fn new(data: &'a [u8]) -> Self {
         Self {
             inner: bitbuf::BitReader::new(data),
+            did_check_overflow: false,
         }
     }
 
+    /// delegated from [dungers::bitbuf::BitReader].
     #[inline(always)]
     pub fn num_bits_left(&self) -> usize {
         self.inner.num_bits_left()
     }
 
+    /// delegated from [dungers::bitbuf::BitReader].
     #[inline(always)]
     pub fn read_ubit64(&mut self, num_bits: usize) -> u64 {
         unsafe { self.inner.read_ubit64_unchecked(num_bits) }
     }
 
+    /// delegated from [dungers::bitbuf::BitReader].
     #[inline(always)]
     pub fn read_bool(&mut self) -> bool {
         unsafe { self.inner.read_bool_unchecked() }
     }
 
+    /// delegated from [dungers::bitbuf::BitReader].
     #[inline(always)]
     pub fn read_byte(&mut self) -> u8 {
         unsafe { self.inner.read_byte_unchecked() }
     }
 
+    /// delegated from [dungers::bitbuf::BitReader].
     pub fn read_bits(&mut self, buf: &mut [u8], num_bits: usize) {
         unsafe { self.inner.read_bits_unchecked(buf, num_bits) }
     }
 
+    /// delegated from [dungers::bitbuf::BitReader].
     pub fn read_bytes(&mut self, buf: &mut [u8]) {
         unsafe { self.inner.read_bytes_unchecked(buf) }
     }
 
+    #[inline]
+    pub fn is_overflowed(&mut self) -> bitbuf::Result<()> {
+        self.did_check_overflow = true;
+        self.inner.is_overflowed()
+    }
+
+    /// delegated from [dungers::bitbuf::BitReader].
     pub fn read_uvarint32(&mut self) -> u32 {
         unsafe { self.inner.read_uvarint32_unchecked() }
     }
 
+    /// delegated from [dungers::bitbuf::BitReader].
     pub fn read_uvarint64(&mut self) -> u64 {
         unsafe { self.inner.read_uvarint64_unchecked() }
     }
 
+    /// delegated from [dungers::bitbuf::BitReader].
     pub fn read_varint32(&mut self) -> i32 {
         unsafe { self.inner.read_varint32_unchecked() }
     }
 
+    /// delegated from [dungers::bitbuf::BitReader].
     pub fn read_varint64(&mut self) -> i64 {
         unsafe { self.inner.read_varint64_unchecked() }
     }

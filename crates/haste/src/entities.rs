@@ -1,5 +1,5 @@
 use crate::{
-    bitreader::BitReader,
+    bitreader::{BitReader, BitReaderError},
     entityclasses::EntityClasses,
     fielddecoder,
     fieldpath::{self, FieldPath},
@@ -21,6 +21,8 @@ pub enum Error {
     FieldPath(#[from] fieldpath::Error),
     #[error(transparent)]
     FieldDecoder(#[from] fielddecoder::Error),
+    #[error(transparent)]
+    BitReader(#[from] BitReaderError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -265,9 +267,9 @@ impl EntityContainer {
         instance_baseline: &InstanceBaseline,
         serializers: &FlattenedSerializerContainer,
     ) -> Result<&Entity> {
-        let class_id = br.read_ubitlong(entity_classes.bits)? as i32;
-        let _serial = br.read_ubitlong(NUM_SERIAL_NUM_BITS as usize)?;
-        let _unknown = br.read_uvarint32()?;
+        let class_id = br.read_ubit64(entity_classes.bits) as i32;
+        let _serial = br.read_ubit64(NUM_SERIAL_NUM_BITS as usize);
+        let _unknown = br.read_uvarint32();
 
         let class_info = unsafe { entity_classes.by_id_unckecked(class_id) };
         let serializer =
@@ -289,8 +291,11 @@ impl EntityContainer {
                     serializer,
                 };
                 let baseline_data = unsafe { instance_baseline.by_id_unchecked(class_id) };
+
                 let mut baseline_br = BitReader::new(baseline_data.as_ref());
                 entity.parse(&mut baseline_br)?;
+                baseline_br.is_overflowed()?;
+
                 e.insert(entity).clone()
             }
         };

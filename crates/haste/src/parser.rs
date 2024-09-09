@@ -373,6 +373,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     fn handle_cmd_packet(&mut self, cmd: CDemoPacket) -> Result<()> {
         let data = cmd.data.unwrap_or_default();
         let mut br = BitReader::new(&data);
+
         while br.num_bits_left() > 8 {
             let command = br.read_ubitvar();
             let size = br.read_uvarint32() as usize;
@@ -414,6 +415,8 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 }
             }
         }
+
+        br.is_overflowed()?;
         Ok(())
     }
 
@@ -435,7 +438,10 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         } else {
             msg.string_data()
         };
-        string_table.parse_update(&mut BitReader::new(string_data), msg.num_entries())?;
+
+        let mut br = BitReader::new(string_data);
+        string_table.parse_update(&mut br, msg.num_entries())?;
+        br.is_overflowed()?;
 
         if string_table.name().eq(INSTANCE_BASELINE_TABLE_NAME) {
             if let Some(entity_classes) = self.ctx.entity_classes.as_ref() {
@@ -462,10 +468,10 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 .get_table_mut(table_id)
                 .unwrap_unchecked()
         };
-        string_table.parse_update(
-            &mut BitReader::new(msg.string_data()),
-            msg.num_changed_entries(),
-        )?;
+
+        let mut br = BitReader::new(msg.string_data());
+        string_table.parse_update(&mut br, msg.num_changed_entries())?;
+        br.is_overflowed()?;
 
         if string_table.name().eq(INSTANCE_BASELINE_TABLE_NAME) {
             if let Some(entity_classes) = self.ctx.entity_classes.as_ref() {
@@ -552,6 +558,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             }
         }
 
+        br.is_overflowed()?;
         Ok(())
     }
 
