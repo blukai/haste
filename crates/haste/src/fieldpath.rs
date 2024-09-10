@@ -631,10 +631,9 @@ lazy_static! {
     static ref FIELDOP_HIERARCHY: Node<FieldOp> = build_fieldop_hierarchy();
 }
 
-// NOTE: majority of field path reads are shorter then 32 (but some are beyond thousand).
-//
-// println the len, and then pipe into sort -n | uniq -c.
 pub(crate) fn read_field_paths<'a>(br: &mut BitReader, fps: &'a mut [FieldPath]) -> usize {
+    // NOTE: majority of field path reads are shorter then 32 (but some are beyond thousand).
+
     // it is more efficient to walk huffman tree, then to do static lookups by first accumulating
     // all the bits (like butterfly does [1]), because hierarchical structure allows making
     // decisions based on variable values which results in reduction of branch misses of otherwise
@@ -670,7 +669,9 @@ pub(crate) fn read_field_paths<'a>(br: &mut BitReader, fps: &'a mut [FieldPath])
                 return i;
             }
             fps[i as usize] = fp.clone();
+
             i += 1;
+            assert!(i <= fps.len());
 
             &FIELDOP_HIERARCHY
         } else {
