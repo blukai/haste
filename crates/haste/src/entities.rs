@@ -221,7 +221,7 @@ impl Entity {
 
     // TODO: consider renaming this into just `serializer`.
     #[inline]
-    pub fn get_serializer(&self) -> &FlattenedSerializer {
+    pub fn serializer(&self) -> &FlattenedSerializer {
         self.serializer.as_ref()
     }
 

@@ -1,5 +1,5 @@
 [package]
-name = "position"
+name = "deadlock-position"
 version = "0.0.0"
 edition.workspace = true
 

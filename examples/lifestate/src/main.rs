@@ -39,13 +39,13 @@ impl Visitor for MyVisitor {
             LIFE_ALIVE => eprintln!(
                 "{:>6}: {} at index {} has spawned",
                 ctx.tick(),
-                entity.get_serializer().serializer_name.str,
+                entity.serializer().serializer_name.str,
                 entity.index(),
             ),
             LIFE_DEAD => eprintln!(
                 "{:>6}: {} at index {} has died",
                 ctx.tick(),
-                entity.get_serializer().serializer_name.str,
+                entity.serializer().serializer_name.str,
                 entity.index(),
             ),
             _ => {}

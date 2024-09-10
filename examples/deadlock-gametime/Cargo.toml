@@ -1,5 +1,5 @@
 [package]
-name = "gametime"
+name = "deadlock-gametime"
 version = "0.0.0"
 edition.workspace = true
 

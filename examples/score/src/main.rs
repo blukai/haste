@@ -17,7 +17,7 @@ impl Visitor for MyVisitor {
         entity: &Entity,
     ) -> parser::Result<()> {
         if entity
-            .get_serializer()
+            .serializer()
             .serializer_name
             .hash
             .eq(&fxhash::hash_bytes(b"CDOTATeam"))

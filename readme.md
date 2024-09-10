@@ -18,7 +18,7 @@ bevy game engine).
 > [!WARNING]
 > there are many `unsafe`s in the codebase, some are rational and explained,
 > some need to be let go; public api isn't great and can be considered very
-> unstable.
+> unstable (e.g. it is not final and parts of it may change dramatically).
 
 ### examples
 

@@ -88,7 +88,7 @@ impl MyVisitor {
     fn handle_player_pawn(&mut self, entity: &Entity) -> anyhow::Result<()> {
         let position = get_entity_position(entity).expect("player pawn position");
 
-        // TODO: get rid if hashmap, parser must supply a list of updated fields.
+        // TODO: get rid of hashmap, parser must supply a list of updated fields.
         match self.positions.entry(entity.index()) {
             Entry::Occupied(mut oe) => {
                 let prev_position = oe.insert(position);
@@ -129,7 +129,7 @@ fn main() -> parser::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let filepath = args.get(1);
     if filepath.is_none() {
-        eprintln!("usage: position <filepath>");
+        eprintln!("usage: deadlock-position <filepath>");
         std::process::exit(42);
     }
 

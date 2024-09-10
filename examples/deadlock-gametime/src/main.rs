@@ -37,6 +37,12 @@ impl MyVisitor {
     fn handle_game_rules(&mut self, entity: &Entity) -> anyhow::Result<()> {
         debug_assert!(entity.serializer_name_heq(DEADLOCK_GAMERULES_ENTITY));
 
+        // TODO(blukai): come up with a nicer get value api.
+        //
+        // maybe something like:
+        // fn try_get_value_as<T>(&self, key: &u64) -> Result<T>
+        // where FieldValue: TryInto<T, Error = FieldValueTryIntoError>
+
         let game_start_time: f32 = entity
             .get_value(&make_field_key(&["m_pGameRules", "m_flGameStartTime"]))
             .context("game start time field is missing")?
@@ -51,9 +57,8 @@ impl MyVisitor {
 
         self.game_paused = entity
             .get_value(&make_field_key(&["m_pGameRules", "m_bGamePaused"]))
-            .context("game paused field is missing")?
-            .try_into()
-            .context("game paused")?;
+            .and_then(|value| Some(value.try_into()))
+            .context("game paused")??;
         self.pause_start_tick = entity
             .get_value(&make_field_key(&["m_pGameRules", "m_nPauseStartTick"]))
             .context("pause start tick field is missing")?
@@ -119,13 +124,11 @@ impl Visitor for MyVisitor {
     }
 }
 
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
-
-fn main() -> Result<()> {
+fn main() -> parser::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let filepath = args.get(1);
     if filepath.is_none() {
-        eprintln!("usage: gametime <filepath>");
+        eprintln!("usage: deadlock-gametime <filepath>");
         std::process::exit(42);
     }
 

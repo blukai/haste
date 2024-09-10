@@ -127,12 +127,12 @@ impl<S: PlayerState> Visitor for &mut HandlerVisitor<S> {
         entity: &crate::entities::Entity,
     ) -> parser::Result<()> {
         if let UpdateType::EnterPVS = update_type {
-            return Ok(())
+            return Ok(());
         }
 
         let ser_key: u64 = fxhash::hash_bytes(b"CCitadelPlayerController");
 
-        let ser = entity.get_serializer().serializer_name.hash;
+        let ser = entity.serializer().serializer_name.hash;
 
         if ser != ser_key {
             return Ok(());

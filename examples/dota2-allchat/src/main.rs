@@ -16,13 +16,11 @@ impl Visitor for MyVisitor {
     }
 }
 
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
-
-fn main() -> Result<()> {
+fn main() -> parser::Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let filepath = args.get(1);
     if filepath.is_none() {
-        eprintln!("usage: allchat <filepath>");
+        eprintln!("usage: dota2-allchat <filepath>");
         std::process::exit(42);
     }
 
