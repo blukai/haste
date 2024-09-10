@@ -60,6 +60,9 @@ pub fn handle_to_index(handle: u32) -> usize {
 // public/basehandle.h) does:
 // m_Index = iEntry | (iSerialNumber << NUM_SERIAL_NUM_SHIFT_BITS);
 
+// TODO(blukai): get rid of a distinction between update type and update flags. read 2 bits and
+// define 3 types of updates. that'll reduce branching further.
+
 // NOTE: PVS is potentially visible set,
 // see more on https://developer.valvesoftware.com/wiki/PVS
 //
@@ -175,14 +178,19 @@ impl Entity {
                 //   point.
                 field.metadata.decoder.decode(br).map(|field_value| {
                     // eprintln!(" -> {:?}", &field_value);
-                    self.fields.insert(
-                        field_key,
-                        EntityField {
-                            #[cfg(feature = "preserve-metadata")]
-                            path: fp.clone(),
-                            value: field_value,
-                        },
-                    );
+
+                    match self.fields.entry(field_key) {
+                        Entry::Occupied(mut oe) => {
+                            oe.get_mut().value = field_value;
+                        }
+                        Entry::Vacant(ve) => {
+                            ve.insert(EntityField {
+                                #[cfg(feature = "preserve-metadata")]
+                                path: fp.clone(),
+                                value: field_value,
+                            });
+                        }
+                    }
                 })?;
             }
 
@@ -286,12 +294,12 @@ impl EntityContainer {
             unsafe { serializers.by_name_hash_unckecked(class_info.network_name_hash) };
 
         let mut entity = match self.baseline_entities.entry(class_id) {
-            Entry::Occupied(entry) => {
-                let mut entity = entry.get().clone();
+            Entry::Occupied(oe) => {
+                let mut entity = oe.get().clone();
                 entity.index = index;
                 entity
             }
-            Entry::Vacant(e) => {
+            Entry::Vacant(ve) => {
                 let mut entity = Entity {
                     index,
                     fields: HashMap::with_capacity_and_hasher(
@@ -306,7 +314,7 @@ impl EntityContainer {
                 entity.parse(&mut baseline_br, &mut self.field_paths)?;
                 baseline_br.is_overflowed()?;
 
-                e.insert(entity).clone()
+                ve.insert(entity).clone()
             }
         };
 
@@ -361,8 +369,6 @@ impl EntityContainer {
     pub fn is_empty(&self) -> bool {
         self.entities.is_empty()
     }
-
-    // TODO: introduce something like get_entity method
 }
 
 // ----
