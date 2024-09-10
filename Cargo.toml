@@ -20,6 +20,7 @@ dungers = { git = "https://github.com/blukai/dungers.git", rev = "b6c2d52d989db6
 dyn-clone = "1.0.17"
 expect-test = "1.5.0"
 hashbrown = { version = "0.14.5", default-features = false, features = ["inline-more"]  }
+lazy_static = "1.5.0"
 nohash = "0.2.0"
 prost = "0.13.2"
 prost-build = "0.13.2"
@@ -28,4 +29,3 @@ rand = "0.8.5"
 snap = "1.1.1"
 thiserror = "1.0.63"
 which = "6.0.3"
-

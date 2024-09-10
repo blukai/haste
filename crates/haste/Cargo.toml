@@ -13,6 +13,7 @@ nohash.workspace = true
 prost.workspace = true
 snap.workspace = true
 thiserror.workspace = true
+lazy_static.workspace = true
 
 [features]
 deadlock = ["haste_protos/deadlock"]

@@ -25,205 +25,206 @@ use std::{cmp::Ordering, collections::BinaryHeap, fmt::Debug};
 // TODO: figure out how to map op names to weights in disassembly.
 
 #[derive(Debug)]
-struct Op {
+struct FieldOpDescriptor {
     name: &'static str,
     weight: usize,
 }
 
-const OPS: [Op; 40] = [
-    Op {
+const FIELDOP_DESCRIPTORS: [FieldOpDescriptor; 40] = [
+    FieldOpDescriptor {
         name: "PlusOne",
         weight: 36271,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PlusTwo",
         weight: 10334,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PlusThree",
         weight: 1375,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PlusFour",
         weight: 646,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PlusN",
         weight: 4128,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushOneLeftDeltaZeroRightZero",
         weight: 35,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushOneLeftDeltaZeroRightNonZero",
         weight: 3,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushOneLeftDeltaOneRightZero",
         weight: 521,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushOneLeftDeltaOneRightNonZero",
         weight: 2942,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushOneLeftDeltaNRightZero",
         weight: 560,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushOneLeftDeltaNRightNonZero",
         weight: 471,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushOneLeftDeltaNRightNonZeroPack6Bits",
         weight: 10530,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushOneLeftDeltaNRightNonZeroPack8Bits",
         weight: 251,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushTwoLeftDeltaZero",
         weight: 1,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushTwoPack5LeftDeltaZero",
         weight: 1,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushThreeLeftDeltaZero",
         weight: 1,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushThreePack5LeftDeltaZero",
         weight: 1,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushTwoLeftDeltaOne",
         weight: 1,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushTwoPack5LeftDeltaOne",
         weight: 1,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushThreeLeftDeltaOne",
         weight: 1,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushThreePack5LeftDeltaOne",
         weight: 1,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushTwoLeftDeltaN",
         weight: 1,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushTwoPack5LeftDeltaN",
         weight: 1,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushThreeLeftDeltaN",
         weight: 1,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushThreePack5LeftDeltaN",
         weight: 1,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushN",
         weight: 1,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PushNAndNonTopological",
         weight: 310,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PopOnePlusOne",
         weight: 2,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PopOnePlusN",
         weight: 1,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PopAllButOnePlusOne",
         weight: 1837,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PopAllButOnePlusN",
         weight: 149,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PopAllButOnePlusNPack3Bits",
         weight: 300,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PopAllButOnePlusNPack6Bits",
         weight: 634,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PopNPlusOne",
         weight: 1,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PopNPlusN",
         weight: 1,
     },
-    Op {
+    FieldOpDescriptor {
         name: "PopNAndNonTopographical",
         weight: 1,
     },
-    Op {
+    FieldOpDescriptor {
         name: "NonTopoComplex",
         weight: 76,
     },
-    Op {
+    FieldOpDescriptor {
         name: "NonTopoPenultimatePlusOne",
         weight: 271,
     },
-    Op {
+    FieldOpDescriptor {
         name: "NonTopoComplexPack4Bits",
         weight: 99,
     },
-    Op {
+    FieldOpDescriptor {
         name: "FieldPathEncodeFinish",
         weight: 25474,
     },
 ];
 
 #[derive(Debug)]
-enum Huffman<Value: Debug> {
+enum Node<T: Debug> {
     Leaf {
         weight: usize,
         num: usize,
-        value: Value,
+        value: T,
     },
-    Node {
+    Branch {
         weight: usize,
         num: usize,
-        left: Box<Huffman<Value>>,
-        right: Box<Huffman<Value>>,
+        left: Box<Node<T>>,
+        right: Box<Node<T>>,
     },
 }
 
-impl<Value: Debug> Huffman<Value> {
+impl<T: Debug> Node<T> {
     fn weight(&self) -> usize {
         match self {
-            Self::Node { weight, .. } => *weight,
             Self::Leaf { weight, .. } => *weight,
+            Self::Branch { weight, .. } => *weight,
         }
     }
+
     fn num(&self) -> usize {
         match self {
-            Self::Node { num, .. } => *num,
             Self::Leaf { num, .. } => *num,
+            Self::Branch { num, .. } => *num,
         }
     }
 }
 
-impl<Value: Debug> Ord for Huffman<Value> {
+impl<T: Debug> Ord for Node<T> {
     fn cmp(&self, other: &Self) -> Ordering {
         if self.weight() == other.weight() {
             self.num().cmp(&other.num())
@@ -233,74 +234,76 @@ impl<Value: Debug> Ord for Huffman<Value> {
     }
 }
 
-impl<Value: Debug> PartialOrd for Huffman<Value> {
+impl<T: Debug> PartialOrd for Node<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<Value: Debug> PartialEq for Huffman<Value> {
+impl<T: Debug> PartialEq for Node<T> {
     fn eq(&self, other: &Self) -> bool {
         self.weight() == other.weight() && self.num() == other.num()
     }
 }
 
-impl<Value: Debug> Eq for Huffman<Value> {}
+impl<T: Debug> Eq for Node<T> {}
 
-fn make_huffman() -> Huffman<&'static Op> {
-    // Valve's Huffman-Tree uses a variation which takes the node number into
-    // account
+fn build_fieldop_hierarchy() -> Node<&'static FieldOpDescriptor> {
+    let mut bh = BinaryHeap::with_capacity(FIELDOP_DESCRIPTORS.len());
+
+    // valve's huffman-tree uses a variation which takes the node number into account
     let mut num = 0;
 
-    let mut bh = BinaryHeap::new();
-
-    for op in OPS.iter() {
-        let leaf = Huffman::Leaf {
+    for op in FIELDOP_DESCRIPTORS.iter() {
+        bh.push(Node::Leaf {
             weight: op.weight,
             num,
             value: op,
-        };
-        bh.push(leaf);
+        });
         num += 1;
     }
 
     while bh.len() > 1 {
         let left = bh.pop().unwrap();
         let right = bh.pop().unwrap();
-        let node = Huffman::Node {
+        bh.push(Node::Branch {
             weight: left.weight() + right.weight(),
             num,
             left: Box::new(left),
             right: Box::new(right),
-        };
-        bh.push(node);
+        });
         num += 1;
     }
 
     bh.pop().unwrap()
 }
 
-fn print_table(huffman: &Huffman<&'static Op>) {
+fn print_table(hierarchy: &Node<&'static FieldOpDescriptor>) {
     struct Leaf {
-        op: &'static Op,
+        op: &'static FieldOpDescriptor,
         id: usize,
         depth: usize,
     }
     let mut leafs: Vec<Leaf> = Vec::new();
 
-    fn walk(huffman: &Huffman<&'static Op>, leafs: &mut Vec<Leaf>, id: usize, depth: usize) {
-        match huffman {
-            Huffman::Leaf { value: op, .. } => {
+    fn walk(
+        hierarchy: &Node<&'static FieldOpDescriptor>,
+        leafs: &mut Vec<Leaf>,
+        id: usize,
+        depth: usize,
+    ) {
+        match hierarchy {
+            Node::Leaf { value: op, .. } => {
                 leafs.push(Leaf { op, id, depth });
             }
-            Huffman::Node { left, right, .. } => {
+            Node::Branch { left, right, .. } => {
                 walk(right, leafs, (id << 1) | 1, depth + 1);
                 walk(left, leafs, id << 1, depth + 1);
             }
         }
     }
 
-    walk(huffman, &mut leafs, 0, 0);
+    walk(hierarchy, &mut leafs, 0, 0);
 
     println!("{:>38} | weight |      id (op bits) | depth", "name");
     leafs.sort_by(|a, b| a.id.partial_cmp(&b.id).unwrap());
@@ -312,16 +315,16 @@ fn print_table(huffman: &Huffman<&'static Op>) {
     });
 }
 
-fn print_dot(huffman: &Huffman<&'static Op>) {
-    fn walk(huffman: &Huffman<&'static Op>, id: usize, depth: usize) {
-        match huffman {
-            Huffman::Leaf { value, weight, .. } => {
+fn print_dot(hierarchy: &Node<&'static FieldOpDescriptor>) {
+    fn walk(hierarchy: &Node<&'static FieldOpDescriptor>, id: usize, depth: usize) {
+        match hierarchy {
+            Node::Leaf { value, weight, .. } => {
                 println!(
                     "  {} [label=\"{}\\nweight {}, id {}, depth {}\"];",
                     id, value.name, weight, id, depth
                 );
             }
-            Huffman::Node { left, right, .. } => {
+            Node::Branch { left, right, .. } => {
                 println!("  {} [label=\"\"];", id);
                 println!("  {} -> {};", id, (id << 1) | 1);
                 println!("  {} -> {};", id, id << 1);
@@ -333,26 +336,26 @@ fn print_dot(huffman: &Huffman<&'static Op>) {
     }
 
     println!("digraph Huffman {{");
-    walk(huffman, 0, 0);
+    walk(hierarchy, 0, 0);
     println!("}}");
 }
 
-fn print_depth(huffman: &Huffman<&'static Op>) {
-    fn walk(node: &Huffman<&'static Op>, depth: usize) -> usize {
+fn print_depth(hierarchy: &Node<&'static FieldOpDescriptor>) {
+    fn walk(node: &Node<&'static FieldOpDescriptor>, depth: usize) -> usize {
         match node {
-            Huffman::Leaf { .. } => depth,
-            Huffman::Node { left, right, .. } => {
+            Node::Leaf { .. } => depth,
+            Node::Branch { left, right, .. } => {
                 let left_depth = walk(left, depth + 1);
                 let right_depth = walk(right, depth + 1);
                 left_depth.max(right_depth)
             }
         }
     }
-    let depth = walk(huffman, 0);
+    let depth = walk(hierarchy, 0);
     println!("{}", depth);
 }
 
-// // ----
+// ----
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -362,18 +365,18 @@ fn main() {
         std::process::exit(42);
     }
 
-    let huffman = make_huffman();
+    let hierarchy = build_fieldop_hierarchy();
 
     match cmd.unwrap().as_str() {
         // table command is useful for constructing id lookup "table" (manually;
         // see fieldpath.rs).
-        "table" => print_table(&huffman),
+        "table" => print_table(&hierarchy),
         // dot command is fun xd. to get the visualisation run (graphviz
         // must be installed):
         // $ cargo run --bin huffmanfieldpath -- dot | dot -Tpng | feh -
-        "dot" => print_dot(&huffman),
+        "dot" => print_dot(&hierarchy),
         // depth command finds the depth of the huffman.
-        "depth" => print_depth(&huffman),
+        "depth" => print_depth(&hierarchy),
         cmd => eprintln!("invalid command: {}", cmd),
     }
 }

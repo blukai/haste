@@ -18,8 +18,6 @@ use std::{hash::BuildHasherDefault, rc::Rc};
 pub enum Error {
     // crate
     #[error(transparent)]
-    FieldPath(#[from] fieldpath::Error),
-    #[error(transparent)]
     FieldDecoder(#[from] fielddecoder::Error),
     #[error(transparent)]
     BitReader(#[from] BitReaderError),
@@ -132,8 +130,10 @@ impl Entity {
         // eprintln!("-- {:?}", self.serializer.serializer_name);
 
         unsafe {
-            let fps = fieldpath::read_field_paths(br, fps)?;
-            for fp in fps {
+            let fp_count = fieldpath::read_field_paths(br, fps);
+            for i in 0..fp_count {
+                let fp = fps.get_unchecked(i);
+
                 // eprint!("{:?} ", &fp.data[..=fp.last]);
 
                 // NOTE: this loop performes much better then the unrolled
@@ -179,7 +179,7 @@ impl Entity {
                         field_key,
                         EntityField {
                             #[cfg(feature = "preserve-metadata")]
-                            path: std::mem::take(fp),
+                            path: fp.clone(),
                             value: field_value,
                         },
                     );
