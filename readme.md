@@ -48,11 +48,11 @@ to use haste in your project, you'll need either:
 
 haste is not published to [crates.io](https://crates.io/) (yet?). you can add it
 to your `Cargo.toml` as a [git
-dependency](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#specifying-dependencies-from-git-repositories):
+dependency](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html#specifying-dependencies-from-git-repositories),
 
 ```toml
 [dependencies]
-# TODO(blukai): introduce a "root" workspace package
+haste = { git = "https://github.com/blukai/haste.git" }
 ```
 
 haste's entity representatin is not debugger / print friendly, you would want to

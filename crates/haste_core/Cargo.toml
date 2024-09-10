@@ -1,5 +1,5 @@
 [package]
-name = "haste"
+name = "haste_core"
 version = "0.0.0"
 edition.workspace = true
 
