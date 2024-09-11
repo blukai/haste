@@ -1,7 +1,7 @@
 use crate::{
     bitreader::{BitReader, BitReaderError},
     entityclasses::EntityClasses,
-    fielddecoder,
+    fielddecoder::{self, FieldDecodeContext},
     fieldpath::{self, FieldPath},
     fieldvalue::FieldValue,
     flattenedserializers::{
@@ -129,7 +129,12 @@ pub struct Entity {
 }
 
 impl Entity {
-    fn parse(&mut self, br: &mut BitReader, fps: &mut [FieldPath]) -> Result<()> {
+    fn parse(
+        &mut self,
+        field_decode_ctx: &FieldDecodeContext,
+        br: &mut BitReader,
+        fps: &mut [FieldPath],
+    ) -> Result<()> {
         // eprintln!("-- {:?}", self.serializer.serializer_name);
 
         unsafe {
@@ -176,22 +181,26 @@ impl Entity {
                 // - map shaved off ~40 ms without sacrafacing error checking, i
                 //   have no idea why, but this is quite impressive at this
                 //   point.
-                field.metadata.decoder.decode(br).map(|field_value| {
-                    // eprintln!(" -> {:?}", &field_value);
+                field
+                    .metadata
+                    .decoder
+                    .decode(field_decode_ctx, br)
+                    .map(|field_value| {
+                        // eprintln!(" -> {:?}", &field_value);
 
-                    match self.fields.entry(field_key) {
-                        Entry::Occupied(mut oe) => {
-                            oe.get_mut().value = field_value;
+                        match self.fields.entry(field_key) {
+                            Entry::Occupied(mut oe) => {
+                                oe.get_mut().value = field_value;
+                            }
+                            Entry::Vacant(ve) => {
+                                ve.insert(EntityField {
+                                    #[cfg(feature = "preserve-metadata")]
+                                    path: fp.clone(),
+                                    value: field_value,
+                                });
+                            }
                         }
-                        Entry::Vacant(ve) => {
-                            ve.insert(EntityField {
-                                #[cfg(feature = "preserve-metadata")]
-                                path: fp.clone(),
-                                value: field_value,
-                            });
-                        }
-                    }
-                })?;
+                    })?;
             }
 
             // dbg!(&self.field_values);
@@ -280,6 +289,7 @@ impl EntityContainer {
     pub(crate) fn handle_create(
         &mut self,
         index: i32,
+        field_decode_ctx: &FieldDecodeContext,
         br: &mut BitReader,
         entity_classes: &EntityClasses,
         instance_baseline: &InstanceBaseline,
@@ -311,14 +321,14 @@ impl EntityContainer {
                 let baseline_data = unsafe { instance_baseline.by_id_unchecked(class_id) };
 
                 let mut baseline_br = BitReader::new(baseline_data.as_ref());
-                entity.parse(&mut baseline_br, &mut self.field_paths)?;
+                entity.parse(field_decode_ctx, &mut baseline_br, &mut self.field_paths)?;
                 baseline_br.is_overflowed()?;
 
                 ve.insert(entity).clone()
             }
         };
 
-        entity.parse(br, &mut self.field_paths)?;
+        entity.parse(field_decode_ctx, br, &mut self.field_paths)?;
 
         self.entities.insert(index, entity);
         // SAFETY: the entity was just inserted ^, it's safe.
@@ -338,10 +348,11 @@ impl EntityContainer {
     pub(crate) unsafe fn handle_update_unchecked(
         &mut self,
         index: i32,
+        field_decode_ctx: &FieldDecodeContext,
         br: &mut BitReader,
     ) -> Result<&Entity> {
         let entity = unsafe { self.entities.get_mut(&index).unwrap_unchecked() };
-        entity.parse(br, &mut self.field_paths)?;
+        entity.parse(field_decode_ctx, br, &mut self.field_paths)?;
         Ok(entity)
     }
 

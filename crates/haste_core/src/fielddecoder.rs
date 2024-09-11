@@ -1,7 +1,7 @@
 use crate::{
     bitreader::BitReader,
     fieldvalue::FieldValue,
-    flattenedserializers::{FlattenedSerializerContext, FlattenedSerializerField},
+    flattenedserializers::FlattenedSerializerField,
     fxhash,
     quantizedfloat::{self, QuantizedFloat},
 };
@@ -17,15 +17,20 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+// NOTE: PropTypeFns (from csgo source code) is what you are looking for, it has all the encoders,
+// decoders, proxies and all of the stuff.
+
+#[derive(Debug)]
+pub struct FieldDecodeContext {
+    pub tick_interval: f32,
+}
+
 // TODO: get rid of trait objects; find a better, more efficient, way to
 // "attach" decoders to fields; but note that having separate decoding functions
 // and attaching function "pointers" to fields is even worse.
 
-// NOTE: PropTypeFns is what you are looking for, it has all the encoders,
-// decoders, proxies and all of the stuff.
-
 pub trait FieldDecode: DynClone + Debug {
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue>;
+    fn decode(&self, ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue>;
 }
 
 dyn_clone::clone_trait_object!(FieldDecode);
@@ -35,7 +40,7 @@ pub struct InvalidDecoder {}
 
 impl FieldDecode for InvalidDecoder {
     #[cold]
-    fn decode(&self, _br: &mut BitReader) -> Result<FieldValue> {
+    fn decode(&self, _ctx: &FieldDecodeContext, _br: &mut BitReader) -> Result<FieldValue> {
         unreachable!()
     }
 }
@@ -47,7 +52,7 @@ pub struct I32Decoder {}
 
 impl FieldDecode for I32Decoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+    fn decode(&self, _ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
         Ok(FieldValue::I32(br.read_varint32()))
     }
 }
@@ -59,7 +64,7 @@ pub struct I64Decoder {}
 
 impl FieldDecode for I64Decoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+    fn decode(&self, _ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
         Ok(FieldValue::I64(br.read_varint64()))
     }
 }
@@ -71,7 +76,7 @@ pub struct U32Decoder {}
 
 impl FieldDecode for U32Decoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+    fn decode(&self, _ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
         Ok(FieldValue::U32(br.read_uvarint32()))
     }
 }
@@ -83,7 +88,7 @@ struct InternalU64Decoder {}
 
 impl FieldDecode for InternalU64Decoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+    fn decode(&self, _ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
         Ok(FieldValue::U64(br.read_uvarint64()))
     }
 }
@@ -93,7 +98,7 @@ struct InternalU64Fixed64Decoder {}
 
 impl FieldDecode for InternalU64Fixed64Decoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+    fn decode(&self, _ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
         let mut buf = [0u8; 8];
         br.read_bytes(&mut buf);
         Ok(FieldValue::U64(u64::from_le_bytes(buf)))
@@ -121,8 +126,8 @@ impl U64Decoder {
 
 impl FieldDecode for U64Decoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        self.decoder.decode(br)
+    fn decode(&self, ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
+        self.decoder.decode(ctx, br)
     }
 }
 
@@ -133,7 +138,7 @@ pub struct BoolDecoder {}
 
 impl FieldDecode for BoolDecoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+    fn decode(&self, _ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
         Ok(FieldValue::Bool(br.read_bool()))
     }
 }
@@ -141,7 +146,7 @@ impl FieldDecode for BoolDecoder {
 // ----
 
 trait InternalF32Decode: DynClone + Debug {
-    fn decode(&self, br: &mut BitReader) -> Result<f32>;
+    fn decode(&self, ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<f32>;
 }
 
 dyn_clone::clone_trait_object!(InternalF32Decode);
@@ -168,7 +173,7 @@ impl InternalQuantizedFloatDecoder {
 
 impl InternalF32Decode for InternalQuantizedFloatDecoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<f32> {
+    fn decode(&self, _ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<f32> {
         Ok(self.quantized_float.decode(br))
     }
 }
@@ -176,21 +181,12 @@ impl InternalF32Decode for InternalQuantizedFloatDecoder {
 // ----
 
 #[derive(Debug, Clone, Default)]
-struct InternalF32SimulationTimeDecoder {
-    tick_interval: f32,
-}
-
-impl InternalF32SimulationTimeDecoder {
-    #[inline]
-    pub fn new(tick_interval: f32) -> Self {
-        Self { tick_interval }
-    }
-}
+struct InternalF32SimulationTimeDecoder;
 
 impl InternalF32Decode for InternalF32SimulationTimeDecoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<f32> {
-        Ok(br.read_uvarint32() as f32 * self.tick_interval)
+    fn decode(&self, ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<f32> {
+        Ok(br.read_uvarint32() as f32 * ctx.tick_interval)
     }
 }
 
@@ -199,7 +195,7 @@ struct InternalF32CoordDecoder {}
 
 impl InternalF32Decode for InternalF32CoordDecoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<f32> {
+    fn decode(&self, _ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<f32> {
         Ok(br.read_bitcoord())
     }
 }
@@ -209,7 +205,7 @@ struct InternalF32NormalDecoder {}
 
 impl InternalF32Decode for InternalF32NormalDecoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<f32> {
+    fn decode(&self, _ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<f32> {
         Ok(br.read_bitnormal())
     }
 }
@@ -219,7 +215,7 @@ struct InternalF32NoScaleDecoder {}
 
 impl InternalF32Decode for InternalF32NoScaleDecoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<f32> {
+    fn decode(&self, _ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<f32> {
         Ok(br.read_bitfloat())
     }
 }
@@ -230,12 +226,12 @@ pub struct InternalF32Decoder {
 }
 
 impl InternalF32Decoder {
-    pub fn new(field: &FlattenedSerializerField, ctx: &FlattenedSerializerContext) -> Result<Self> {
+    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         if field.var_name.hash == fxhash::hash_bytes(b"m_flSimulationTime")
             || field.var_name.hash == fxhash::hash_bytes(b"m_flAnimTime")
         {
             return Ok(Self {
-                decoder: Box::new(InternalF32SimulationTimeDecoder::new(ctx.tick_interval)),
+                decoder: Box::<InternalF32SimulationTimeDecoder>::default(),
             });
         }
 
@@ -275,8 +271,8 @@ impl InternalF32Decoder {
 
 impl InternalF32Decode for InternalF32Decoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<f32> {
-        self.decoder.decode(br)
+    fn decode(&self, ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<f32> {
+        self.decoder.decode(ctx, br)
     }
 }
 
@@ -287,18 +283,18 @@ pub struct F32Decoder {
 
 impl F32Decoder {
     #[inline]
-    pub fn new(field: &FlattenedSerializerField, ctx: &FlattenedSerializerContext) -> Result<Self> {
+    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
-            decoder: Box::new(InternalF32Decoder::new(field, ctx)?),
+            decoder: Box::new(InternalF32Decoder::new(field)?),
         })
     }
 }
 
 impl FieldDecode for F32Decoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+    fn decode(&self, ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
         self.decoder
-            .decode(br)
+            .decode(ctx, br)
             .map(FieldValue::F32)
             .map_err(Error::from)
     }
@@ -313,11 +309,11 @@ struct InternalVectorDefaultDecoder {
 
 impl FieldDecode for InternalVectorDefaultDecoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+    fn decode(&self, ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
         let vec3 = [
-            self.inner_decoder.decode(br)?,
-            self.inner_decoder.decode(br)?,
-            self.inner_decoder.decode(br)?,
+            self.inner_decoder.decode(ctx, br)?,
+            self.inner_decoder.decode(ctx, br)?,
+            self.inner_decoder.decode(ctx, br)?,
         ];
         Ok(FieldValue::Vector(vec3))
     }
@@ -328,7 +324,7 @@ struct InternalVectorNormalDecoder;
 
 impl FieldDecode for InternalVectorNormalDecoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+    fn decode(&self, _ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
         Ok(FieldValue::Vector(br.read_bitvec3normal()))
     }
 }
@@ -339,7 +335,7 @@ pub struct VectorDecoder {
 }
 
 impl VectorDecoder {
-    pub fn new(field: &FlattenedSerializerField, ctx: &FlattenedSerializerContext) -> Result<Self> {
+    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         if field.var_encoder_heq(fxhash::hash_bytes(b"normal")) {
             Ok(Self {
                 decoder: Box::<InternalVectorNormalDecoder>::default(),
@@ -347,7 +343,7 @@ impl VectorDecoder {
         } else {
             Ok(Self {
                 decoder: Box::new(InternalVectorDefaultDecoder {
-                    inner_decoder: Box::new(InternalF32Decoder::new(field, ctx)?),
+                    inner_decoder: Box::new(InternalF32Decoder::new(field)?),
                 }),
             })
         }
@@ -356,8 +352,8 @@ impl VectorDecoder {
 
 impl FieldDecode for VectorDecoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        self.decoder.decode(br)
+    fn decode(&self, ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
+        self.decoder.decode(ctx, br)
     }
 }
 
@@ -370,19 +366,19 @@ pub struct Vector2DDecoder {
 
 impl Vector2DDecoder {
     #[inline]
-    pub fn new(field: &FlattenedSerializerField, ctx: &FlattenedSerializerContext) -> Result<Self> {
+    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
-            inner_decoder: Box::new(InternalF32Decoder::new(field, ctx)?),
+            inner_decoder: Box::new(InternalF32Decoder::new(field)?),
         })
     }
 }
 
 impl FieldDecode for Vector2DDecoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+    fn decode(&self, ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
         let vec2 = [
-            self.inner_decoder.decode(br)?,
-            self.inner_decoder.decode(br)?,
+            self.inner_decoder.decode(ctx, br)?,
+            self.inner_decoder.decode(ctx, br)?,
         ];
         Ok(FieldValue::Vector2D(vec2))
     }
@@ -396,21 +392,21 @@ pub struct Vector4DDecoder {
 }
 
 impl Vector4DDecoder {
-    pub fn new(field: &FlattenedSerializerField, ctx: &FlattenedSerializerContext) -> Result<Self> {
+    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
-            inner_decoder: Box::new(InternalF32Decoder::new(field, ctx)?),
+            inner_decoder: Box::new(InternalF32Decoder::new(field)?),
         })
     }
 }
 
 impl FieldDecode for Vector4DDecoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+    fn decode(&self, ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
         let vec4 = [
-            self.inner_decoder.decode(br)?,
-            self.inner_decoder.decode(br)?,
-            self.inner_decoder.decode(br)?,
-            self.inner_decoder.decode(br)?,
+            self.inner_decoder.decode(ctx, br)?,
+            self.inner_decoder.decode(ctx, br)?,
+            self.inner_decoder.decode(ctx, br)?,
+            self.inner_decoder.decode(ctx, br)?,
         ];
         Ok(FieldValue::Vector4D(vec4))
     }
@@ -425,7 +421,7 @@ struct InternalQAnglePitchYawDecoder {
 
 impl FieldDecode for InternalQAnglePitchYawDecoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+    fn decode(&self, _ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
         let vec3 = [
             br.read_bitangle(self.bit_count),
             br.read_bitangle(self.bit_count),
@@ -440,7 +436,7 @@ struct InternalQAngleNoBitCountDecoder {}
 
 impl FieldDecode for InternalQAngleNoBitCountDecoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+    fn decode(&self, _ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
         Ok(FieldValue::QAngle(br.read_bitvec3coord()))
     }
 }
@@ -450,7 +446,7 @@ struct InternalQAnglePreciseDecoder;
 
 impl FieldDecode for InternalQAnglePreciseDecoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+    fn decode(&self, _ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
         let mut vec3 = [0f32; 3];
 
         let rx = br.read_bool();
@@ -478,7 +474,7 @@ struct InternalQAngleBitCountDecoder {
 
 impl FieldDecode for InternalQAngleBitCountDecoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+    fn decode(&self, _ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
         let vec3 = [
             br.read_bitangle(self.bit_count),
             br.read_bitangle(self.bit_count),
@@ -533,8 +529,8 @@ impl QAngleDecoder {
 
 impl FieldDecode for QAngleDecoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        self.decoder.decode(br)
+    fn decode(&self, ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
+        self.decoder.decode(ctx, br)
     }
 }
 
@@ -545,7 +541,7 @@ pub struct StringDecoder {}
 
 impl FieldDecode for StringDecoder {
     #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
+    fn decode(&self, _ctx: &FieldDecodeContext, br: &mut BitReader) -> Result<FieldValue> {
         // just don't read uninit memory.
         #[allow(invalid_value)]
         let mut buf: [u8; 1024] = unsafe { MaybeUninit::uninit().assume_init() };
