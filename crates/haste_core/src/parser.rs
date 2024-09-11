@@ -170,6 +170,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             },
             field_decode_ctx: FieldDecodeContext {
                 tick_interval: DEFAULT_TICK_INTERVAL,
+                ..Default::default()
             },
         })
     }
@@ -529,7 +530,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                     let entity = unsafe {
                         let entity = self.ctx.entities.handle_create(
                             entity_index,
-                            &self.field_decode_ctx,
+                            &mut self.field_decode_ctx,
                             &mut br,
                             entity_classes,
                             instance_baseline,
@@ -554,7 +555,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                     let entity = unsafe {
                         let entity = self.ctx.entities.handle_update_unchecked(
                             entity_index,
-                            &self.field_decode_ctx,
+                            &mut self.field_decode_ctx,
                             &mut br,
                         )?;
                         &*(entity as *const Entity)

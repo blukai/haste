@@ -70,3 +70,7 @@ pub(crate) use haste_vartype as vartype;
 
 // TODO(blukai): get rid of stupid fat pointers (Rc) in flattened serializers. do the gen vec
 // thing, but without gen part.
+
+// NOTE(blukai): don't overuse/overrely on Result. it slows things down very significantly on hot
+// code (for example field value decoder); here's an artice that i managed to find that talks more
+// about the Try trait - https://agourlay.github.io/rust-performance-retrospective-part3/

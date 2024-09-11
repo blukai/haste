@@ -131,7 +131,7 @@ pub struct Entity {
 impl Entity {
     fn parse(
         &mut self,
-        field_decode_ctx: &FieldDecodeContext,
+        field_decode_ctx: &mut FieldDecodeContext,
         br: &mut BitReader,
         fps: &mut [FieldPath],
     ) -> Result<()> {
@@ -169,38 +169,22 @@ impl Entity {
 
                 // eprint!("{:?} {:?} ", field.var_name, field.var_type);
 
-                // NOTE: a shit ton of time was being spent here in a Try trait.
-                // apparently Result is quite expensive xd. here's an artice
-                // that i managed to find that talks more about the Try trait -
-                // https://agourlay.github.io/rust-performance-retrospective-part3/
-                //
-                // tried couple of things here:
-                // - unwrap_unchecked shaved off ~20 ms
-                // - and_then (that was used by the author in the article above)
-                //   did not really work here
-                // - map shaved off ~40 ms without sacrafacing error checking, i
-                //   have no idea why, but this is quite impressive at this
-                //   point.
-                field
-                    .metadata
-                    .decoder
-                    .decode(field_decode_ctx, br)
-                    .map(|field_value| {
-                        // eprintln!(" -> {:?}", &field_value);
+                let field_value = field.metadata.decoder.decode(field_decode_ctx, br);
 
-                        match self.fields.entry(field_key) {
-                            Entry::Occupied(mut oe) => {
-                                oe.get_mut().value = field_value;
-                            }
-                            Entry::Vacant(ve) => {
-                                ve.insert(EntityField {
-                                    #[cfg(feature = "preserve-metadata")]
-                                    path: fp.clone(),
-                                    value: field_value,
-                                });
-                            }
-                        }
-                    })?;
+                // eprintln!(" -> {:?}", &field_value);
+
+                match self.fields.entry(field_key) {
+                    Entry::Occupied(mut oe) => {
+                        oe.get_mut().value = field_value;
+                    }
+                    Entry::Vacant(ve) => {
+                        ve.insert(EntityField {
+                            #[cfg(feature = "preserve-metadata")]
+                            path: fp.clone(),
+                            value: field_value,
+                        });
+                    }
+                }
             }
 
             // dbg!(&self.field_values);
@@ -289,7 +273,7 @@ impl EntityContainer {
     pub(crate) fn handle_create(
         &mut self,
         index: i32,
-        field_decode_ctx: &FieldDecodeContext,
+        field_decode_ctx: &mut FieldDecodeContext,
         br: &mut BitReader,
         entity_classes: &EntityClasses,
         instance_baseline: &InstanceBaseline,
@@ -348,7 +332,7 @@ impl EntityContainer {
     pub(crate) unsafe fn handle_update_unchecked(
         &mut self,
         index: i32,
-        field_decode_ctx: &FieldDecodeContext,
+        field_decode_ctx: &mut FieldDecodeContext,
         br: &mut BitReader,
     ) -> Result<&Entity> {
         let entity = unsafe { self.entities.get_mut(&index).unwrap_unchecked() };
