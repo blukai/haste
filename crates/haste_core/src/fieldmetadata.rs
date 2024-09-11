@@ -1,8 +1,8 @@
 use crate::{
     fielddecoder::{
-        self, BoolDecoder, F32Decoder, FieldDecode, I16Decoder, I32Decoder, I64Decoder, I8Decoder,
-        NopDecoder, QAngleDecoder, StringDecoder, U16Decoder, U32Decoder, U64Decoder, U8Decoder,
-        Vector2DDecoder, Vector4DDecoder, VectorDecoder,
+        self, BoolDecoder, F32Decoder, FieldDecode, I32Decoder, I64Decoder, InvalidDecoder,
+        QAngleDecoder, StringDecoder, U32Decoder, U64Decoder, Vector2DDecoder, Vector4DDecoder,
+        VectorDecoder,
     },
     flattenedserializers::{FlattenedSerializerContext, FlattenedSerializerField},
     vartype::{Expr, Lit},
@@ -91,7 +91,7 @@ impl Default for FieldMetadata {
     fn default() -> Self {
         Self {
             special_descriptor: None,
-            decoder: Box::<NopDecoder>::default(),
+            decoder: Box::<InvalidDecoder>::default(),
         }
     }
 }
@@ -127,16 +127,18 @@ fn visit_ident(
     }
 
     match ident {
-        // TODO: smaller decoders (8 and 16 bit)
+        // TODO: (very maybe) smaller decoders (8 and 16 bit). but in terms for decode speed the
+        // impact is less then negligible.
+
         // ints
-        "int8" => non_special!(I8Decoder),
-        "int16" => non_special!(I16Decoder),
+        "int8" => non_special!(I32Decoder),
+        "int16" => non_special!(I32Decoder),
         "int32" => non_special!(I32Decoder),
         "int64" => non_special!(I64Decoder),
 
         // uints
-        "uint8" => non_special!(U8Decoder),
-        "uint16" => non_special!(U16Decoder),
+        "uint8" => non_special!(U32Decoder),
+        "uint16" => non_special!(U32Decoder),
         "uint32" => non_special!(U32Decoder),
         "uint64" => non_special!(U64Decoder::new(field)),
 

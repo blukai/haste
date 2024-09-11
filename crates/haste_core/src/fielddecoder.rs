@@ -31,36 +31,12 @@ pub trait FieldDecode: DynClone + Debug {
 dyn_clone::clone_trait_object!(FieldDecode);
 
 #[derive(Debug, Clone, Default)]
-pub struct NopDecoder {}
+pub struct InvalidDecoder {}
 
-impl FieldDecode for NopDecoder {
+impl FieldDecode for InvalidDecoder {
     #[cold]
     fn decode(&self, _br: &mut BitReader) -> Result<FieldValue> {
         unreachable!()
-    }
-}
-
-// ----
-
-#[derive(Debug, Clone, Default)]
-pub struct I8Decoder {}
-
-impl FieldDecode for I8Decoder {
-    #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        Ok(FieldValue::I8(br.read_varint32() as i8))
-    }
-}
-
-// ----
-
-#[derive(Debug, Clone, Default)]
-pub struct I16Decoder {}
-
-impl FieldDecode for I16Decoder {
-    #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        Ok(FieldValue::I16(br.read_varint32() as i16))
     }
 }
 
@@ -88,28 +64,6 @@ impl FieldDecode for I64Decoder {
     }
 }
 
-// ----
-
-#[derive(Debug, Clone, Default)]
-pub struct U8Decoder {}
-
-impl FieldDecode for U8Decoder {
-    #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        Ok(FieldValue::U8(br.read_uvarint32() as u8))
-    }
-}
-// ----
-
-#[derive(Debug, Clone, Default)]
-pub struct U16Decoder {}
-
-impl FieldDecode for U16Decoder {
-    #[inline]
-    fn decode(&self, br: &mut BitReader) -> Result<FieldValue> {
-        Ok(FieldValue::U16(br.read_uvarint32() as u16))
-    }
-}
 // ----
 
 #[derive(Debug, Clone, Default)]
@@ -215,7 +169,7 @@ impl InternalQuantizedFloatDecoder {
 impl InternalF32Decode for InternalQuantizedFloatDecoder {
     #[inline]
     fn decode(&self, br: &mut BitReader) -> Result<f32> {
-        self.quantized_float.decode(br).map_err(Error::from)
+        Ok(self.quantized_float.decode(br))
     }
 }
 

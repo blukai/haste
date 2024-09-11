@@ -55,6 +55,8 @@ impl From<&String> for Symbol {
     }
 }
 
+// TODO: get rid of what is currently FlattenedSerializerContext and instead introduce decode
+// context that can be passed down into the decoder as argument together with bit reader.
 #[derive(Debug)]
 pub struct FlattenedSerializerContext {
     pub tick_interval: f32,
