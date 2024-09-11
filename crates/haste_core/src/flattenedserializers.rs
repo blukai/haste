@@ -156,11 +156,11 @@ impl FlattenedSerializerField {
     }
 
     #[inline(always)]
-    pub fn is_dynamic_array(&self) -> bool {
+    pub fn is_fixed_or_dynamic_array(&self) -> bool {
         self.metadata
             .special_descriptor
             .as_ref()
-            .is_some_and(|sd| sd.is_dynamic_array())
+            .is_some_and(|sd| sd.is_fixed_or_dynamic_array())
     }
 }
 
@@ -271,13 +271,9 @@ impl FlattenedSerializerContainer {
 
                     // TODO: maybe extract arms into separate functions
                     match field.metadata.special_descriptor {
-                        Some(FieldSpecialDescriptor::FixedArray { length }) => {
+                        Some(FieldSpecialDescriptor::FixedArray { .. }) => {
                             field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                fields: {
-                                    let mut fields = Vec::with_capacity(length);
-                                    fields.resize(length, Rc::new(field.clone()));
-                                    fields
-                                },
+                                fields: vec![Rc::new(field.clone())],
                                 ..Default::default()
                             }));
                         }
