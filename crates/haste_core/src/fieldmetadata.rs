@@ -1,9 +1,5 @@
 use crate::{
-    fielddecoder::{
-        self, BoolDecoder, F32Decoder, FieldDecode, I32Decoder, I64Decoder, InvalidDecoder,
-        QAngleDecoder, StringDecoder, U32Decoder, U64Decoder, Vector2DDecoder, Vector4DDecoder,
-        VectorDecoder,
-    },
+    fielddecoder::{self, FieldDecoder},
     flattenedserializers::FlattenedSerializerField,
     vartype::{Expr, Lit},
 };
@@ -42,7 +38,7 @@ pub enum FieldSpecialDescriptor {
         /// decoder must be capable of decoding the type specified in the array's generic argument.
         /// for example, if the var type is `CNetworkUtlVectorBase< Vector >`, the decoder must be
         /// able to decode `Vector` values.
-        decoder: Box<dyn FieldDecode>,
+        decoder: FieldDecoder,
     },
 
     /// represents a dynamic array of fields that must be deserialized by the serializer specified
@@ -83,7 +79,7 @@ impl FieldSpecialDescriptor {
 #[derive(Debug, Clone)]
 pub struct FieldMetadata {
     pub special_descriptor: Option<FieldSpecialDescriptor>,
-    pub decoder: Box<dyn FieldDecode>,
+    pub decoder: FieldDecoder,
 }
 
 impl Default for FieldMetadata {
@@ -91,7 +87,7 @@ impl Default for FieldMetadata {
     fn default() -> Self {
         Self {
             special_descriptor: None,
-            decoder: Box::<InvalidDecoder>::default(),
+            decoder: fielddecoder::decode_invalid,
         }
     }
 }
@@ -99,16 +95,10 @@ impl Default for FieldMetadata {
 #[inline]
 fn visit_ident(ident: &str, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
     macro_rules! non_special {
-        ($decoder:ident) => {
-            Ok(FieldMetadata {
-                special_descriptor: None,
-                decoder: Box::<$decoder>::default(),
-            })
-        };
         ($decoder:expr) => {
             Ok(FieldMetadata {
                 special_descriptor: None,
-                decoder: Box::new($decoder),
+                decoder: $decoder,
             })
         };
     }
@@ -117,7 +107,7 @@ fn visit_ident(ident: &str, field: &FlattenedSerializerField) -> Result<FieldMet
         () => {
             Ok(FieldMetadata {
                 special_descriptor: Some(FieldSpecialDescriptor::Pointer),
-                decoder: Box::<BoolDecoder>::default(),
+                decoder: fielddecoder::decode_bool,
             })
         };
     }
@@ -127,24 +117,24 @@ fn visit_ident(ident: &str, field: &FlattenedSerializerField) -> Result<FieldMet
         // impact is less then negligible.
 
         // ints
-        "int8" => non_special!(I32Decoder),
-        "int16" => non_special!(I32Decoder),
-        "int32" => non_special!(I32Decoder),
-        "int64" => non_special!(I64Decoder),
+        "int8" => non_special!(fielddecoder::decode_u32),
+        "int16" => non_special!(fielddecoder::decode_u32),
+        "int32" => non_special!(fielddecoder::decode_u32),
+        "int64" => non_special!(fielddecoder::determine_u64_decoder(field)),
 
         // uints
-        "uint8" => non_special!(U32Decoder),
-        "uint16" => non_special!(U32Decoder),
-        "uint32" => non_special!(U32Decoder),
-        "uint64" => non_special!(U64Decoder::new(field)),
+        "uint8" => non_special!(fielddecoder::decode_u32),
+        "uint16" => non_special!(fielddecoder::decode_u32),
+        "uint32" => non_special!(fielddecoder::decode_u32),
+        "uint64" => non_special!(fielddecoder::determine_u64_decoder(field)),
 
         // other primitives
-        "bool" => non_special!(BoolDecoder),
-        "float32" => non_special!(F32Decoder::new(field)?),
+        "bool" => non_special!(fielddecoder::decode_bool),
+        "float32" => non_special!(fielddecoder::determine_f32_decoder(field)),
 
         // templates
-        "CHandle" => non_special!(U32Decoder),
-        "CStrongHandle" => non_special!(U64Decoder::new(field)),
+        "CHandle" => non_special!(fielddecoder::decode_u32),
+        "CStrongHandle" => non_special!(fielddecoder::determine_u64_decoder(field)),
 
         // pointers (?)
         // https://github.com/SteamDatabase/GameTracking-Deadlock/blob/master/game/core/tools/demoinfo2/demoinfo2.txt#L130
@@ -163,41 +153,43 @@ fn visit_ident(ident: &str, field: &FlattenedSerializerField) -> Result<FieldMet
         "CPhysicsComponent" => pointer!(),
 
         // other custom types
-        "CUtlSymbolLarge" => non_special!(StringDecoder),
-        "CUtlString" => non_special!(StringDecoder),
+        "CUtlSymbolLarge" => non_special!(fielddecoder::decode_string),
+        "CUtlString" => non_special!(fielddecoder::decode_string),
         // public/mathlib/vector.h
-        "QAngle" => non_special!(QAngleDecoder::new(field)),
+        "QAngle" => non_special!(fielddecoder::determine_qangle_decoder(field)),
         // NOTE: not all quantized floats are actually quantized (if bit_count is 0 or 32 it's
         // not!) F32Decoder will determine which kind of f32 decoder to use.
-        "CNetworkedQuantizedFloat" => non_special!(F32Decoder::new(field)?),
-        "GameTime_t" => non_special!(F32Decoder::new(field)?),
-        "MatchID_t" => non_special!(U64Decoder::new(field)),
+        //
+        // TODO(blukai): fix up quantized float decoder so that it can handle 0 or 32 bit counts.
+        "CNetworkedQuantizedFloat" => non_special!(fielddecoder::determine_f32_decoder(field)),
+        "GameTime_t" => non_special!(fielddecoder::determine_f32_decoder(field)),
+        "MatchID_t" => non_special!(fielddecoder::determine_u64_decoder(field)),
         // public/mathlib/vector.h
-        "Vector" => non_special!(VectorDecoder::new(field)?),
+        "Vector" => non_special!(fielddecoder::determine_vector_decoder(field)),
         // public/mathlib/vector2d.h
-        "Vector2D" => non_special!(Vector2DDecoder::new(field)?),
+        "Vector2D" => non_special!(fielddecoder::decode_vector2d),
         // public/mathlib/vector4d.h
-        "Vector4D" => non_special!(Vector4DDecoder::new(field)?),
+        "Vector4D" => non_special!(fielddecoder::decode_vector4d),
         // game/shared/econ/econ_item_constants.h
-        "itemid_t" => non_special!(U64Decoder::new(field)),
-        "HeroFacetKey_t" => non_special!(U64Decoder::new(field)),
-        "BloodType" => non_special!(U32Decoder),
+        "itemid_t" => non_special!(fielddecoder::determine_u64_decoder(field)),
+        "HeroFacetKey_t" => non_special!(fielddecoder::determine_u64_decoder(field)),
+        "BloodType" => non_special!(fielddecoder::decode_u32),
 
         // exceptional specials xd
         "m_SpeechBubbles" => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::DynamicSerializerArray),
-            decoder: Box::<U32Decoder>::default(),
+            decoder: fielddecoder::decode_u32,
         }),
         // https://github.com/SteamDatabase/GameTracking-CS2/blob/6b3bf6ad44266e3ee4440a0b9b2fee1268812840/game/core/tools/demoinfo2/demoinfo2.txt#L155C83-L155C111
         "DOTA_CombatLogQueryProgress" => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::DynamicSerializerArray),
-            decoder: Box::<U32Decoder>::default(),
+            decoder: fielddecoder::decode_u32,
         }),
 
         // ----
         _ => Ok(FieldMetadata {
             special_descriptor: None,
-            decoder: Box::<U32Decoder>::default(),
+            decoder: fielddecoder::decode_u32,
         }),
     }
 }
@@ -219,7 +211,7 @@ fn visit_template(
         if field.field_serializer_name.is_some() {
             return Ok(FieldMetadata {
                 special_descriptor: Some(FieldSpecialDescriptor::DynamicSerializerArray),
-                decoder: Box::<U32Decoder>::default(),
+                decoder: fielddecoder::decode_u32,
             });
         }
 
@@ -227,7 +219,7 @@ fn visit_template(
             special_descriptor: Some(FieldSpecialDescriptor::DynamicArray {
                 decoder: field_metadata.decoder,
             }),
-            decoder: Box::<U32Decoder>::default(),
+            decoder: fielddecoder::decode_u32,
         });
     }
 
@@ -240,7 +232,7 @@ fn visit_array(expr: Expr, len: Expr, field: &FlattenedSerializerField) -> Resul
         if ident == "char" {
             return Ok(FieldMetadata {
                 special_descriptor: None,
-                decoder: Box::<StringDecoder>::default(),
+                decoder: fielddecoder::decode_string,
             });
         }
     }
@@ -267,7 +259,7 @@ fn visit_array(expr: Expr, len: Expr, field: &FlattenedSerializerField) -> Resul
 fn visit_pointer() -> Result<FieldMetadata> {
     Ok(FieldMetadata {
         special_descriptor: Some(FieldSpecialDescriptor::Pointer),
-        decoder: Box::<BoolDecoder>::default(),
+        decoder: fielddecoder::decode_bool,
     })
 }
 

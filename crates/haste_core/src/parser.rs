@@ -3,7 +3,7 @@ use crate::{
     demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_BUFFER_SIZE, DEMO_HEADER_SIZE},
     entities::{self, EntityContainer},
     entityclasses::EntityClasses,
-    fielddecoder::FieldDecodeContext,
+    fielddecoder::FieldDecoderContext,
     flattenedserializers::FlattenedSerializerContainer,
     instancebaseline::{InstanceBaseline, INSTANCE_BASELINE_TABLE_NAME},
     protos::{
@@ -144,7 +144,7 @@ pub struct Parser<R: Read + Seek, V: Visitor> {
     buf: Vec<u8>,
     visitor: V,
     ctx: Context,
-    field_decode_ctx: FieldDecodeContext,
+    field_decode_ctx: FieldDecoderContext,
 }
 
 impl<R: Read + Seek, V: Visitor> Parser<R, V> {
@@ -167,7 +167,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 tick_interval: DEFAULT_TICK_INTERVAL,
                 full_packet_interval: DEFAULT_FULL_PACKET_INTERVAL,
             },
-            field_decode_ctx: FieldDecodeContext {
+            field_decode_ctx: FieldDecoderContext {
                 tick_interval: DEFAULT_TICK_INTERVAL,
             },
         })

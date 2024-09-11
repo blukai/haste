@@ -18,7 +18,6 @@ haste_vartype = { path = "crates/haste_vartype" }
 # external
 anyhow = "1.0.86"
 dungers = { git = "https://github.com/blukai/dungers.git", rev = "b6c2d52d989db66171d74a579fcfc0a5d921cc41", features = ["charsor", "varint", "bitbuf"] }
-dyn-clone = "1.0.17"
 expect-test = "1.5.0"
 hashbrown = { version = "0.14.5", default-features = false, features = ["inline-more"]  }
 lazy_static = "1.5.0"

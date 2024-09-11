@@ -283,13 +283,11 @@ impl FlattenedSerializerContainer {
                         }
                         Some(FieldSpecialDescriptor::DynamicArray { ref decoder }) => {
                             field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                fields: vec![Rc::new(FlattenedSerializerField {
-                                    metadata: FieldMetadata {
-                                        decoder: decoder.clone(),
-                                        ..Default::default()
-                                    },
-                                    ..Default::default()
-                                })],
+                                fields: {
+                                    let mut field = field.clone();
+                                    field.metadata.decoder = *decoder;
+                                    vec![Rc::new(field)]
+                                },
                                 ..Default::default()
                             }));
                         }
