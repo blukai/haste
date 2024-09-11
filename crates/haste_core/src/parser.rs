@@ -3,7 +3,8 @@ use crate::{
     demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_BUFFER_SIZE, DEMO_HEADER_SIZE},
     entities::{self, EntityContainer},
     entityclasses::EntityClasses,
-    flattenedserializers::{FlattenedSerializerContainer, FlattenedSerializerContext},
+    fielddecoder::FieldDecodeContext,
+    flattenedserializers::FlattenedSerializerContainer,
     instancebaseline::{InstanceBaseline, INSTANCE_BASELINE_TABLE_NAME},
     protos::{
         prost::Message, CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoPacket,
@@ -143,6 +144,8 @@ pub struct Parser<R: Read + Seek, V: Visitor> {
     buf: Vec<u8>,
     visitor: V,
     ctx: Context,
+    // NOTE(blukai): is this the place for this? can it be moved "closer" to entities somewhere?
+    field_decode_ctx: FieldDecodeContext,
 }
 
 impl<R: Read + Seek, V: Visitor> Parser<R, V> {
@@ -164,6 +167,9 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 prev_tick: -1,
                 tick_interval: DEFAULT_TICK_INTERVAL,
                 full_packet_interval: DEFAULT_FULL_PACKET_INTERVAL,
+            },
+            field_decode_ctx: FieldDecodeContext {
+                tick_interval: DEFAULT_TICK_INTERVAL,
             },
         })
     }
@@ -325,12 +331,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 }
 
                 let cmd = CDemoSendTables::decode(data)?;
-                self.ctx.serializers = Some(FlattenedSerializerContainer::parse(
-                    cmd,
-                    FlattenedSerializerContext {
-                        tick_interval: self.ctx.tick_interval,
-                    },
-                )?);
+                self.ctx.serializers = Some(FlattenedSerializerContainer::parse(cmd)?);
             }
 
             EDemoCommands::DemClassInfo => {
@@ -407,6 +408,10 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
 
                         let ratio = DEFAULT_TICK_INTERVAL / tick_interval;
                         self.ctx.full_packet_interval = DEFAULT_FULL_PACKET_INTERVAL * ratio as i32;
+
+                        // NOTE(blukai): field decoder context needs tick interval to be able to
+                        // decode simulation time floats.
+                        self.field_decode_ctx.tick_interval = tick_interval;
                     }
                 }
 
@@ -524,6 +529,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                     let entity = unsafe {
                         let entity = self.ctx.entities.handle_create(
                             entity_index,
+                            &self.field_decode_ctx,
                             &mut br,
                             entity_classes,
                             instance_baseline,
@@ -546,10 +552,11 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                     // SAFETY: see comment above for .handle_create call in
                     // EnterPVS arm; same stuff.
                     let entity = unsafe {
-                        let entity = self
-                            .ctx
-                            .entities
-                            .handle_update_unchecked(entity_index, &mut br)?;
+                        let entity = self.ctx.entities.handle_update_unchecked(
+                            entity_index,
+                            &self.field_decode_ctx,
+                            &mut br,
+                        )?;
                         &*(entity as *const Entity)
                     };
                     self.visitor
