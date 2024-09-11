@@ -184,7 +184,7 @@ impl Entity {
                 field
                     .metadata
                     .decoder
-                    .decode(field_decode_ctx, br)
+                    .decode(field, field_decode_ctx, br)
                     .map(|field_value| {
                         // eprintln!(" -> {:?}", &field_value);
 

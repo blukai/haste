@@ -68,6 +68,7 @@ fn compute_encode_flags(encode_flags: i32, low_value: f32, high_value: f32) -> R
 const EQUAL_EPSILON: f32 = 0.001;
 
 // public/mathlib/mathlib.h
+#[inline(always)]
 fn close_enough(a: f32, b: f32, epsilon: f32) -> bool {
     (a - b).abs() <= epsilon
 }
@@ -128,6 +129,7 @@ fn assign_range_multiplier(bit_count: i32, range: f64) -> Result<f32> {
 }
 
 // public/dt_common.h
+#[inline(always)]
 fn num_bits_for_count(n_max_elements: i32) -> i32 {
     let mut n_bits = 0;
     let mut n_max_elements = n_max_elements;
