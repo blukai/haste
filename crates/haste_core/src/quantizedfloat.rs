@@ -3,6 +3,8 @@ use crate::bitreader::BitReader;
 // NOTE: this is composite of stuff from butterfly, clarity, manta and leaked
 // csgo.
 
+// TODO: more errors, treat what clarity treats as warnings as errors?
+
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     // mod
@@ -72,16 +74,18 @@ fn close_enough(a: f32, b: f32, epsilon: f32) -> bool {
 
 // public/dt_send.cpp
 fn assign_range_multiplier(bit_count: i32, range: f64) -> Result<f32> {
+    // NOTE(blukai): actually it should not be possible for bit_count to be 32 here - for that
+    // there's noscale decoder. but i'm not going to change this piece of code to comform original.
     let high_value = if bit_count == 32 {
         0xFFFFFFFE
     } else {
         (1 << bit_count) - 1
     };
 
-    // In C++, when you perform an operation between two different numeric
-    // types, the result will be promoted to the type that can represent both
-    // operands with the least loss of precision. This process is called "type
-    // promotion" or "type coercion."
+    // NOTE(blukai): a general knowledge thing... in c++, when you perform an operation between two
+    // different numeric types, the result will be promoted to the type that can represent both
+    // operands with the least loss of precision. this process is called "type promotion" or "type
+    // coercion."
 
     let mut high_low_mul = if close_enough(range as f32, 0.0, EQUAL_EPSILON) {
         high_value as f32
@@ -160,9 +164,9 @@ impl QuantizedFloat {
             decode_mul: 0.0,
         };
 
-        if bit_count <= 0 || bit_count >= 32 {
-            return Ok(qf);
-        }
+        // NOTE(blukai): quantized float decoder wouldn't be able to decode non-quantized float
+        // correctly.
+        debug_assert!(bit_count > 0 && bit_count < 32);
 
         qf.encode_flags = compute_encode_flags(qf.encode_flags, qf.low_value, qf.high_value)?;
         let mut steps = 1 << qf.bit_count;
@@ -222,21 +226,21 @@ impl QuantizedFloat {
         self.low_value + range * (i as f32 * self.decode_mul)
     }
 
-    pub fn decode(&self, br: &mut BitReader) -> Result<f32> {
+    pub fn decode(&self, br: &mut BitReader) -> f32 {
         if (self.encode_flags & QFE_ROUNDDOWN) != 0 && br.read_bool() {
-            return Ok(self.low_value);
+            return self.low_value;
         }
 
         if (self.encode_flags & QFE_ROUNDUP) != 0 && br.read_bool() {
-            return Ok(self.high_value);
+            return self.high_value;
         }
 
         if (self.encode_flags & QFE_ENCODE_ZERO_EXACTLY) != 0 && br.read_bool() {
-            return Ok(0.0);
+            return 0.0;
         }
 
         let range = self.high_value - self.low_value;
         let value = br.read_ubit64(self.bit_count as usize);
-        Ok(self.low_value + range * (value as f32 * self.decode_mul))
+        self.low_value + range * (value as f32 * self.decode_mul)
     }
 }
