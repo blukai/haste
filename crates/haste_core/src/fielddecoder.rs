@@ -68,33 +68,11 @@ impl FieldDecode for InvalidDecoder {
 // ----
 
 #[derive(Debug, Clone, Default)]
-pub struct I32Decoder;
-
-impl FieldDecode for I32Decoder {
-    fn decode(&self, _ctx: &mut FieldDecodeContext, br: &mut BitReader) -> FieldValue {
-        FieldValue::I32(br.read_varint32())
-    }
-}
-
-// ----
-
-#[derive(Debug, Clone, Default)]
 pub struct I64Decoder;
 
 impl FieldDecode for I64Decoder {
     fn decode(&self, _ctx: &mut FieldDecodeContext, br: &mut BitReader) -> FieldValue {
         FieldValue::I64(br.read_varint64())
-    }
-}
-
-// ----
-
-#[derive(Debug, Clone, Default)]
-pub struct U32Decoder;
-
-impl FieldDecode for U32Decoder {
-    fn decode(&self, _ctx: &mut FieldDecodeContext, br: &mut BitReader) -> FieldValue {
-        FieldValue::U32(br.read_uvarint32())
     }
 }
 
@@ -125,6 +103,15 @@ pub struct U64Decoder {
     decoder: Box<dyn FieldDecode>,
 }
 
+impl Default for U64Decoder {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            decoder: Box::<InternalU64Decoder>::default(),
+        }
+    }
+}
+
 impl U64Decoder {
     #[inline]
     pub fn new(field: &FlattenedSerializerField) -> Self {
@@ -133,9 +120,7 @@ impl U64Decoder {
                 decoder: Box::<InternalU64Fixed64Decoder>::default(),
             }
         } else {
-            Self {
-                decoder: Box::<InternalU64Decoder>::default(),
-            }
+            Self::default()
         }
     }
 }
@@ -321,45 +306,45 @@ impl FieldDecode for F32Decoder {
 // ----
 
 #[derive(Debug, Clone)]
-struct InternalVectorDefaultDecoder {
+struct InternalVector3DefaultDecoder {
     decoder: Box<dyn InternalF32Decode>,
 }
 
-impl FieldDecode for InternalVectorDefaultDecoder {
+impl FieldDecode for InternalVector3DefaultDecoder {
     fn decode(&self, ctx: &mut FieldDecodeContext, br: &mut BitReader) -> FieldValue {
         let vec3 = [
             self.decoder.decode(ctx, br),
             self.decoder.decode(ctx, br),
             self.decoder.decode(ctx, br),
         ];
-        FieldValue::Vector(vec3)
+        FieldValue::Vector3(vec3)
     }
 }
 
 #[derive(Debug, Clone, Default)]
-struct InternalVectorNormalDecoder;
+struct InternalVector3NormalDecoder;
 
-impl FieldDecode for InternalVectorNormalDecoder {
+impl FieldDecode for InternalVector3NormalDecoder {
     fn decode(&self, _ctx: &mut FieldDecodeContext, br: &mut BitReader) -> FieldValue {
-        FieldValue::Vector(br.read_bitvec3normal())
+        FieldValue::Vector3(br.read_bitvec3normal())
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct VectorDecoder {
+pub struct Vector3Decoder {
     decoder: Box<dyn FieldDecode>,
 }
 
-impl VectorDecoder {
+impl Vector3Decoder {
     #[inline]
     pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         if field.var_encoder_heq(fxhash::hash_bytes(b"normal")) {
             Ok(Self {
-                decoder: Box::<InternalVectorNormalDecoder>::default(),
+                decoder: Box::<InternalVector3NormalDecoder>::default(),
             })
         } else {
             Ok(Self {
-                decoder: Box::new(InternalVectorDefaultDecoder {
+                decoder: Box::new(InternalVector3DefaultDecoder {
                     decoder: Box::new(InternalF32Decoder::new(field)?),
                 }),
             })
@@ -367,7 +352,7 @@ impl VectorDecoder {
     }
 }
 
-impl FieldDecode for VectorDecoder {
+impl FieldDecode for Vector3Decoder {
     fn decode(&self, ctx: &mut FieldDecodeContext, br: &mut BitReader) -> FieldValue {
         self.decoder.decode(ctx, br)
     }
@@ -376,11 +361,11 @@ impl FieldDecode for VectorDecoder {
 // ----
 
 #[derive(Debug, Clone)]
-pub struct Vector2DDecoder {
+pub struct Vector2Decoder {
     decoder: Box<dyn InternalF32Decode>,
 }
 
-impl Vector2DDecoder {
+impl Vector2Decoder {
     #[inline]
     pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
@@ -389,21 +374,21 @@ impl Vector2DDecoder {
     }
 }
 
-impl FieldDecode for Vector2DDecoder {
+impl FieldDecode for Vector2Decoder {
     fn decode(&self, ctx: &mut FieldDecodeContext, br: &mut BitReader) -> FieldValue {
         let vec2 = [self.decoder.decode(ctx, br), self.decoder.decode(ctx, br)];
-        FieldValue::Vector2D(vec2)
+        FieldValue::Vector2(vec2)
     }
 }
 
 // ----
 
 #[derive(Debug, Clone)]
-pub struct Vector4DDecoder {
+pub struct Vector4Decoder {
     decoder: Box<dyn InternalF32Decode>,
 }
 
-impl Vector4DDecoder {
+impl Vector4Decoder {
     #[inline]
     pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
@@ -412,7 +397,7 @@ impl Vector4DDecoder {
     }
 }
 
-impl FieldDecode for Vector4DDecoder {
+impl FieldDecode for Vector4Decoder {
     fn decode(&self, ctx: &mut FieldDecodeContext, br: &mut BitReader) -> FieldValue {
         let vec4 = [
             self.decoder.decode(ctx, br),
@@ -420,7 +405,7 @@ impl FieldDecode for Vector4DDecoder {
             self.decoder.decode(ctx, br),
             self.decoder.decode(ctx, br),
         ];
-        FieldValue::Vector4D(vec4)
+        FieldValue::Vector4(vec4)
     }
 }
 

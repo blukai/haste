@@ -1,8 +1,7 @@
 use crate::{
     fielddecoder::{
-        self, BoolDecoder, F32Decoder, FieldDecode, I32Decoder, I64Decoder, InvalidDecoder,
-        QAngleDecoder, StringDecoder, U32Decoder, U64Decoder, Vector2DDecoder, Vector4DDecoder,
-        VectorDecoder,
+        self, BoolDecoder, F32Decoder, FieldDecode, I64Decoder, InvalidDecoder, QAngleDecoder,
+        StringDecoder, U64Decoder, Vector2Decoder, Vector3Decoder, Vector4Decoder,
     },
     flattenedserializers::FlattenedSerializerField,
     vartype::{Expr, Lit},
@@ -123,28 +122,13 @@ fn visit_ident(ident: &str, field: &FlattenedSerializerField) -> Result<FieldMet
     }
 
     match ident {
-        // TODO: (very maybe) smaller decoders (8 and 16 bit). but in terms for decode speed the
-        // impact is less then negligible.
-
-        // ints
-        "int8" => non_special!(I32Decoder),
-        "int16" => non_special!(I32Decoder),
-        "int32" => non_special!(I32Decoder),
+        // primitives
+        "int8" => non_special!(I64Decoder),
+        "int16" => non_special!(I64Decoder),
+        "int32" => non_special!(I64Decoder),
         "int64" => non_special!(I64Decoder),
-
-        // uints
-        "uint8" => non_special!(U32Decoder),
-        "uint16" => non_special!(U32Decoder),
-        "uint32" => non_special!(U32Decoder),
-        "uint64" => non_special!(U64Decoder::new(field)),
-
-        // other primitives
         "bool" => non_special!(BoolDecoder),
         "float32" => non_special!(F32Decoder::new(field)?),
-
-        // templates
-        "CHandle" => non_special!(U32Decoder),
-        "CStrongHandle" => non_special!(U64Decoder::new(field)),
 
         // pointers (?)
         // https://github.com/SteamDatabase/GameTracking-Deadlock/blob/master/game/core/tools/demoinfo2/demoinfo2.txt#L130
@@ -171,33 +155,28 @@ fn visit_ident(ident: &str, field: &FlattenedSerializerField) -> Result<FieldMet
         // not!) F32Decoder will determine which kind of f32 decoder to use.
         "CNetworkedQuantizedFloat" => non_special!(F32Decoder::new(field)?),
         "GameTime_t" => non_special!(F32Decoder::new(field)?),
-        "MatchID_t" => non_special!(U64Decoder::new(field)),
         // public/mathlib/vector.h
-        "Vector" => non_special!(VectorDecoder::new(field)?),
+        "Vector" => non_special!(Vector3Decoder::new(field)?),
         // public/mathlib/vector2d.h
-        "Vector2D" => non_special!(Vector2DDecoder::new(field)?),
+        "Vector2D" => non_special!(Vector2Decoder::new(field)?),
         // public/mathlib/vector4d.h
-        "Vector4D" => non_special!(Vector4DDecoder::new(field)?),
-        // game/shared/econ/econ_item_constants.h
-        "itemid_t" => non_special!(U64Decoder::new(field)),
-        "HeroFacetKey_t" => non_special!(U64Decoder::new(field)),
-        "BloodType" => non_special!(U32Decoder),
+        "Vector4D" => non_special!(Vector4Decoder::new(field)?),
 
         // exceptional specials xd
         "m_SpeechBubbles" => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::DynamicSerializerArray),
-            decoder: Box::<U32Decoder>::default(),
+            decoder: Box::<U64Decoder>::default(),
         }),
         // https://github.com/SteamDatabase/GameTracking-CS2/blob/6b3bf6ad44266e3ee4440a0b9b2fee1268812840/game/core/tools/demoinfo2/demoinfo2.txt#L155C83-L155C111
         "DOTA_CombatLogQueryProgress" => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::DynamicSerializerArray),
-            decoder: Box::<U32Decoder>::default(),
+            decoder: Box::<U64Decoder>::default(),
         }),
 
-        // ----
+        // default
         _ => Ok(FieldMetadata {
             special_descriptor: None,
-            decoder: Box::<U32Decoder>::default(),
+            decoder: Box::new(U64Decoder::new(field)),
         }),
     }
 }
@@ -219,7 +198,7 @@ fn visit_template(
         if field.field_serializer_name.is_some() {
             return Ok(FieldMetadata {
                 special_descriptor: Some(FieldSpecialDescriptor::DynamicSerializerArray),
-                decoder: Box::<U32Decoder>::default(),
+                decoder: Box::<U64Decoder>::default(),
             });
         }
 
@@ -227,7 +206,7 @@ fn visit_template(
             special_descriptor: Some(FieldSpecialDescriptor::DynamicArray {
                 decoder: field_metadata.decoder,
             }),
-            decoder: Box::<U32Decoder>::default(),
+            decoder: Box::<U64Decoder>::default(),
         });
     }
 
