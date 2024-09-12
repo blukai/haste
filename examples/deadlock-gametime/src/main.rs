@@ -3,7 +3,7 @@
 /// logic for dota 2 would be different. if you need an example - open an issue on github.
 use anyhow::Context as _;
 use haste::{
-    entities::{make_field_key, Entity, UpdateType},
+    entities::{make_field_key, DeltaHeader, Entity},
     fxhash,
     parser::{self, Context, Parser, Visitor},
     protos::{self, prost::Message},
@@ -108,8 +108,7 @@ impl Visitor for MyVisitor {
     fn on_entity(
         &mut self,
         _ctx: &Context,
-        _update_flags: usize,
-        _update_type: UpdateType,
+        _delta_header: DeltaHeader,
         entity: &Entity,
     ) -> parser::Result<()> {
         if entity.serializer_name_heq(DEADLOCK_GAMERULES_ENTITY) {

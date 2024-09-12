@@ -62,8 +62,6 @@ pub(crate) use haste_vartype as vartype;
 // difference is that instead of specifying which binary to build the project is
 // being specified.
 
-// TODO(blukai): clean up decoders: reduce amount of indirection; don't heap-allocate.
-
 // TODO(blukai): figure out a more efficient representation for entity state. hashbrown is fast,
 // but that stuff can be faster. this probably will also change how entity field lookups need to be
 // performed.

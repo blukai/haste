@@ -60,56 +60,42 @@ pub fn handle_to_index(handle: u32) -> usize {
 // public/basehandle.h) does:
 // m_Index = iEntry | (iSerialNumber << NUM_SERIAL_NUM_SHIFT_BITS);
 
-// TODO(blukai): get rid of a distinction between update type and update flags. read 2 bits and
-// define 3 types of updates. that'll reduce branching further.
-
-// NOTE: PVS is potentially visible set,
-// see more on https://developer.valvesoftware.com/wiki/PVS
+// csgo srcs:
+// - CL_ParseDeltaHeader in engine/client.cpp.
+// - DetermineUpdateType in engine/client.cpp
 //
-// Flags for delta encoding header
-// csgo src: engine/ents_shared.h
-pub const FHDR_ZERO: usize = 0x0000;
-pub const FHDR_LEAVEPVS: usize = 0x0001;
-pub const FHDR_DELETE: usize = 0x0002;
-pub const FHDR_ENTERPVS: usize = 0x0004;
+// NOTE: this can be decomposed into valve-style update flags and update type, if needed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(transparent)]
+pub struct DeltaHeader(u8);
 
-// CL_ParseDeltaHeader in engine/client.cpp
-#[inline(always)]
-pub(crate) fn parse_delta_header(br: &mut BitReader) -> Result<usize> {
-    let mut update_flags = FHDR_ZERO;
-    // NOTE: read_bool is equivalent to ReadOneBit() == 1
-    if !br.read_bool() {
-        if br.read_bool() {
-            update_flags |= FHDR_ENTERPVS;
-        }
-    } else {
-        update_flags |= FHDR_LEAVEPVS;
+impl DeltaHeader {
+    // NOTE: each variant is annotated with branches from CL_ParseDeltaHeader
 
-        if br.read_bool() {
-            update_flags |= FHDR_DELETE;
-        }
-    }
-    Ok(update_flags)
-}
+    // false -> false; no flags
+    pub const UPDATE: Self = Self(0b00);
 
-// Used to classify entity update types in DeltaPacketEntities.
-// csgo src: engine/ents_shared.h
-#[derive(Debug)]
-pub enum UpdateType {
-    EnterPVS = 0, // Entity came back into pvs, create new entity if one doesn't exist
-    LeavePVS,     // Entity left pvs
-    DeltaEnt,     // There is a delta for this entity.
-}
+    /// entity came back into pvs, create new entity if one doesn't exist.
+    //
+    // false -> true; FHDR_ENTERPVS
+    pub const CREATE: Self = Self(0b10);
 
-// DetermineUpdateType in engine/client.cpp
-#[inline(always)]
-pub(crate) fn determine_update_type(update_flags: usize) -> UpdateType {
-    if update_flags & FHDR_ENTERPVS != 0 {
-        UpdateType::EnterPVS
-    } else if update_flags & FHDR_LEAVEPVS != 0 {
-        UpdateType::LeavePVS
-    } else {
-        UpdateType::DeltaEnt
+    /// entity left pvs
+    //
+    // true -> false; FHDR_LEAVEPVS
+    pub const LEAVE: Self = Self(0b01);
+
+    /// Entity left pvs and can be deleted
+    //
+    // true -> true; FHDR_LEAVEPVS and FHDR_DELETE
+    pub const DELETE: Self = Self(0b11);
+
+    #[inline(always)]
+    pub(crate) fn from_bit_reader(br: &mut BitReader) -> Self {
+        // TODO(blukai): also try merging two bits from read_bool. who's faster?
+        let mut buf = [0u8];
+        br.read_bits(&mut buf, 2);
+        Self(buf[0])
     }
 }
 

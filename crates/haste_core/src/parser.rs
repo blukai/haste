@@ -100,8 +100,7 @@ pub trait Visitor {
     fn on_entity(
         &mut self,
         ctx: &Context,
-        update_flags: usize,
-        update_type: entities::UpdateType,
+        delta_header: entities::DeltaHeader,
         entity: &entities::Entity,
     ) -> Result<()> {
         Ok(())
@@ -512,21 +511,9 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             // and CL_ParseDeltaHeader in engine/client.cpp
             entity_index += br.read_ubitvar() as i32 + 1;
 
-            let update_flags = parse_delta_header(&mut br)?;
-            let update_type = determine_update_type(update_flags);
-
-            match update_type {
-                UpdateType::EnterPVS => {
-                    // SAFETY: borrow checker is not happy because handle_create
-                    // requires mutable access to entities; rust's borrowing
-                    // rules specify that you cannot have both mutable and
-                    // immutable refs to the same data at the same time.
-                    //
-                    // alternative would be to call .handle_create and then
-                    // .get, but that does not make any sense, that is redundant
-                    // because .get is called inside of .handle_create. i can't
-                    // think of any issues that may arrise because of my raw
-                    // pointer approach.
+            let delta_header = DeltaHeader::from_bit_reader(&mut br);
+            match delta_header {
+                DeltaHeader::CREATE => {
                     let entity = unsafe {
                         let entity = self.ctx.entities.handle_create(
                             entity_index,
@@ -536,33 +523,36 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                             instance_baseline,
                             serializers,
                         )?;
+                        // SAFETY: borrow checker is not happy because handle_create requires
+                        // mutable access to entities; rust's borrowing rules specify that you
+                        // cannot have both mutable and immutable refs to the same data at the same
+                        // time.
+                        //
+                        // alternative would be to call .handle_create and then .get, but that does
+                        // not make any sense, that is redundant because .get is called inside of
+                        // .handle_create. i can't think of any issues that may arrise because of
+                        // my raw pointer approach.
                         &*(entity as *const Entity)
                     };
-                    self.visitor
-                        .on_entity(&self.ctx, update_flags, update_type, entity)?;
+                    self.visitor.on_entity(&self.ctx, delta_header, entity)?;
                 }
-                UpdateType::LeavePVS => {
-                    if (update_flags & FHDR_DELETE) != 0 {
-                        let entity =
-                            unsafe { self.ctx.entities.handle_delete_unchecked(entity_index) };
-                        self.visitor
-                            .on_entity(&self.ctx, update_flags, update_type, &entity)?;
-                    }
+                DeltaHeader::DELETE => {
+                    let entity = unsafe { self.ctx.entities.handle_delete_unchecked(entity_index) };
+                    self.visitor.on_entity(&self.ctx, delta_header, &entity)?;
                 }
-                UpdateType::DeltaEnt => {
-                    // SAFETY: see comment above for .handle_create call in
-                    // EnterPVS arm; same stuff.
+                DeltaHeader::UPDATE => {
                     let entity = unsafe {
                         let entity = self.ctx.entities.handle_update_unchecked(
                             entity_index,
                             &mut self.field_decode_ctx,
                             &mut br,
                         )?;
+                        // SAFETY: see comment above (below .handle_create call); same stuff.
                         &*(entity as *const Entity)
                     };
-                    self.visitor
-                        .on_entity(&self.ctx, update_flags, update_type, entity)?;
+                    self.visitor.on_entity(&self.ctx, delta_header, entity)?;
                 }
+                _ => {}
             }
         }
 

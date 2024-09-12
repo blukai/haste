@@ -1,5 +1,5 @@
 use haste::{
-    entities::{self, Entity, UpdateType},
+    entities::{self, DeltaHeader, Entity},
     fieldvalue::FieldValue,
     fxhash,
     parser::{self, Context, Parser, Visitor},
@@ -12,8 +12,7 @@ impl Visitor for MyVisitor {
     fn on_entity(
         &mut self,
         _ctx: &Context,
-        _update_flags: usize,
-        _update_type: UpdateType,
+        _delta_header: DeltaHeader,
         entity: &Entity,
     ) -> parser::Result<()> {
         if entity

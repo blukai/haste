@@ -1,5 +1,5 @@
 use haste::{
-    entities::{make_field_key, Entity, UpdateType},
+    entities::{make_field_key, DeltaHeader, Entity},
     fieldvalue::FieldValue,
     parser::{self, Context, Parser, Visitor},
 };
@@ -18,8 +18,7 @@ impl Visitor for MyVisitor {
     fn on_entity(
         &mut self,
         ctx: &Context,
-        _update_flags: usize,
-        _update_type: UpdateType,
+        _delta_header: DeltaHeader,
         entity: &Entity,
     ) -> parser::Result<()> {
         let life_state_key = make_field_key(&["m_lifeState"]);
