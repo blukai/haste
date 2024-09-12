@@ -19,6 +19,8 @@ pub enum FieldValue {
     String(Box<str>),
 }
 
+// TODO(blukai): when you'll be unfucking errors - rename this one to FieldValueInvalidConversion
+// or something..
 #[derive(Debug, thiserror::Error)]
 #[error("incompatible types or out of range integer type conversion attempted")]
 pub struct FieldValueConversionError;
@@ -26,12 +28,12 @@ pub struct FieldValueConversionError;
 macro_rules! impl_try_into_numeric {
     ($($variant:ident => $ty:ty),+) => {
         $(
-            impl TryInto<$ty> for &FieldValue {
+            impl TryInto<$ty> for FieldValue {
                 type Error = FieldValueConversionError;
 
                 fn try_into(self) -> Result<$ty, Self::Error> {
                     match self {
-                        FieldValue::$variant(value) => (*value).try_into().map_err(|_| FieldValueConversionError),
+                        FieldValue::$variant(value) => value.try_into().map_err(|_| FieldValueConversionError),
                         _ => Err(FieldValueConversionError),
                     }
                 }
@@ -55,12 +57,12 @@ impl_try_into_numeric! {
 macro_rules! impl_try_into_inner {
     ($($variant:ident => $ty:ty),+) => {
         $(
-            impl TryInto<$ty> for &FieldValue {
+            impl TryInto<$ty> for FieldValue {
                 type Error = FieldValueConversionError;
 
                 fn try_into(self) -> Result<$ty, Self::Error> {
                     match self {
-                        FieldValue::$variant(value) => Ok(*value),
+                        FieldValue::$variant(value) => Ok(value),
                         _ => Err(FieldValueConversionError),
                     }
                 }
@@ -77,18 +79,18 @@ impl_try_into_inner! {
 
 // and some specials...
 
-impl TryInto<[f32; 3]> for &FieldValue {
+impl TryInto<[f32; 3]> for FieldValue {
     type Error = FieldValueConversionError;
 
     fn try_into(self) -> Result<[f32; 3], Self::Error> {
         match self {
-            FieldValue::Vector3(value) | FieldValue::QAngle(value) => Ok(*value),
+            FieldValue::Vector3(value) | FieldValue::QAngle(value) => Ok(value),
             _ => Err(FieldValueConversionError),
         }
     }
 }
 
-impl TryInto<String> for &FieldValue {
+impl TryInto<String> for FieldValue {
     type Error = FieldValueConversionError;
 
     fn try_into(self) -> Result<String, Self::Error> {

@@ -3,7 +3,7 @@ use crate::{
     entityclasses::EntityClasses,
     fielddecoder::{self, FieldDecodeContext},
     fieldpath::{self, FieldPath},
-    fieldvalue::FieldValue,
+    fieldvalue::{FieldValue, FieldValueConversionError},
     flattenedserializers::{
         FlattenedSerializer, FlattenedSerializerContainer, FlattenedSerializerField,
     },
@@ -21,9 +21,13 @@ pub enum Error {
     FieldDecoder(#[from] fielddecoder::Error),
     #[error(transparent)]
     BitReader(#[from] BitReaderError),
+    #[error("field does not exist")]
+    FieldValueNotExist,
+    #[error(transparent)]
+    FieldValueInvalidConversion(#[from] FieldValueConversionError),
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 // public/const.h (adjusted)
 
@@ -180,36 +184,54 @@ impl Entity {
         Ok(())
     }
 
-    // ----
+    // public api
+    // ----------
 
-    #[inline]
     pub fn iter(&self) -> impl Iterator<Item = (&u64, &FieldValue)> {
         self.fields.iter().map(|(key, ef)| (key, &ef.value))
     }
 
-    #[inline]
-    pub fn get_value(&self, key: &u64) -> Option<&FieldValue> {
-        self.fields.get(key).map(|ef| &ef.value)
+    /// get the value of the field with the provided key, and attempt to convert it.
+    ///
+    /// this is a variant of "getter" returns None on conversion error, intended to be used for
+    /// cases where missing and invalid values should be treated the same.
+    pub fn get_value<T>(&self, key: &u64) -> Option<T>
+    where
+        FieldValue: TryInto<T, Error = FieldValueConversionError>,
+    {
+        self.fields
+            .get(key)
+            .and_then(|entity_field| entity_field.value.clone().try_into().ok())
+    }
+
+    /// get the value of the field with the provided key, and attempt to convert it.
+    ///
+    /// - if the value is missing, it returns [`Error::FieldValueNotExist`]
+    /// - if the value is present but convesion failed, returns
+    /// [`Error::FieldValueInvalidConversion`]
+    pub fn try_get_value<T>(&self, key: &u64) -> Result<T>
+    where
+        FieldValue: TryInto<T, Error = FieldValueConversionError>,
+    {
+        self.fields.get(key).map_or_else(
+            || Err(Error::FieldValueNotExist),
+            |entity_field| entity_field.value.clone().try_into().map_err(Error::from),
+        )
     }
 
     #[cfg(feature = "preserve-metadata")]
-    #[inline]
     pub fn get_path(&self, key: &u64) -> Option<&FieldPath> {
         self.fields.get(key).map(|ef| &ef.path)
     }
 
-    // TODO: consider renaming this into just `serializer`.
-    #[inline]
     pub fn serializer(&self) -> &FlattenedSerializer {
         self.serializer.as_ref()
     }
 
-    #[inline]
     pub fn serializer_name_heq(&self, rhs: u64) -> bool {
         self.serializer.serializer_name.hash == rhs
     }
 
-    #[inline]
     pub fn get_serializer_field(&self, path: &FieldPath) -> Option<&FlattenedSerializerField> {
         let first = path.get(0).and_then(|i| self.serializer.get_child(i));
         path.iter().skip(1).fold(first, |field, i| {
@@ -217,7 +239,6 @@ impl Entity {
         })
     }
 
-    #[inline]
     pub fn index(&self) -> i32 {
         self.index
     }

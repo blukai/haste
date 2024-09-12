@@ -1,6 +1,5 @@
 use haste::{
     entities::{make_field_key, DeltaHeader, Entity},
-    fieldvalue::FieldValue,
     parser::{self, Context, Parser, Visitor},
 };
 use std::{collections::HashMap, fs::File, io::BufReader};
@@ -21,11 +20,8 @@ impl Visitor for MyVisitor {
         _delta_header: DeltaHeader,
         entity: &Entity,
     ) -> parser::Result<()> {
-        let life_state_key = make_field_key(&["m_lifeState"]);
-        let Some(FieldValue::U8(next_life_state)) = entity.get_value(&life_state_key).cloned()
-        else {
-            return Ok(());
-        };
+        const LIFE_STATE_KEY: u64 = make_field_key(&["m_lifeState"]);
+        let next_life_state = entity.try_get_value(&LIFE_STATE_KEY)?;
 
         let prev_life_state = *self.life_states.get(&entity.index()).unwrap_or(&LIFE_DEAD);
         if next_life_state == prev_life_state {

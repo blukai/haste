@@ -55,8 +55,8 @@ fn coord_from_cell(cell_width: u32, max_coord: u32, cell: u16, vec: f32) -> f32 
 // m_pGameRules.m_vMinimapMaxs:Vector = [8960.0, 8960.0, 0.0]
 
 fn get_entity_coord(entity: &Entity, cell_key: &u64, vec_key: &u64) -> Option<f32> {
-    let cell: u16 = entity.get_value(cell_key)?.try_into().expect("u16 cell");
-    let vec: f32 = entity.get_value(vec_key)?.try_into().expect("f32 vec");
+    let cell: u16 = entity.get_value(cell_key)?;
+    let vec: f32 = entity.get_value(vec_key)?;
     let coord = coord_from_cell(CELL_WIDTH, MAX_COORD_INTEGER, cell, vec);
     Some(coord)
 }

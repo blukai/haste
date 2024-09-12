@@ -1,7 +1,6 @@
 /// this example shows how to compute game time in deadlock.
 ///
 /// logic for dota 2 would be different. if you need an example - open an issue on github.
-use anyhow::Context as _;
 use haste::{
     entities::{make_field_key, DeltaHeader, Entity},
     fxhash,
@@ -37,17 +36,8 @@ impl MyVisitor {
     fn handle_game_rules(&mut self, entity: &Entity) -> anyhow::Result<()> {
         debug_assert!(entity.serializer_name_heq(DEADLOCK_GAMERULES_ENTITY));
 
-        // TODO(blukai): come up with a nicer get value api.
-        //
-        // maybe something like:
-        // fn try_get_value_as<T>(&self, key: &u64) -> Result<T>
-        // where FieldValue: TryInto<T, Error = FieldValueTryIntoError>
-
-        let game_start_time: f32 = entity
-            .get_value(&make_field_key(&["m_pGameRules", "m_flGameStartTime"]))
-            .context("game start time field is missing")?
-            .try_into()
-            .context("game start time")?;
+        let game_start_time: f32 =
+            entity.try_get_value(&make_field_key(&["m_pGameRules", "m_flGameStartTime"]))?;
         // NOTE: 0.001 is an arbitrary number; nothing special.
         if game_start_time < 0.001 {
             return Ok(());
@@ -55,20 +45,12 @@ impl MyVisitor {
 
         self.game_start_time = Some(game_start_time);
 
-        self.game_paused = entity
-            .get_value(&make_field_key(&["m_pGameRules", "m_bGamePaused"]))
-            .and_then(|value| Some(value.try_into()))
-            .context("game paused")??;
-        self.pause_start_tick = entity
-            .get_value(&make_field_key(&["m_pGameRules", "m_nPauseStartTick"]))
-            .context("pause start tick field is missing")?
-            .try_into()
-            .context("pause start tick")?;
-        self.total_paused_ticks = entity
-            .get_value(&make_field_key(&["m_pGameRules", "m_nTotalPausedTicks"]))
-            .context("total paused ticks field is missing")?
-            .try_into()
-            .context("total paused ticks")?;
+        self.game_paused =
+            entity.try_get_value(&make_field_key(&["m_pGameRules", "m_bGamePaused"]))?;
+        self.pause_start_tick =
+            entity.try_get_value(&make_field_key(&["m_pGameRules", "m_nPauseStartTick"]))?;
+        self.total_paused_ticks =
+            entity.try_get_value(&make_field_key(&["m_pGameRules", "m_nTotalPausedTicks"]))?;
 
         Ok(())
     }
