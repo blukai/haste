@@ -71,10 +71,10 @@ pub enum FieldSpecialDescriptor {
 
 impl FieldSpecialDescriptor {
     #[inline(always)]
-    pub(crate) fn is_fixed_or_dynamic_array(&self) -> bool {
+    pub(crate) fn is_dynamic_array(&self) -> bool {
         matches!(
             self,
-            Self::FixedArray { .. } | Self::DynamicArray { .. } | Self::DynamicSerializerArray
+            Self::DynamicArray { .. } | Self::DynamicSerializerArray
         )
     }
 }
