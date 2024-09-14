@@ -349,25 +349,29 @@ impl EntityContainer {
 
     // ----
 
-    #[inline]
     pub fn iter(&self) -> impl Iterator<Item = (&i32, &Entity)> {
         self.entities.iter()
     }
 
-    #[inline]
     pub fn get(&self, index: &i32) -> Option<&Entity> {
         self.entities.get(index)
     }
 
+    pub fn iter_baselines(&self) -> impl Iterator<Item = (&i32, &Entity)> {
+        self.baseline_entities.iter()
+    }
+
+    pub fn get_baseline(&self, index: &i32) -> Option<&Entity> {
+        self.baseline_entities.get(index)
+    }
+
     // clear clears underlying storage, but this has no effect on the allocated
     // capacity.
-    #[inline]
     pub fn clear(&mut self) {
         self.entities.clear();
         self.baseline_entities.clear();
     }
 
-    #[inline]
     pub fn is_empty(&self) -> bool {
         self.entities.is_empty()
     }
