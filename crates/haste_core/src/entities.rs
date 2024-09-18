@@ -10,6 +10,7 @@ use crate::{
     fxhash,
     instancebaseline::InstanceBaseline,
 };
+use dungers::rangealloc::{RangeAlloc, RangeAllocError};
 use hashbrown::{hash_map::Entry, HashMap};
 use nohash::NoHashHasher;
 use std::{hash::BuildHasherDefault, rc::Rc};
@@ -103,6 +104,61 @@ impl DeltaHeader {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+struct FieldState {
+    value: Option<FieldValue>,
+    children: Option<std::ops::Range<usize>>,
+}
+
+impl FieldState {
+    fn set(
+        &mut self,
+        fp: &FieldPath,
+        fv: FieldValue,
+        buf: &mut [Self],
+        alloc: &mut RangeAlloc<usize>,
+    ) -> Result<(), RangeAllocError> {
+        let mut node = self;
+        for i in 0..=fp.last() {
+            let i = unsafe { fp.get_unchecked(i) };
+            if let Some(range) = node.children.as_mut() {
+                // grow range and reallocate "view", if needed
+                let range_len = range.end - range.start;
+                if i >= range_len {
+                    const GROWTH_FACTOR: usize = 2;
+                    let next_range = alloc.allocate(range_len * GROWTH_FACTOR)?;
+
+                    let prev_view: &mut [Self] =
+                        unsafe { &mut *(&mut buf[range.clone()] as *mut _) };
+                    let next_view: &mut [Self] = unsafe {
+                        &mut *(&mut buf[next_range.start..next_range.start + range_len] as *mut _)
+                    };
+                    next_view.swap_with_slice(prev_view);
+                    // eprintln!(
+                    //     "{:?} -> {:?}",
+                    //     range.clone(),
+                    //     next_range.start..next_range.start + range_len
+                    // );
+
+                    let prev_range = std::mem::replace(range, next_range);
+                    alloc.deallocate(prev_range);
+                }
+
+                node = unsafe { &mut *(&mut buf[range.start + i] as *mut _) };
+            } else {
+                let range = alloc.allocate(i.max(8))?;
+                let w = range.start + i;
+                node.children = Some(range);
+                node = unsafe { &mut *(&mut buf[w] as *mut _) };
+            }
+        }
+
+        node.value = Some(fv);
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone)]
 struct EntityField {
     #[cfg(feature = "preserve-metadata")]
@@ -114,8 +170,9 @@ struct EntityField {
 #[derive(Debug, Clone)]
 pub struct Entity {
     index: i32,
-    fields: HashMap<u64, EntityField, BuildHasherDefault<NoHashHasher<u64>>>,
+    // fields: HashMap<u64, EntityField, BuildHasherDefault<NoHashHasher<u64>>>,
     serializer: Rc<FlattenedSerializer>,
+    state: FieldState,
 }
 
 impl Entity {
@@ -124,6 +181,8 @@ impl Entity {
         field_decode_ctx: &mut FieldDecodeContext,
         br: &mut BitReader,
         fps: &mut [FieldPath],
+        fss: &mut [FieldState],
+        alloc: &mut RangeAlloc<usize>,
     ) -> Result<()> {
         // eprintln!("-- {:?}", self.serializer.serializer_name);
 
@@ -163,18 +222,19 @@ impl Entity {
 
                 // eprintln!(" -> {:?}", &field_value);
 
-                match self.fields.entry(field_key) {
-                    Entry::Occupied(mut oe) => {
-                        oe.get_mut().value = field_value;
-                    }
-                    Entry::Vacant(ve) => {
-                        ve.insert(EntityField {
-                            #[cfg(feature = "preserve-metadata")]
-                            path: fp.clone(),
-                            value: field_value,
-                        });
-                    }
-                }
+                self.state.set(fp, field_value, fss, alloc).unwrap();
+                // match self.fields.entry(field_key) {
+                //     Entry::Occupied(mut oe) => {
+                //         oe.get_mut().value = field_value;
+                //     }
+                //     Entry::Vacant(ve) => {
+                //         ve.insert(EntityField {
+                //             #[cfg(feature = "preserve-metadata")]
+                //             path: fp.clone(),
+                //             value: field_value,
+                //         });
+                //     }
+                // }
             }
 
             // dbg!(&self.field_values);
@@ -184,64 +244,64 @@ impl Entity {
         Ok(())
     }
 
-    // public api
-    // ----------
-
-    pub fn iter(&self) -> impl Iterator<Item = (&u64, &FieldValue)> {
-        self.fields.iter().map(|(key, ef)| (key, &ef.value))
-    }
-
-    /// get the value of the field with the provided key, and attempt to convert it.
-    ///
-    /// this is a variant of "getter" returns None on conversion error, intended to be used for
-    /// cases where missing and invalid values should be treated the same.
-    pub fn get_value<T>(&self, key: &u64) -> Option<T>
-    where
-        FieldValue: TryInto<T, Error = FieldValueConversionError>,
-    {
-        self.fields
-            .get(key)
-            .and_then(|entity_field| entity_field.value.clone().try_into().ok())
-    }
-
-    /// get the value of the field with the provided key, and attempt to convert it.
-    ///
-    /// - if the value is missing, it returns [`Error::FieldValueNotExist`]
-    /// - if the value is present but convesion failed, returns
-    /// [`Error::FieldValueInvalidConversion`]
-    pub fn try_get_value<T>(&self, key: &u64) -> Result<T>
-    where
-        FieldValue: TryInto<T, Error = FieldValueConversionError>,
-    {
-        self.fields.get(key).map_or_else(
-            || Err(Error::FieldValueNotExist),
-            |entity_field| entity_field.value.clone().try_into().map_err(Error::from),
-        )
-    }
-
-    #[cfg(feature = "preserve-metadata")]
-    pub fn get_path(&self, key: &u64) -> Option<&FieldPath> {
-        self.fields.get(key).map(|ef| &ef.path)
-    }
-
-    pub fn serializer(&self) -> &FlattenedSerializer {
-        self.serializer.as_ref()
-    }
-
-    pub fn serializer_name_heq(&self, rhs: u64) -> bool {
-        self.serializer.serializer_name.hash == rhs
-    }
-
-    pub fn get_serializer_field(&self, path: &FieldPath) -> Option<&FlattenedSerializerField> {
-        let first = path.get(0).and_then(|i| self.serializer.get_child(i));
-        path.iter().skip(1).fold(first, |field, i| {
-            field.and_then(|f| f.get_child(*i as usize))
-        })
-    }
-
-    pub fn index(&self) -> i32 {
-        self.index
-    }
+    // // public api
+    // // ----------
+    //
+    // pub fn iter(&self) -> impl Iterator<Item = (&u64, &FieldValue)> {
+    //     self.fields.iter().map(|(key, ef)| (key, &ef.value))
+    // }
+    //
+    // /// get the value of the field with the provided key, and attempt to convert it.
+    // ///
+    // /// this is a variant of "getter" returns None on conversion error, intended to be used for
+    // /// cases where missing and invalid values should be treated the same.
+    // pub fn get_value<T>(&self, key: &u64) -> Option<T>
+    // where
+    //     FieldValue: TryInto<T, Error = FieldValueConversionError>,
+    // {
+    //     self.fields
+    //         .get(key)
+    //         .and_then(|entity_field| entity_field.value.clone().try_into().ok())
+    // }
+    //
+    // /// get the value of the field with the provided key, and attempt to convert it.
+    // ///
+    // /// - if the value is missing, it returns [`Error::FieldValueNotExist`]
+    // /// - if the value is present but convesion failed, returns
+    // /// [`Error::FieldValueInvalidConversion`]
+    // pub fn try_get_value<T>(&self, key: &u64) -> Result<T>
+    // where
+    //     FieldValue: TryInto<T, Error = FieldValueConversionError>,
+    // {
+    //     self.fields.get(key).map_or_else(
+    //         || Err(Error::FieldValueNotExist),
+    //         |entity_field| entity_field.value.clone().try_into().map_err(Error::from),
+    //     )
+    // }
+    //
+    // #[cfg(feature = "preserve-metadata")]
+    // pub fn get_path(&self, key: &u64) -> Option<&FieldPath> {
+    //     self.fields.get(key).map(|ef| &ef.path)
+    // }
+    //
+    // pub fn serializer(&self) -> &FlattenedSerializer {
+    //     self.serializer.as_ref()
+    // }
+    //
+    // pub fn serializer_name_heq(&self, rhs: u64) -> bool {
+    //     self.serializer.serializer_name.hash == rhs
+    // }
+    //
+    // pub fn get_serializer_field(&self, path: &FieldPath) -> Option<&FlattenedSerializerField> {
+    //     let first = path.get(0).and_then(|i| self.serializer.get_child(i));
+    //     path.iter().skip(1).fold(first, |field, i| {
+    //         field.and_then(|f| f.get_child(*i as usize))
+    //     })
+    // }
+    //
+    // pub fn index(&self) -> i32 {
+    //     self.index
+    // }
 }
 
 #[derive(Debug)]
@@ -257,6 +317,9 @@ pub struct EntityContainer {
     // FieldPathsReader there would be 2 levels of indirection (at least as i imagine it right
     // now).
     field_paths: Vec<FieldPath>,
+
+    field_states: Vec<FieldState>,
+    field_states_alloc: RangeAlloc<usize>,
 }
 
 impl EntityContainer {
@@ -271,9 +334,13 @@ impl EntityContainer {
                 1024,
                 BuildHasherDefault::default(),
             ),
+
             // NOTE: 4096 is an arbitrary value that is large enough that that came out of printing
             // out count of fps collected per "run". (sort -nr can be handy)
             field_paths: vec![FieldPath::default(); 4096],
+
+            field_states: vec![FieldState::default(); 128 << 10],
+            field_states_alloc: RangeAlloc::new(0..128 << 10),
         }
     }
 
@@ -303,23 +370,32 @@ impl EntityContainer {
             Entry::Vacant(ve) => {
                 let mut entity = Entity {
                     index,
-                    fields: HashMap::with_capacity_and_hasher(
-                        serializer.fields.len(),
-                        BuildHasherDefault::default(),
-                    ),
                     serializer,
+                    state: FieldState::default(),
                 };
                 let baseline_data = unsafe { instance_baseline.by_id_unchecked(class_id) };
 
                 let mut baseline_br = BitReader::new(baseline_data.as_ref());
-                entity.parse(field_decode_ctx, &mut baseline_br, &mut self.field_paths)?;
+                entity.parse(
+                    field_decode_ctx,
+                    &mut baseline_br,
+                    &mut self.field_paths,
+                    &mut self.field_states,
+                    &mut self.field_states_alloc,
+                )?;
                 baseline_br.is_overflowed()?;
 
                 ve.insert(entity).clone()
             }
         };
 
-        entity.parse(field_decode_ctx, br, &mut self.field_paths)?;
+        entity.parse(
+            field_decode_ctx,
+            br,
+            &mut self.field_paths,
+            &mut self.field_states,
+            &mut self.field_states_alloc,
+        )?;
 
         self.entities.insert(index, entity);
         // SAFETY: the entity was just inserted ^, it's safe.
@@ -343,7 +419,13 @@ impl EntityContainer {
         br: &mut BitReader,
     ) -> Result<&Entity> {
         let entity = unsafe { self.entities.get_mut(&index).unwrap_unchecked() };
-        entity.parse(field_decode_ctx, br, &mut self.field_paths)?;
+        entity.parse(
+            field_decode_ctx,
+            br,
+            &mut self.field_paths,
+            &mut self.field_states,
+            &mut self.field_states_alloc,
+        )?;
         Ok(entity)
     }
 

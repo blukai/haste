@@ -84,7 +84,7 @@ impl<'a> BitReader<'a> {
     }
 
     #[inline]
-    pub fn is_overflowed(&mut self) -> bitbuf::Result<()> {
+    pub fn is_overflowed(&mut self) -> Result<(), bitbuf::Error> {
         self.did_check_overflow = true;
         self.inner.is_overflowed()
     }

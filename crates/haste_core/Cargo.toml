@@ -4,7 +4,7 @@ version = "0.0.0"
 edition.workspace = true
 
 [dependencies]
-dungers = { workspace = true, features = ["varint", "bitbuf"] }
+dungers = { workspace = true, features = ["varint", "bitbuf", "rangealloc"] }
 dyn-clone.workspace = true
 hashbrown.workspace = true
 haste_protos.workspace = true

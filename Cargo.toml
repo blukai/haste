@@ -17,7 +17,9 @@ haste_protos = { path = "crates/haste_protos" }
 haste_vartype = { path = "crates/haste_vartype" }
 # external
 anyhow = "1.0.86"
-dungers = { git = "https://github.com/blukai/dungers.git", rev = "b6c2d52d989db66171d74a579fcfc0a5d921cc41", features = ["charsor", "varint", "bitbuf"] }
+# NOCOMMIT
+# dungers = { git = "https://github.com/blukai/dungers.git", rev = "d14d436bc6fb5c4d8cdb003db57b5738531a4220", features = ["charsor", "varint", "bitbuf", "rangealloc"] }
+dungers = { path = "../dungers", features = ["charsor", "varint", "bitbuf", "rangealloc"] }
 dyn-clone = "1.0.17"
 expect-test = "1.5.0"
 hashbrown = { version = "0.14.5", default-features = false, features = ["inline-more"]  }
