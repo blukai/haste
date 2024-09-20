@@ -12,7 +12,7 @@ mod handler;
 
 fn get_entity_name<'a>(entity: &'a Entity, entity_names: &'a StringTable) -> Option<&'a str> {
     const NAME_STRINGTABLE_INDEX_KEY: u64 =
-        entities::make_field_key(&["m_pEntity", "m_nameStringableIndex"]);
+        entities::fkey_from_path(&["m_pEntity", "m_nameStringableIndex"]);
     let name_stringtable_index: i32 = entity.get_value(&NAME_STRINGTABLE_INDEX_KEY)?;
 
     let (_, name_stringtable_item) = entity_names

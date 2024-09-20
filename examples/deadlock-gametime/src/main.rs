@@ -2,7 +2,7 @@
 ///
 /// logic for dota 2 would be different. if you need an example - open an issue on github.
 use haste::{
-    entities::{make_field_key, DeltaHeader, Entity},
+    entities::{fkey_from_path, DeltaHeader, Entity},
     fxhash,
     parser::{self, Context, Parser, Visitor},
     protos::{self, prost::Message},
@@ -37,7 +37,7 @@ impl MyVisitor {
         debug_assert!(entity.serializer_name_heq(DEADLOCK_GAMERULES_ENTITY));
 
         let game_start_time: f32 =
-            entity.try_get_value(&make_field_key(&["m_pGameRules", "m_flGameStartTime"]))?;
+            entity.try_get_value(&fkey_from_path(&["m_pGameRules", "m_flGameStartTime"]))?;
         // NOTE: 0.001 is an arbitrary number; nothing special.
         if game_start_time < 0.001 {
             return Ok(());
@@ -46,11 +46,11 @@ impl MyVisitor {
         self.game_start_time = Some(game_start_time);
 
         self.game_paused =
-            entity.try_get_value(&make_field_key(&["m_pGameRules", "m_bGamePaused"]))?;
+            entity.try_get_value(&fkey_from_path(&["m_pGameRules", "m_bGamePaused"]))?;
         self.pause_start_tick =
-            entity.try_get_value(&make_field_key(&["m_pGameRules", "m_nPauseStartTick"]))?;
+            entity.try_get_value(&fkey_from_path(&["m_pGameRules", "m_nPauseStartTick"]))?;
         self.total_paused_ticks =
-            entity.try_get_value(&make_field_key(&["m_pGameRules", "m_nTotalPausedTicks"]))?;
+            entity.try_get_value(&fkey_from_path(&["m_pGameRules", "m_nTotalPausedTicks"]))?;
 
         Ok(())
     }

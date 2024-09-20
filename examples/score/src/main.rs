@@ -1,5 +1,5 @@
 use haste::{
-    entities::{make_field_key, DeltaHeader, Entity},
+    entities::{fkey_from_path, DeltaHeader, Entity},
     fxhash,
     parser::{self, Context, Parser, Visitor},
 };
@@ -20,10 +20,10 @@ impl Visitor for MyVisitor {
             .hash
             .eq(&fxhash::hash_bytes(b"CDOTATeam"))
         {
-            const TEAM_NUM_KEY: u64 = make_field_key(&["m_iTeamNum"]);
+            const TEAM_NUM_KEY: u64 = fkey_from_path(&["m_iTeamNum"]);
             let team_num: u8 = entity.try_get_value(&TEAM_NUM_KEY)?;
             if team_num == 2 || team_num == 3 {
-                let hero_kills_key = make_field_key(&["m_iHeroKills"]);
+                let hero_kills_key = fkey_from_path(&["m_iHeroKills"]);
                 let hero_kills: u16 = entity.try_get_value(&hero_kills_key)?;
                 println!("team_num: {:?}; hero_kills: {:?}", team_num, hero_kills);
             }

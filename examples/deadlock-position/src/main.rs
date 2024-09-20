@@ -1,5 +1,5 @@
 use haste::{
-    entities::{make_field_key, DeltaHeader, Entity},
+    entities::{deadlock_coord_from_cell, fkey_from_path, DeltaHeader, Entity},
     fxhash,
     parser::{self, Context, Parser, Visitor},
 };
@@ -9,66 +9,21 @@ use std::{
     io::BufReader,
 };
 
-// TODO(blukai): figure out where to put those consts in haste crate. but note that values for dota
-// are different!
-
-// in replay that i'm fiddling with (3843940_683350910.dem) CBodyComponent.m_vecY of
-// CCitadelPlayerPawn #4 at tick 111,077 is 1022.78125 and CBodyComponent.m_cellY is 36;
-// at tick 111,080 CBodyComponent.m_vecY becomes 0.375 and CBodyComponent.m_cellY 38.
-//
-// thus CELL_BASEENTITY_ORIGIN_CELL_BITS = 10 so that 1 << 10 is 1024 - right?
-// no, it's 9. why? i'm not exactly sure, but i would appreciate of somebody could explain.
-//
-// game/shared/shareddefs.h (adjusted)
-const CELL_BASEENTITY_ORIGIN_CELL_BITS: u32 = 9;
-// game/client/c_baseentity.cpp
-const CELL_WIDTH: u32 = 1 << CELL_BASEENTITY_ORIGIN_CELL_BITS;
-
-// CNPC_MidBoss (exactly in the middle of the map):
-// CBodyComponent.m_cellX:uint16 = 32
-// CBodyComponent.m_cellY:uint16 = 32
-// CBodyComponent.m_cellZ:uint16 = 30
-// CBodyComponent.m_vecX:CNetworkedQuantizedFloat = 0.0
-// CBodyComponent.m_vecY:CNetworkedQuantizedFloat = 0.0
-// CBodyComponent.m_vecZ:CNetworkedQuantizedFloat = 768.0
-//
-// from this it is safe to conclude that the actual grid is 64x64 which gives us
-// MAX_COORD_INTEGER = CELL_WIDTH * 32. the same exact value that is defined in csgo.
-//
-// also CELL_COUNT can be computed as MAX_COORD_INTEGER * 2 / CELL_WIDTH.
-//
-// public/worldsize.h
-const MAX_COORD_INTEGER: u32 = 16384;
-
-/// given a cell and an offset in that cell, reconstruct the world coord
-///
-/// source: game/shared/cellcoord.h
-fn coord_from_cell(cell_width: u32, max_coord: u32, cell: u16, vec: f32) -> f32 {
-    let cell_pos = cell as u32 * cell_width;
-    // nanitfi is r, what does it stand for in this context? (copypasting from valve)
-    let r = (cell_pos as i32 - max_coord as i32) as f32 + vec;
-    r
-}
-
-// CCitadelGameRulesProxy entity contains:
-// m_pGameRules.m_vMinimapMins:Vector = [-8960.0, -8960.005, 0.0]
-// m_pGameRules.m_vMinimapMaxs:Vector = [8960.0, 8960.0, 0.0]
-
 fn get_entity_coord(entity: &Entity, cell_key: &u64, vec_key: &u64) -> Option<f32> {
     let cell: u16 = entity.get_value(cell_key)?;
     let vec: f32 = entity.get_value(vec_key)?;
-    let coord = coord_from_cell(CELL_WIDTH, MAX_COORD_INTEGER, cell, vec);
+    let coord = deadlock_coord_from_cell(cell, vec);
     Some(coord)
 }
 
 fn get_entity_position(entity: &Entity) -> Option<[f32; 3]> {
-    const CX: u64 = make_field_key(&["CBodyComponent", "m_cellX"]);
-    const CY: u64 = make_field_key(&["CBodyComponent", "m_cellY"]);
-    const CZ: u64 = make_field_key(&["CBodyComponent", "m_cellZ"]);
+    const CX: u64 = fkey_from_path(&["CBodyComponent", "m_cellX"]);
+    const CY: u64 = fkey_from_path(&["CBodyComponent", "m_cellY"]);
+    const CZ: u64 = fkey_from_path(&["CBodyComponent", "m_cellZ"]);
 
-    const VX: u64 = make_field_key(&["CBodyComponent", "m_vecX"]);
-    const VY: u64 = make_field_key(&["CBodyComponent", "m_vecY"]);
-    const VZ: u64 = make_field_key(&["CBodyComponent", "m_vecZ"]);
+    const VX: u64 = fkey_from_path(&["CBodyComponent", "m_vecX"]);
+    const VY: u64 = fkey_from_path(&["CBodyComponent", "m_vecY"]);
+    const VZ: u64 = fkey_from_path(&["CBodyComponent", "m_vecZ"]);
 
     let x = get_entity_coord(entity, &CX, &VX)?;
     let y = get_entity_coord(entity, &CY, &VY)?;

@@ -1,7 +1,7 @@
 use crate::{
     bitreader::BitReader,
     demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_BUFFER_SIZE, DEMO_HEADER_SIZE},
-    entities::{self, DeltaHeader, Entity, EntityContainer},
+    entities::{DeltaHeader, Entity, EntityContainer},
     entityclasses::EntityClasses,
     fielddecoder::FieldDecodeContext,
     flattenedserializers::FlattenedSerializerContainer,
@@ -491,8 +491,6 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     // NOTE: handle_msg_packet_entities is partially based on
     // ReadPacketEntities in engine/client.cpp
     fn handle_svc_packet_entities(&mut self, msg: CsvcMsgPacketEntities) -> Result<()> {
-        use entities::*;
-
         // SAFETY: safety here can only be guaranteed by the fact that entity
         // classes and flattened serializers become available before packet
         // entities.
