@@ -32,9 +32,14 @@ const DEFAULT_TICK_INTERVAL: f32 = 1.0 / 30.0;
 pub type Error = Box<dyn std::error::Error>;
 pub type Result<T> = std::result::Result<T, Error>;
 
-// NOTE: primary purpose of Context is to to be able to expose state to the
-// public; attempts to put parser into arguments of Visitor's method did not
-// result in anything satisfyable.
+#[derive(Debug, Clone)]
+struct CmdPosition {
+    stream_position: u64,
+    tick: i32,
+}
+
+// NOTE: primary purpose of Context is to to be able to expose state to the public; attempts to put
+// parser into arguments of Visitor's method did not result in anything satisfyable.
 //
 // TODO: consider turing Context into an enum with Initialized and Uninitialized variants. though
 // there also must be an intermediary variant (or maybe stuff can be piled into Uninitialized
@@ -46,10 +51,15 @@ pub struct Context {
     serializers: Option<FlattenedSerializerContainer>,
     entity_classes: Option<EntityClasses>,
     entities: EntityContainer,
-    tick: i32,
-    prev_tick: i32,
     tick_interval: f32,
     full_packet_interval: i32,
+    tick: i32,
+    prev_tick: i32,
+    /// EDemoCommands::DemSyncTick is the last command with 4294967295 tick (normlized to -1). last
+    /// "initialization" command meaning that string tables, flattened serializers and entity
+    /// classes are initialized before first sync tick is sent.
+    did_see_sync_tick: bool,
+    full_packet_positions: Option<Vec<CmdPosition>>,
 }
 
 impl Context {
@@ -162,10 +172,12 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 instance_baseline: InstanceBaseline::default(),
                 serializers: None,
                 entity_classes: None,
-                tick: -1,
-                prev_tick: -1,
                 tick_interval: DEFAULT_TICK_INTERVAL,
                 full_packet_interval: DEFAULT_FULL_PACKET_INTERVAL,
+                tick: -1,
+                prev_tick: -1,
+                did_see_sync_tick: false,
+                full_packet_positions: None,
             },
             field_decode_ctx: FieldDecodeContext {
                 tick_interval: DEFAULT_TICK_INTERVAL,
@@ -225,35 +237,83 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         self.run(|_notnotself, _cmd_header| Ok(ControlFlow::HandleCmd))
     }
 
+    /// resets positions and clears string tables, instance baselines and entities. does not clear
+    /// flattened serializes nor entity classes because those are sent only once at the very
+    /// beginning and never change.
     fn reset(&mut self) -> Result<()> {
         self.demo_file
             .seek(SeekFrom::Start(DEMO_HEADER_SIZE as u64))?;
 
-        self.ctx.entities.clear();
         self.ctx.string_tables.clear();
         self.ctx.instance_baseline.clear();
+        self.ctx.entities.clear();
+        self.ctx.did_see_sync_tick = false;
         self.ctx.tick = -1;
         self.ctx.prev_tick = -1;
 
         Ok(())
     }
 
+    fn collect_full_packet_positions(&mut self) -> Result<Vec<CmdPosition>> {
+        let backup = self.demo_file.stream_position()?;
+        self.demo_file
+            .seek(SeekFrom::Start(DEMO_HEADER_SIZE as u64))?;
+
+        // does not necessarily need to be precise. it's okay to grow once or twice.
+        let approx_full_packet_count =
+            self.demo_file.total_ticks()? / self.ctx.full_packet_interval;
+        let mut full_packet_positions: Vec<CmdPosition> =
+            Vec::with_capacity(approx_full_packet_count as usize);
+        self.run(|notnotself, cmd_header| {
+            if cmd_header.command == EDemoCommands::DemFullPacket {
+                let cmd_position = CmdPosition {
+                    stream_position: notnotself.demo_file.stream_position()?,
+                    tick: cmd_header.tick,
+                };
+                full_packet_positions.push(cmd_position);
+            }
+            Ok(ControlFlow::SkipCmd)
+        })?;
+
+        self.demo_file.seek(SeekFrom::Start(backup))?;
+
+        Ok(full_packet_positions)
+    }
+
+    fn find_full_packet_position(&mut self, target_tick: i32) -> Result<CmdPosition> {
+        if self.ctx.full_packet_positions.is_none() {
+            self.ctx.full_packet_positions = Some(self.collect_full_packet_positions()?);
+        }
+        let Some(full_packet_positions) = self.ctx.full_packet_positions.as_ref() else {
+            unreachable!();
+        };
+
+        let search_result = full_packet_positions
+            .binary_search_by(|cmd_position| cmd_position.tick.partial_cmp(&target_tick).unwrap());
+        match search_result {
+            // exact match
+            Ok(i) => Ok(full_packet_positions[i].clone()),
+            // no exact match, return previous
+            Err(i) => Ok(full_packet_positions[i.saturating_sub(1)].clone()),
+        }
+    }
+
     pub fn run_to_tick(&mut self, target_tick: i32) -> Result<()> {
-        // TODO: do not allow tick to be less then -1
+        let target_tick = target_tick.clamp(-1, self.demo_file.total_ticks()?);
+        if self.ctx.tick == target_tick {
+            return Ok(());
+        }
 
-        // TODO: do not allow tick to be greater then total ticks
+        let full_packet_position = self.find_full_packet_position(target_tick)?;
+        assert!(full_packet_position.tick <= target_tick);
 
-        // TODO: do not clear if seeking forward and there's no full packet on
-        // the way to the wanted tick / if target tick is closer then full
-        // packet interval
-        self.reset()?;
+        let seeking_backwards = target_tick < self.ctx.tick;
+        let has_full_packet_ahead = full_packet_position.tick > self.ctx.tick;
+        if seeking_backwards || has_full_packet_ahead {
+            self.reset()?;
+        }
 
-        // NOTE: EDemoCommands::DemSyncTick is the last command with 4294967295
-        // tick (normlized to -1). last "initialization" command.
-        let mut did_handle_first_sync_tick = false;
-
-        // NOTE: EDemoCommands::DemFullPacket contains snapshot of everything...
-        // everything? it does not seem like it: string tables must be handled.
+        // not last-last, but last before the target tick
         let mut did_handle_last_full_packet = false;
 
         self.run(|notnotself, cmd_header| {
@@ -262,38 +322,29 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             }
 
             // init string tables, flattened serializers and entity classes
-            if !did_handle_first_sync_tick {
-                did_handle_first_sync_tick = cmd_header.command == EDemoCommands::DemSyncTick;
+            if !notnotself.ctx.did_see_sync_tick {
                 return Ok(ControlFlow::HandleCmd);
             }
 
-            let is_full_packet = cmd_header.command == EDemoCommands::DemFullPacket;
-            let distance_to_target_tick = target_tick - notnotself.ctx.tick;
-            // TODO: what if there's no full packet ahead? maybe dem file is
-            // corrupted or something... scan for full packets before enterint
-            // the "run"?
-            let has_full_packet_ahead =
-                distance_to_target_tick > notnotself.ctx.full_packet_interval + 100;
-            if is_full_packet {
+            if cmd_header.command == EDemoCommands::DemFullPacket {
                 let cmd_data = notnotself.demo_file.read_cmd(cmd_header)?;
                 notnotself
                     .visitor
                     .on_cmd(&notnotself.ctx, cmd_header, cmd_data)?;
-
                 let mut cmd = CDemoFullPacket::decode(cmd_data)?;
+
+                let has_full_packet_ahead = cmd_header.tick < full_packet_position.tick;
+                // NOTE: clarity seem to ignore "intermediary" full packet's packet
+                //
+                // TODO: verify that is okay to ignore "intermediary" full packet's packet
                 if has_full_packet_ahead {
-                    // NOTE: clarity seem to ignore "intermediary" full packet's
-                    // packet
-                    //
-                    // TODO: verify that is okay to ignore "intermediary" full
-                    // packet's packet
                     cmd.packet = None;
                 }
-                notnotself.handle_cmd_full_packet(cmd)?;
-
                 did_handle_last_full_packet = !has_full_packet_ahead;
 
-                if notnotself.ctx.prev_tick != notnotself.ctx.tick {
+                notnotself.handle_cmd_full_packet(cmd)?;
+
+                if notnotself.ctx.prev_tick > notnotself.ctx.tick {
                     notnotself.visitor.on_tick_end(&notnotself.ctx)?;
                 }
 
@@ -360,6 +411,10 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                         .instance_baseline
                         .update(string_table, entity_classes.classes)?;
                 }
+            }
+
+            EDemoCommands::DemSyncTick => {
+                self.ctx.did_see_sync_tick = true;
             }
 
             _ => {
