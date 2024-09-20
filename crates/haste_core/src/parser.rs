@@ -1,7 +1,7 @@
 use crate::{
     bitreader::BitReader,
     demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_BUFFER_SIZE, DEMO_HEADER_SIZE},
-    entities::{self, EntityContainer},
+    entities::{self, DeltaHeader, Entity, EntityContainer},
     entityclasses::EntityClasses,
     fielddecoder::FieldDecodeContext,
     flattenedserializers::FlattenedSerializerContainer,
@@ -100,8 +100,8 @@ pub trait Visitor {
     fn on_entity(
         &mut self,
         ctx: &Context,
-        delta_header: entities::DeltaHeader,
-        entity: &entities::Entity,
+        delta_header: DeltaHeader,
+        entity: &Entity,
     ) -> Result<()> {
         Ok(())
     }
@@ -238,7 +238,6 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         Ok(())
     }
 
-    // TODO: rename parse_to_tick to run_to_tick
     pub fn run_to_tick(&mut self, target_tick: i32) -> Result<()> {
         // TODO: do not allow tick to be less then -1
 

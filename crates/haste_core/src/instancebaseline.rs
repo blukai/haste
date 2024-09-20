@@ -14,7 +14,6 @@ pub const INSTANCE_BASELINE_TABLE_NAME: &str = "instancebaseline";
 
 #[derive(Default)]
 pub struct InstanceBaseline {
-    // TODO: ref into StringTables instead of cloning
     data: Vec<Option<Rc<UnsafeCell<Vec<u8>>>>>,
 }
 
