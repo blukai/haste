@@ -26,9 +26,9 @@ pub type Result<T> = std::result::Result<T, Error>;
 // decoders, proxies and all of the stuff.
 
 #[derive(Debug)]
-pub struct FieldDecodeContext {
-    pub tick_interval: f32,
-    pub string_buf: [u8; DT_MAX_STRING_BUFFERSIZE as usize],
+pub(crate) struct FieldDecodeContext {
+    pub(crate) tick_interval: f32,
+    pub(crate) string_buf: [u8; DT_MAX_STRING_BUFFERSIZE as usize],
 }
 
 impl Default for FieldDecodeContext {
@@ -48,7 +48,7 @@ impl Default for FieldDecodeContext {
 
 // TODO(blukai): try to not box internal decoders (for example u64).
 
-pub trait FieldDecode: DynClone + Debug {
+pub(crate) trait FieldDecode: DynClone + Debug {
     fn decode(&self, ctx: &mut FieldDecodeContext, br: &mut BitReader) -> FieldValue;
 }
 
@@ -56,7 +56,7 @@ dyn_clone::clone_trait_object!(FieldDecode);
 
 /// used during multi-phase initialization. never called.
 #[derive(Debug, Clone, Default)]
-pub struct InvalidDecoder;
+pub(crate) struct InvalidDecoder;
 
 impl FieldDecode for InvalidDecoder {
     #[cold]
@@ -68,7 +68,7 @@ impl FieldDecode for InvalidDecoder {
 // ----
 
 #[derive(Debug, Clone, Default)]
-pub struct I64Decoder;
+pub(crate) struct I64Decoder;
 
 impl FieldDecode for I64Decoder {
     fn decode(&self, _ctx: &mut FieldDecodeContext, br: &mut BitReader) -> FieldValue {
@@ -99,7 +99,7 @@ impl FieldDecode for InternalU64Fixed64Decoder {
 }
 
 #[derive(Debug, Clone)]
-pub struct U64Decoder {
+pub(crate) struct U64Decoder {
     decoder: Box<dyn FieldDecode>,
 }
 
@@ -114,7 +114,7 @@ impl Default for U64Decoder {
 
 impl U64Decoder {
     #[inline]
-    pub fn new(field: &FlattenedSerializerField) -> Self {
+    pub(crate) fn new(field: &FlattenedSerializerField) -> Self {
         if field.var_encoder_heq(fxhash::hash_bytes(b"fixed64")) {
             Self {
                 decoder: Box::<InternalU64Fixed64Decoder>::default(),
@@ -134,7 +134,7 @@ impl FieldDecode for U64Decoder {
 // ----
 
 #[derive(Debug, Clone, Default)]
-pub struct BoolDecoder;
+pub(crate) struct BoolDecoder;
 
 impl FieldDecode for BoolDecoder {
     fn decode(&self, _ctx: &mut FieldDecodeContext, br: &mut BitReader) -> FieldValue {
@@ -145,7 +145,7 @@ impl FieldDecode for BoolDecoder {
 // ----
 
 #[derive(Debug, Clone, Default)]
-pub struct StringDecoder;
+pub(crate) struct StringDecoder;
 
 impl FieldDecode for StringDecoder {
     fn decode(&self, ctx: &mut FieldDecodeContext, br: &mut BitReader) -> FieldValue {
@@ -210,7 +210,7 @@ struct InternalQuantizedFloatDecoder {
 
 impl InternalQuantizedFloatDecoder {
     #[inline]
-    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
+    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
             quantized_float: QuantizedFloat::new(
                 field.bit_count.unwrap_or_default(),
@@ -231,12 +231,12 @@ impl InternalF32Decode for InternalQuantizedFloatDecoder {
 // ----
 
 #[derive(Debug, Clone)]
-pub struct InternalF32Decoder {
+pub(crate) struct InternalF32Decoder {
     decoder: Box<dyn InternalF32Decode>,
 }
 
 impl InternalF32Decoder {
-    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
+    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self> {
         if field.var_name.hash == fxhash::hash_bytes(b"m_flSimulationTime")
             || field.var_name.hash == fxhash::hash_bytes(b"m_flAnimTime")
         {
@@ -284,13 +284,13 @@ impl InternalF32Decode for InternalF32Decoder {
 }
 
 #[derive(Debug, Clone)]
-pub struct F32Decoder {
+pub(crate) struct F32Decoder {
     decoder: Box<dyn InternalF32Decode>,
 }
 
 impl F32Decoder {
     #[inline]
-    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
+    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
             decoder: Box::new(InternalF32Decoder::new(field)?),
         })
@@ -331,13 +331,13 @@ impl FieldDecode for InternalVector3NormalDecoder {
 }
 
 #[derive(Debug, Clone)]
-pub struct Vector3Decoder {
+pub(crate) struct Vector3Decoder {
     decoder: Box<dyn FieldDecode>,
 }
 
 impl Vector3Decoder {
     #[inline]
-    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
+    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self> {
         if field.var_encoder_heq(fxhash::hash_bytes(b"normal")) {
             Ok(Self {
                 decoder: Box::<InternalVector3NormalDecoder>::default(),
@@ -361,13 +361,13 @@ impl FieldDecode for Vector3Decoder {
 // ----
 
 #[derive(Debug, Clone)]
-pub struct Vector2Decoder {
+pub(crate) struct Vector2Decoder {
     decoder: Box<dyn InternalF32Decode>,
 }
 
 impl Vector2Decoder {
     #[inline]
-    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
+    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
             decoder: Box::new(InternalF32Decoder::new(field)?),
         })
@@ -384,13 +384,13 @@ impl FieldDecode for Vector2Decoder {
 // ----
 
 #[derive(Debug, Clone)]
-pub struct Vector4Decoder {
+pub(crate) struct Vector4Decoder {
     decoder: Box<dyn InternalF32Decode>,
 }
 
 impl Vector4Decoder {
     #[inline]
-    pub fn new(field: &FlattenedSerializerField) -> Result<Self> {
+    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self> {
         Ok(Self {
             decoder: Box::new(InternalF32Decoder::new(field)?),
         })
@@ -478,12 +478,12 @@ impl FieldDecode for InternalQAngleBitCountDecoder {
 }
 
 #[derive(Debug, Clone)]
-pub struct QAngleDecoder {
+pub(crate) struct QAngleDecoder {
     decoder: Box<dyn FieldDecode>,
 }
 
 impl QAngleDecoder {
-    pub fn new(field: &FlattenedSerializerField) -> Self {
+    pub(crate) fn new(field: &FlattenedSerializerField) -> Self {
         let bit_count = field.bit_count.unwrap_or_default() as usize;
 
         if let Some(var_encoder) = field.var_encoder.as_ref() {

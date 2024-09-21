@@ -107,7 +107,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-pub fn parse<'a>(input: &'a str) -> Result<Expr<'a>> {
+pub fn parse(input: &str) -> Result<Expr> {
     Parser::new(input).parse()
 }
 

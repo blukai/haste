@@ -143,7 +143,7 @@ fn num_bits_for_count(n_max_elements: i32) -> i32 {
 // NOTE: Clone is derived because QuantizedFloatDecoder that implmenets Decode
 // trait needs it
 #[derive(Debug, Clone)]
-pub struct QuantizedFloat {
+pub(crate) struct QuantizedFloat {
     bit_count: i32,
     encode_flags: i32,
     low_value: f32,
@@ -154,7 +154,12 @@ pub struct QuantizedFloat {
 }
 
 impl QuantizedFloat {
-    pub fn new(bit_count: i32, encode_flags: i32, low_value: f32, high_value: f32) -> Result<Self> {
+    pub(crate) fn new(
+        bit_count: i32,
+        encode_flags: i32,
+        low_value: f32,
+        high_value: f32,
+    ) -> Result<Self> {
         let mut qf = Self {
             bit_count,
             encode_flags,
@@ -226,7 +231,7 @@ impl QuantizedFloat {
         self.low_value + range * (i as f32 * self.decode_mul)
     }
 
-    pub fn decode(&self, br: &mut BitReader) -> f32 {
+    pub(crate) fn decode(&self, br: &mut BitReader) -> f32 {
         if (self.encode_flags & QFE_ROUNDDOWN) != 0 && br.read_bool() {
             return self.low_value;
         }

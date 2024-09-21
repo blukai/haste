@@ -62,6 +62,9 @@ pub fn ehandle_to_index(handle: u32) -> usize {
 // public/basehandle.h) does) be somehow somewhere useful?:
 // m_Index = iEntry | (iSerialNumber << NUM_SERIAL_NUM_SHIFT_BITS);
 
+// NOTE: rust want that coord_from_cell is never used, but that is because there are no default
+// features that indicate otherwise (both deadlock and dota2 features are not active by default).
+#[allow(dead_code)]
 /// given a cell and an offset in that cell, reconstruct the world coord.
 ///
 /// game/shared/cellcoord.h
@@ -401,7 +404,7 @@ impl EntityContainer {
                 };
                 let baseline_data = unsafe { instance_baseline.by_id_unchecked(class_id) };
 
-                let mut baseline_br = BitReader::new(baseline_data.as_ref());
+                let mut baseline_br = BitReader::new(baseline_data);
                 entity.parse(field_decode_ctx, &mut baseline_br, &mut self.field_paths)?;
                 baseline_br.is_overflowed()?;
 

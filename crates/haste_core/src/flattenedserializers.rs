@@ -85,7 +85,7 @@ pub struct FlattenedSerializerField {
     pub var_encoder: Option<Symbol>,
 
     pub field_serializer: Option<Rc<FlattenedSerializer>>,
-    pub metadata: FieldMetadata,
+    pub(crate) metadata: FieldMetadata,
 }
 
 impl FlattenedSerializerField {

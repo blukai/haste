@@ -20,7 +20,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 // NOTE: Clone is derived because FlattenedSerializerField needs to be clonable.
 #[derive(Debug, Clone)]
-pub enum FieldSpecialDescriptor {
+pub(crate) enum FieldSpecialDescriptor {
     FixedArray {
         length: usize,
     },
@@ -80,9 +80,9 @@ impl FieldSpecialDescriptor {
 }
 
 #[derive(Debug, Clone)]
-pub struct FieldMetadata {
-    pub special_descriptor: Option<FieldSpecialDescriptor>,
-    pub decoder: Box<dyn FieldDecode>,
+pub(crate) struct FieldMetadata {
+    pub(crate) special_descriptor: Option<FieldSpecialDescriptor>,
+    pub(crate) decoder: Box<dyn FieldDecode>,
 }
 
 impl Default for FieldMetadata {
@@ -210,7 +210,7 @@ fn visit_template(
         });
     }
 
-    return visit_ident(ident, field);
+    visit_ident(ident, field)
 }
 
 #[inline]
@@ -261,7 +261,10 @@ fn visit_any(expr: Expr, field: &FlattenedSerializerField) -> Result<FieldMetada
     }
 }
 
-pub fn get_field_metadata(expr: Expr, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
+pub(crate) fn get_field_metadata(
+    expr: Expr,
+    field: &FlattenedSerializerField,
+) -> Result<FieldMetadata> {
     visit_any(expr, field)
 }
 

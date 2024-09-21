@@ -7,15 +7,15 @@ pub(crate) mod bitreader;
 pub mod demofile;
 pub mod entities;
 pub mod entityclasses;
-pub mod fielddecoder; // TODO: try to not publicly expose fielddecoder
-pub mod fieldmetadata; // TODO: try to not publicly expose fieldmetadata
+pub(crate) mod fielddecoder;
+pub(crate) mod fieldmetadata;
 pub mod fieldpath;
 pub mod fieldvalue;
 pub mod flattenedserializers;
 pub mod fxhash;
-pub mod instancebaseline;
+pub(crate) mod instancebaseline;
 pub mod parser;
-pub mod quantizedfloat; // TODO: try to not publicly expose quantizedfloat
+pub(crate) mod quantizedfloat;
 pub mod stringtables;
 
 // own crate re-exports

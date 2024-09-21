@@ -10,15 +10,15 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-pub const INSTANCE_BASELINE_TABLE_NAME: &str = "instancebaseline";
+pub(crate) const INSTANCE_BASELINE_TABLE_NAME: &str = "instancebaseline";
 
 #[derive(Default)]
-pub struct InstanceBaseline {
+pub(crate) struct InstanceBaseline {
     data: Vec<Option<Rc<UnsafeCell<Vec<u8>>>>>,
 }
 
 impl InstanceBaseline {
-    pub fn update(&mut self, string_table: &StringTable, classes: usize) -> Result<()> {
+    pub(crate) fn update(&mut self, string_table: &StringTable, classes: usize) -> Result<()> {
         if self.data.len() < classes {
             self.data.resize(classes, None);
         }
@@ -36,7 +36,7 @@ impl InstanceBaseline {
     }
 
     #[inline]
-    pub unsafe fn by_id_unchecked(&self, class_id: i32) -> &[u8] {
+    pub(crate) unsafe fn by_id_unchecked(&self, class_id: i32) -> &[u8] {
         unsafe {
             &*self
                 .data
@@ -47,9 +47,8 @@ impl InstanceBaseline {
         }
     }
 
-    // clear clears underlying storage, but this has no effect on the allocated
-    // capacity.
-    pub fn clear(&mut self) {
+    /// clear clears underlying storage, but this has no effect on the allocated capacity.
+    pub(crate) fn clear(&mut self) {
         self.data.clear();
     }
 }

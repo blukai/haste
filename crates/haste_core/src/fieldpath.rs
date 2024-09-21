@@ -631,7 +631,7 @@ lazy_static! {
     static ref FIELDOP_HIERARCHY: Node<FieldOp> = build_fieldop_hierarchy();
 }
 
-pub(crate) fn read_field_paths<'a>(br: &mut BitReader, fps: &'a mut [FieldPath]) -> usize {
+pub(crate) fn read_field_paths(br: &mut BitReader, fps: &mut [FieldPath]) -> usize {
     // NOTE: majority of field path reads are shorter then 32 (but some are beyond thousand).
 
     // it is more efficient to walk huffman tree, then to do static lookups by first accumulating
@@ -668,7 +668,7 @@ pub(crate) fn read_field_paths<'a>(br: &mut BitReader, fps: &'a mut [FieldPath])
             if fp.finished {
                 return i;
             }
-            fps[i as usize] = fp.clone();
+            fps[i] = fp.clone();
 
             i += 1;
             assert!(i <= fps.len());
