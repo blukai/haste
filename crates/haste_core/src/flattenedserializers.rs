@@ -1,18 +1,18 @@
-use crate::{
-    fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialDescriptor},
-    fxhash, vartype,
-};
+use std::hash::BuildHasherDefault;
+use std::rc::Rc;
+
 use dungers::varint;
-use hashbrown::{hash_map::Values, HashMap};
+use hashbrown::hash_map::Values;
+use hashbrown::HashMap;
 use nohash::NoHashHasher;
-use std::{hash::BuildHasherDefault, rc::Rc};
-use valveprotos::{
-    common::{
-        CDemoSendTables, CsvcMsgFlattenedSerializer, ProtoFlattenedSerializerFieldT,
-        ProtoFlattenedSerializerT,
-    },
-    prost::{self, Message},
+use valveprotos::common::{
+    CDemoSendTables, CsvcMsgFlattenedSerializer, ProtoFlattenedSerializerFieldT,
+    ProtoFlattenedSerializerT,
 };
+use valveprotos::prost::{self, Message};
+
+use crate::fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialDescriptor};
+use crate::{fxhash, vartype};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {

@@ -1,0 +1,6 @@
+# NOTE: these options require nightly, i.e.:
+# $ cargo +nightly fmt --all
+# see https://rust-lang.github.io/rustfmt/ for more info
+group_imports = "StdExternalCrate"
+imports_granularity = "Module"
+version = "Two"

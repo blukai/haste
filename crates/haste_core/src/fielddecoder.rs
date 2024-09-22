@@ -1,12 +1,12 @@
-use crate::{
-    bitreader::BitReader,
-    fieldvalue::FieldValue,
-    flattenedserializers::FlattenedSerializerField,
-    fxhash,
-    quantizedfloat::{self, QuantizedFloat},
-};
-use dyn_clone::DynClone;
 use std::fmt::Debug;
+
+use dyn_clone::DynClone;
+
+use crate::bitreader::BitReader;
+use crate::fieldvalue::FieldValue;
+use crate::flattenedserializers::FlattenedSerializerField;
+use crate::fxhash;
+use crate::quantizedfloat::{self, QuantizedFloat};
 
 // public/dt_common.h
 const DT_MAX_STRING_BITS: u32 = 9;
@@ -250,12 +250,12 @@ impl InternalF32Decoder {
                 hash if hash == fxhash::hash_bytes(b"coord") => {
                     return Ok(Self {
                         decoder: Box::<InternalF32CoordDecoder>::default(),
-                    })
+                    });
                 }
                 hash if hash == fxhash::hash_bytes(b"normal") => {
                     return Ok(Self {
                         decoder: Box::<InternalF32NormalDecoder>::default(),
-                    })
+                    });
                 }
                 _ => unimplemented!("{:?}", var_encoder),
             }
@@ -491,12 +491,12 @@ impl QAngleDecoder {
                 hash if hash == fxhash::hash_bytes(b"qangle_pitch_yaw") => {
                     return Self {
                         decoder: Box::new(InternalQAnglePitchYawDecoder { bit_count }),
-                    }
+                    };
                 }
                 hash if hash == fxhash::hash_bytes(b"qangle_precise") => {
                     return Self {
                         decoder: Box::<InternalQAnglePreciseDecoder>::default(),
-                    }
+                    };
                 }
 
                 hash if hash == fxhash::hash_bytes(b"qangle") => {}

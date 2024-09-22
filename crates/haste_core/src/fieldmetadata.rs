@@ -1,11 +1,9 @@
-use crate::{
-    fielddecoder::{
-        self, BoolDecoder, F32Decoder, FieldDecode, I64Decoder, InvalidDecoder, QAngleDecoder,
-        StringDecoder, U64Decoder, Vector2Decoder, Vector3Decoder, Vector4Decoder,
-    },
-    flattenedserializers::FlattenedSerializerField,
-    vartype::{Expr, Lit},
+use crate::fielddecoder::{
+    self, BoolDecoder, F32Decoder, FieldDecode, I64Decoder, InvalidDecoder, QAngleDecoder,
+    StringDecoder, U64Decoder, Vector2Decoder, Vector3Decoder, Vector4Decoder,
 };
+use crate::flattenedserializers::FlattenedSerializerField;
+use crate::vartype::{Expr, Lit};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {

@@ -20,7 +20,6 @@ pub mod stringtables;
 
 // own crate re-exports
 pub(crate) use haste_vartype as vartype;
-
 // external re-resports
 pub use valveprotos;
 

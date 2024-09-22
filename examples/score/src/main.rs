@@ -1,9 +1,9 @@
-use haste::{
-    entities::{fkey_from_path, DeltaHeader, Entity},
-    fxhash,
-    parser::{self, Context, Parser, Visitor},
-};
-use std::{fs::File, io::BufReader};
+use std::fs::File;
+use std::io::BufReader;
+
+use haste::entities::{fkey_from_path, DeltaHeader, Entity};
+use haste::fxhash;
+use haste::parser::{self, Context, Parser, Visitor};
 
 struct MyVisitor;
 

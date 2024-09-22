@@ -1,8 +1,9 @@
-use haste::{
-    entities::{fkey_from_path, DeltaHeader, Entity},
-    parser::{self, Context, Parser, Visitor},
-};
-use std::{collections::HashMap, fs::File, io::BufReader};
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::BufReader;
+
+use haste::entities::{fkey_from_path, DeltaHeader, Entity};
+use haste::parser::{self, Context, Parser, Visitor};
 
 // public/const.h
 const LIFE_ALIVE: u8 = 0; // alive

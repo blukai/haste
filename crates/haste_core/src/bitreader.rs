@@ -1,6 +1,5 @@
-use dungers::bitbuf;
-
 pub use bitbuf::Error as BitReaderError;
+use dungers::bitbuf;
 
 // public/coordsize.h
 const COORD_INTEGER_BITS: usize = 14;
@@ -22,7 +21,10 @@ pub struct BitReader<'a> {
 impl<'a> Drop for BitReader<'a> {
     #[inline]
     fn drop(&mut self) {
-        assert!(self.did_check_overflow, "when you are done reading, you must call `is_overflowed` to ensure that there were no out of bounds reads");
+        assert!(
+            self.did_check_overflow,
+            "when you are done reading, you must call `is_overflowed` to ensure that there were no out of bounds reads"
+        );
     }
 }
 

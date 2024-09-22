@@ -1,11 +1,9 @@
-use haste::{
-    parser::{self, Context, Parser, Visitor},
-    valveprotos::{
-        dota2::{CdotaUserMsgChatMessage, EDotaUserMessages},
-        prost::Message,
-    },
-};
-use std::{fs::File, io::BufReader};
+use std::fs::File;
+use std::io::BufReader;
+
+use haste::parser::{self, Context, Parser, Visitor};
+use haste::valveprotos::dota2::{CdotaUserMsgChatMessage, EDotaUserMessages};
+use haste::valveprotos::prost::Message;
 
 struct MyVisitor;
 

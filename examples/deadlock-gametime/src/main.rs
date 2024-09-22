@@ -1,3 +1,6 @@
+use std::fs::File;
+use std::io::BufReader;
+
 /// this example shows how to compute game time in deadlock.
 ///
 /// logic for dota 2 would be different. if you need an example - open an issue on github.
@@ -10,7 +13,6 @@ use haste::{
         prost::Message,
     },
 };
-use std::{fs::File, io::BufReader};
 
 const DEADLOCK_GAMERULES_ENTITY: u64 = fxhash::hash_bytes(b"CCitadelGameRulesProxy");
 

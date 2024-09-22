@@ -1,4 +1,6 @@
-use std::{cmp::Ordering, collections::BinaryHeap, fmt::Debug};
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
+use std::fmt::Debug;
 
 use lazy_static::lazy_static;
 

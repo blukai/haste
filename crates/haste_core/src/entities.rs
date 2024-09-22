@@ -1,18 +1,20 @@
-use crate::{
-    bitreader::{BitReader, BitReaderError},
-    entityclasses::EntityClasses,
-    fielddecoder::{self, FieldDecodeContext},
-    fieldpath::{self, FieldPath},
-    fieldvalue::{FieldValue, FieldValueConversionError},
-    flattenedserializers::{
-        FlattenedSerializer, FlattenedSerializerContainer, FlattenedSerializerField,
-    },
-    fxhash,
-    instancebaseline::InstanceBaseline,
-};
-use hashbrown::{hash_map::Entry, HashMap};
+use std::hash::BuildHasherDefault;
+use std::rc::Rc;
+
+use hashbrown::hash_map::Entry;
+use hashbrown::HashMap;
 use nohash::NoHashHasher;
-use std::{hash::BuildHasherDefault, rc::Rc};
+
+use crate::bitreader::{BitReader, BitReaderError};
+use crate::entityclasses::EntityClasses;
+use crate::fielddecoder::{self, FieldDecodeContext};
+use crate::fieldpath::{self, FieldPath};
+use crate::fieldvalue::{FieldValue, FieldValueConversionError};
+use crate::flattenedserializers::{
+    FlattenedSerializer, FlattenedSerializerContainer, FlattenedSerializerField,
+};
+use crate::fxhash;
+use crate::instancebaseline::InstanceBaseline;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -364,6 +366,7 @@ impl EntityContainer {
                 1024,
                 BuildHasherDefault::default(),
             ),
+
             // NOTE: 4096 is an arbitrary value that is large enough that that came out of printing
             // out count of fps collected per "run". (sort -nr can be handy)
             field_paths: vec![FieldPath::default(); 4096],

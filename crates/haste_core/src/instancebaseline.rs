@@ -1,5 +1,7 @@
+use std::cell::UnsafeCell;
+use std::rc::Rc;
+
 use crate::stringtables::StringTable;
-use std::{cell::UnsafeCell, rc::Rc};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {

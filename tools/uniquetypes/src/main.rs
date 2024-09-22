@@ -1,14 +1,12 @@
-use std::{collections::HashSet, fs::File, io::BufReader};
+use std::collections::HashSet;
+use std::fs::File;
+use std::io::BufReader;
 
 use anyhow::{Context, Result};
 use dungers::varint;
-use haste::{
-    demofile::DemoFile,
-    valveprotos::{
-        common::{CDemoSendTables, CsvcMsgFlattenedSerializer, EDemoCommands},
-        prost::Message,
-    },
-};
+use haste::demofile::DemoFile;
+use haste::valveprotos::common::{CDemoSendTables, CsvcMsgFlattenedSerializer, EDemoCommands};
+use haste::valveprotos::prost::Message;
 use haste_vartype::{TokenKind, Tokenizer};
 
 fn resolve_sym(

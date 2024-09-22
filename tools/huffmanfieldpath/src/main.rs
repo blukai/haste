@@ -7,7 +7,9 @@
 // it is not so cool to blindly rely on someone else's undocumented findings; it
 // feels better to build a deeper understanding of what's going on.
 
-use std::{cmp::Ordering, collections::BinaryHeap, fmt::Debug};
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
+use std::fmt::Debug;
 
 // NOTE: names and weights are stolen from butterfly; in ghidra it is possible
 // to find names (in string search); it is also possible to find where huffman

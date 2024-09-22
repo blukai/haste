@@ -1,22 +1,20 @@
-use crate::{
-    bitreader::BitReader,
-    demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_BUFFER_SIZE, DEMO_HEADER_SIZE},
-    entities::{DeltaHeader, Entity, EntityContainer},
-    entityclasses::EntityClasses,
-    fielddecoder::FieldDecodeContext,
-    flattenedserializers::FlattenedSerializerContainer,
-    instancebaseline::{InstanceBaseline, INSTANCE_BASELINE_TABLE_NAME},
-    stringtables::StringTableContainer,
-};
 use std::io::{Read, Seek, SeekFrom};
-use valveprotos::{
-    common::{
-        CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables,
-        CDemoStringTables, CsvcMsgCreateStringTable, CsvcMsgPacketEntities, CsvcMsgServerInfo,
-        CsvcMsgUpdateStringTable, EDemoCommands, SvcMessages,
-    },
-    prost::Message,
+
+use valveprotos::common::{
+    CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables,
+    CDemoStringTables, CsvcMsgCreateStringTable, CsvcMsgPacketEntities, CsvcMsgServerInfo,
+    CsvcMsgUpdateStringTable, EDemoCommands, SvcMessages,
 };
+use valveprotos::prost::Message;
+
+use crate::bitreader::BitReader;
+use crate::demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_BUFFER_SIZE, DEMO_HEADER_SIZE};
+use crate::entities::{DeltaHeader, Entity, EntityContainer};
+use crate::entityclasses::EntityClasses;
+use crate::fielddecoder::FieldDecodeContext;
+use crate::flattenedserializers::FlattenedSerializerContainer;
+use crate::instancebaseline::{InstanceBaseline, INSTANCE_BASELINE_TABLE_NAME};
+use crate::stringtables::StringTableContainer;
 
 // as can be observed when dumping commands. also as specified in clarity
 // (src/main/java/skadistats/clarity/model/engine/AbstractDotaEngineType.java)
@@ -49,10 +47,10 @@ pub struct Context {
     serializers: Option<FlattenedSerializerContainer>,
     entity_classes: Option<EntityClasses>,
     entities: EntityContainer,
-    tick: i32,
-    prev_tick: i32,
     tick_interval: f32,
     full_packet_interval: i32,
+    tick: i32,
+    prev_tick: i32,
 }
 
 impl Context {
@@ -87,13 +85,13 @@ impl Context {
     }
 
     #[inline]
-    pub fn tick(&self) -> i32 {
-        self.tick
+    pub fn tick_interval(&self) -> f32 {
+        self.tick_interval
     }
 
     #[inline]
-    pub fn tick_interval(&self) -> f32 {
-        self.tick_interval
+    pub fn tick(&self) -> i32 {
+        self.tick
     }
 }
 
@@ -165,10 +163,10 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 instance_baseline: InstanceBaseline::default(),
                 serializers: None,
                 entity_classes: None,
-                tick: -1,
-                prev_tick: -1,
                 tick_interval: DEFAULT_TICK_INTERVAL,
                 full_packet_interval: DEFAULT_FULL_PACKET_INTERVAL,
+                tick: -1,
+                prev_tick: -1,
             },
             field_decode_ctx: FieldDecodeContext {
                 tick_interval: DEFAULT_TICK_INTERVAL,

@@ -1,13 +1,11 @@
-use haste::{
-    entities::{deadlock_coord_from_cell, fkey_from_path, DeltaHeader, Entity},
-    fxhash,
-    parser::{self, Context, Parser, Visitor},
-};
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    fs::File,
-    io::BufReader,
-};
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::BufReader;
+
+use haste::entities::{deadlock_coord_from_cell, fkey_from_path, DeltaHeader, Entity};
+use haste::fxhash;
+use haste::parser::{self, Context, Parser, Visitor};
 
 fn get_entity_coord(entity: &Entity, cell_key: &u64, vec_key: &u64) -> Option<f32> {
     let cell: u16 = entity.get_value(cell_key)?;

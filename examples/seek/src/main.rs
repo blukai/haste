@@ -1,6 +1,9 @@
+use std::fs::File;
+use std::io::BufReader;
+use std::time::Instant;
+
 use haste::parser::Parser;
 use rand::Rng;
-use std::{fs::File, io::BufReader, time::Instant};
 
 const N_SEEKS: u64 = 1000;
 

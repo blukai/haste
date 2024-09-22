@@ -1,5 +1,6 @@
-use crate::fxhash;
 use valveprotos::common::CDemoClassInfo;
+
+use crate::fxhash;
 
 #[derive(Clone)]
 pub struct ClassInfo {

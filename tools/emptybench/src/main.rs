@@ -1,5 +1,7 @@
+use std::fs::File;
+use std::io::BufReader;
+
 use haste::parser::Parser;
-use std::{fs::File, io::BufReader};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 

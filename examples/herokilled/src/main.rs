@@ -1,12 +1,12 @@
-use std::{collections::HashMap, fs::File, io::BufReader};
+use std::collections::HashMap;
+use std::fs::File;
+use std::io::BufReader;
 
 use handler::HandlerVisitor;
-use haste::{
-    entities::{self, Entity},
-    parser::{self, Context, Parser},
-    stringtables::StringTable,
-    valveprotos::deadlock::{CCitadelUserMsgHeroKilled, CitadelUserMessageIds},
-};
+use haste::entities::{self, Entity};
+use haste::parser::{self, Context, Parser};
+use haste::stringtables::StringTable;
+use haste::valveprotos::deadlock::{CCitadelUserMsgHeroKilled, CitadelUserMessageIds};
 
 mod handler;
 
