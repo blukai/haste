@@ -1,17 +1,17 @@
 use crate::fielddecoder::{
-    self, BoolDecoder, F32Decoder, FieldDecode, I64Decoder, InvalidDecoder, QAngleDecoder,
-    StringDecoder, U64Decoder, Vector2Decoder, Vector3Decoder, Vector4Decoder,
+    BoolDecoder, F32Decoder, FieldDecode, I64Decoder, InvalidDecoder, QAngleDecoder, StringDecoder,
+    U64Decoder, Vector2Decoder, Vector3Decoder, Vector4Decoder,
 };
 use crate::flattenedserializers::FlattenedSerializerField;
+use crate::quantizedfloat;
 use crate::vartype::{Expr, Lit};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("unknown array length ident: {0}")]
     UnknownArrayLenIdent(String),
-    // crate
     #[error(transparent)]
-    FieldDecoder(#[from] fielddecoder::Error),
+    QuantizedFloatError(#[from] quantizedfloat::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

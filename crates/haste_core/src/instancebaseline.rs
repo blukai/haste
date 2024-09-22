@@ -1,16 +1,8 @@
 use std::cell::UnsafeCell;
+use std::num::ParseIntError;
 use std::rc::Rc;
 
 use crate::stringtables::StringTable;
-
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    // std
-    #[error(transparent)]
-    ParseIntError(#[from] std::num::ParseIntError),
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
 
 pub(crate) const INSTANCE_BASELINE_TABLE_NAME: &str = "instancebaseline";
 
@@ -20,7 +12,11 @@ pub(crate) struct InstanceBaseline {
 }
 
 impl InstanceBaseline {
-    pub(crate) fn update(&mut self, string_table: &StringTable, classes: usize) -> Result<()> {
+    pub(crate) fn update(
+        &mut self,
+        string_table: &StringTable,
+        classes: usize,
+    ) -> Result<(), ParseIntError> {
         if self.data.len() < classes {
             self.data.resize(classes, None);
         }

@@ -13,15 +13,6 @@ const DT_MAX_STRING_BITS: u32 = 9;
 /// maximum length of a string that can be sent.
 const DT_MAX_STRING_BUFFERSIZE: u32 = 1 << DT_MAX_STRING_BITS;
 
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    // crate
-    #[error(transparent)]
-    QuantizedFloat(#[from] quantizedfloat::Error),
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
-
 // NOTE: PropTypeFns (from csgo source code) is what you are looking for, it has all the encoders,
 // decoders, proxies and all of the stuff.
 
@@ -210,7 +201,7 @@ struct InternalQuantizedFloatDecoder {
 
 impl InternalQuantizedFloatDecoder {
     #[inline]
-    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self> {
+    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self, quantizedfloat::Error> {
         Ok(Self {
             quantized_float: QuantizedFloat::new(
                 field.bit_count.unwrap_or_default(),
@@ -236,7 +227,7 @@ pub(crate) struct InternalF32Decoder {
 }
 
 impl InternalF32Decoder {
-    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self> {
+    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self, quantizedfloat::Error> {
         if field.var_name.hash == fxhash::hash_bytes(b"m_flSimulationTime")
             || field.var_name.hash == fxhash::hash_bytes(b"m_flAnimTime")
         {
@@ -290,7 +281,7 @@ pub(crate) struct F32Decoder {
 
 impl F32Decoder {
     #[inline]
-    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self> {
+    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self, quantizedfloat::Error> {
         Ok(Self {
             decoder: Box::new(InternalF32Decoder::new(field)?),
         })
@@ -337,7 +328,7 @@ pub(crate) struct Vector3Decoder {
 
 impl Vector3Decoder {
     #[inline]
-    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self> {
+    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self, quantizedfloat::Error> {
         if field.var_encoder_heq(fxhash::hash_bytes(b"normal")) {
             Ok(Self {
                 decoder: Box::<InternalVector3NormalDecoder>::default(),
@@ -367,7 +358,7 @@ pub(crate) struct Vector2Decoder {
 
 impl Vector2Decoder {
     #[inline]
-    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self> {
+    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self, quantizedfloat::Error> {
         Ok(Self {
             decoder: Box::new(InternalF32Decoder::new(field)?),
         })
@@ -390,7 +381,7 @@ pub(crate) struct Vector4Decoder {
 
 impl Vector4Decoder {
     #[inline]
-    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self> {
+    pub(crate) fn new(field: &FlattenedSerializerField) -> Result<Self, quantizedfloat::Error> {
         Ok(Self {
             decoder: Box::new(InternalF32Decoder::new(field)?),
         })

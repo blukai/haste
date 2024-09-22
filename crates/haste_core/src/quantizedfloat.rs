@@ -1,13 +1,10 @@
 use crate::bitreader::BitReader;
 
-// NOTE: this is composite of stuff from butterfly, clarity, manta and leaked
-// csgo.
+// NOTE: this is composite of stuff from butterfly, clarity, manta and leaked csgo.
 
 // TODO: more errors, treat what clarity treats as warnings as errors?
-
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    // mod
     #[error("encode flags are both round up and down, these flags are mutually exclusive")]
     InvalidEncodeFlags,
     #[error("invalid range")]

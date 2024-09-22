@@ -7,7 +7,7 @@ use nohash::NoHashHasher;
 
 use crate::bitreader::{BitReader, BitReaderOverflowError};
 use crate::entityclasses::EntityClasses;
-use crate::fielddecoder::{self, FieldDecodeContext};
+use crate::fielddecoder::FieldDecodeContext;
 use crate::fieldpath::{self, FieldPath};
 use crate::fieldvalue::{FieldValue, FieldValueConversionError};
 use crate::flattenedserializers::{
@@ -18,9 +18,6 @@ use crate::instancebaseline::InstanceBaseline;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
-    // crate
-    #[error(transparent)]
-    FieldDecoder(#[from] fielddecoder::Error),
     #[error(transparent)]
     BitReaderOverflowError(#[from] BitReaderOverflowError),
     #[error("field does not exist")]
