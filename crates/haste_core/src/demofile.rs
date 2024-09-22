@@ -80,9 +80,12 @@ pub struct DemoFile<R: Read + Seek> {
 }
 
 impl<R: Read + Seek> DemoFile<R> {
-    // TODO: maybe read demo header in constructor and return a result. or maybe
-    // document and make it clear somehow that it is required to call
-    // read_demo_header upon doing anything else.
+    /// creates a new [`DemoFile`] instance from the given reader.
+    ///
+    /// # note
+    ///
+    /// after creating a [`DemoFile`] instance, you must call [`Self::read_demo_header`] before
+    /// using any other methods. failure to do so will result in panics!
     pub fn from_reader(rdr: R) -> Self {
         Self {
             rdr,
@@ -90,6 +93,51 @@ impl<R: Read + Seek> DemoFile<R> {
             demo_header: None,
             file_info: None,
         }
+    }
+
+    // ----
+
+    // void SeekTo( int position, bool bRead );
+    //
+    /// delegated from [`std::io::Seek`].
+    #[inline]
+    pub fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
+        self.rdr.seek(pos).map_err(Error::Io)
+    }
+
+    // unsigned int GetCurPos( bool bRead );
+    //
+    /// delegated from [`std::io::Seek`].
+    ///
+    /// # note
+    ///
+    /// be aware that this method can be quite expensive. it might be best to make sure not to call
+    /// it too frequently.
+    #[inline]
+    pub fn stream_position(&mut self) -> Result<u64> {
+        self.rdr.stream_position().map_err(Error::Io)
+    }
+
+    // int GetSize();
+    //
+    /// reimplementation of nightly [`std::io::Seek::stream_len`].
+    pub fn stream_len(&mut self) -> Result<u64> {
+        let old_pos = self.rdr.stream_position()?;
+        let len = self.rdr.seek(SeekFrom::End(0))?;
+
+        // avoid seeking a third time when we were already at the end of the
+        // stream. the branch is usually way cheaper than a seek operation.
+        if old_pos != len {
+            self.rdr.seek(SeekFrom::Start(old_pos))?;
+        }
+
+        Ok(len)
+    }
+
+    /// when continuously reading cmds in a loop this method can help to determine when to stop.
+    #[inline(always)]
+    pub fn is_eof(&mut self) -> Result<bool> {
+        Ok(self.stream_position()? == self.stream_len()?)
     }
 
     // ----
@@ -124,7 +172,7 @@ impl<R: Read + Seek> DemoFile<R> {
             spawngroups_offset,
         });
 
-        Ok(unsafe { self.demo_header_unchecked() })
+        Ok(self.unwrap_demo_header())
     }
 
     // NOTE: demo_header will call read_demo_header if demo header have not been
@@ -133,14 +181,13 @@ impl<R: Read + Seek> DemoFile<R> {
         if self.demo_header.is_none() {
             self.read_demo_header()
         } else {
-            Ok(unsafe { self.demo_header_unchecked() })
+            Ok(self.unwrap_demo_header())
         }
     }
 
-    // NOTE: demo_header_unchecked can be useful when you're sure that
-    // read_demo_header was called
-    pub unsafe fn demo_header_unchecked(&self) -> &DemoHeader {
-        self.demo_header.as_ref().unwrap_unchecked()
+    /// safe to use when you're sure that [`Self::read_demo_header`] was already called.
+    pub fn unwrap_demo_header(&self) -> &DemoHeader {
+        self.demo_header.as_ref().unwrap()
     }
 
     // ----
@@ -224,59 +271,6 @@ impl<R: Read + Seek> DemoFile<R> {
 
     // ----
 
-    // void SeekTo( int position, bool bRead );
-    //
-    // copypasta from rust io::Seek (that is used under the hood):
-    // > If the seek operation completed successfully, this method returns the
-    // > new position from the start of the stream. That position can be used
-    // > later with SeekFrom::Start.
-    #[inline(always)]
-    pub fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
-        self.rdr.seek(pos).map_err(Error::Io)
-    }
-
-    // unsigned int GetCurPos( bool bRead );
-    #[inline(always)]
-    pub fn stream_position(&mut self) -> Result<u64> {
-        self.rdr.stream_position().map_err(Error::Io)
-    }
-
-    // int GetSize();
-    //
-    // NOTE: Seek has stream_len method, but it's nigtly-only experimental
-    // thing; at this point i would like to minimize use of non-stable features
-    // (and bring then down to 0 eventually). what you see below is a copy-pasta
-    // of rust's current implementation of it.
-    //
-    // quote from rust doc: > Note that length of a stream can change over time
-    // (for example, when data is appended to a file). So calling this method
-    // multiple times does not necessarily return the same length each time.
-    pub fn stream_len(&mut self) -> Result<u64> {
-        let old_pos = self.rdr.stream_position()?;
-        let len = self.rdr.seek(SeekFrom::End(0))?;
-
-        // Avoid seeking a third time when we were already at the end of the
-        // stream. The branch is usually way cheaper than a seek operation.
-        if old_pos != len {
-            self.rdr.seek(SeekFrom::Start(old_pos))?;
-        }
-
-        Ok(len)
-    }
-
-    #[inline(always)]
-    pub fn is_eof(&mut self) -> Result<bool> {
-        Ok(self.stream_position()? == self.stream_len()?)
-    }
-
-    // ----
-
-    // NOTE: if for some reason performance for file info stuff is critically
-    // important - make sure to call read_file_info instead of relying on
-    // file_info method and probably introduce _unchecked variants of
-    // ticks_per_second, and others to avoid couple of branches... it is very
-    // unlikely that this will we worth it though.
-
     pub fn read_file_info(&mut self) -> Result<&CDemoFileInfo> {
         debug_assert!(
             self.demo_header.is_some(),
@@ -289,7 +283,10 @@ impl<R: Read + Seek> DemoFile<R> {
 
         let backup = self.stream_position()?;
 
-        let demo_header = unsafe { self.demo_header_unchecked() };
+        // NOTE: before any other method of DemoFile can be called consumer must call
+        // read_demo_header method. it is safe to unwrap here because otherwise it is a failure of
+        // consumer xd.
+        let demo_header = self.unwrap_demo_header();
         self.seek(SeekFrom::Start(demo_header.fileinfo_offset as u64))?;
 
         let cmd_header = self.read_cmd_header()?;
@@ -301,7 +298,7 @@ impl<R: Read + Seek> DemoFile<R> {
 
         self.seek(SeekFrom::Start(backup))?;
 
-        Ok(unsafe { self.file_info_unchecked() })
+        Ok(self.unwrap_file_info())
     }
 
     // NOTE: file_info will call read_file_info if file info have not been read
@@ -309,14 +306,13 @@ impl<R: Read + Seek> DemoFile<R> {
         if self.file_info.is_none() {
             self.read_file_info()
         } else {
-            Ok(unsafe { self.file_info_unchecked() })
+            Ok(self.unwrap_file_info())
         }
     }
 
-    // NOTE: file_info_unchecked can be useful when you're sure that
-    // read_file_info was called
-    pub unsafe fn file_info_unchecked(&self) -> &CDemoFileInfo {
-        self.file_info.as_ref().unwrap_unchecked()
+    /// safe to use when you're sure that [`Self::read_file_info`] was already called.
+    pub fn unwrap_file_info(&self) -> &CDemoFileInfo {
+        self.file_info.as_ref().unwrap()
     }
 
     // virtual float GetTicksPerSecond() OVERRIDE;

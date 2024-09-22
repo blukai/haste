@@ -597,10 +597,9 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     /// delegated from [`DemoFile`].
     #[inline]
     pub fn demo_header(&self) -> &DemoHeader {
-        // SAFETY: it is safe to call unchecked method here becuase Self's
-        // constructor will return an error if demo header check (that is
-        // executed during the construction) fails.
-        unsafe { self.demo_file.demo_header_unchecked() }
+        // NOTE: it is safe to call unwrap method here becuase Self's constructor will return an
+        // error if demo header check (that is executed during the construction) fails.
+        self.demo_file.unwrap_demo_header()
     }
 
     /// delegated from [`DemoFile`].
