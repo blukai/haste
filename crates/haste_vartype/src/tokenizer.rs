@@ -1,6 +1,6 @@
 use dungers::charsor::Charsor;
 
-use crate::{Error, Result, Span};
+use crate::{Error, Span};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TokenKind<'a> {
@@ -86,7 +86,7 @@ impl<'a> Tokenizer<'a> {
     }
 
     #[inline(always)]
-    fn next_token(&mut self) -> Option<Result<Token<'a>>> {
+    fn next_token(&mut self) -> Option<Result<Token<'a>, Error>> {
         loop {
             let Some(ch) = self.cursor.next() else {
                 break None;
@@ -110,7 +110,7 @@ impl<'a> Tokenizer<'a> {
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
-    type Item = Result<Token<'a>>;
+    type Item = Result<Token<'a>, Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.next_token()
@@ -134,7 +134,7 @@ CDOTA_AbilityDraftAbilityState[MAX_ABILITY_DRAFT_ABILITIES]
             "#;
 
         let tokenizer = Tokenizer::new(INPUT);
-        let tokens: Vec<Result<Token>> = tokenizer.collect();
+        let tokens: Vec<Result<Token, Error>> = tokenizer.collect();
 
         let expected = expect![[r#"
             [

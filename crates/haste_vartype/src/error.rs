@@ -7,5 +7,3 @@ pub enum Error {
     #[error("unexpected token at {0}")]
     UnexpectedToken(u16),
 }
-
-pub type Result<T> = std::result::Result<T, Error>;

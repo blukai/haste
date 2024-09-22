@@ -1,4 +1,4 @@
-use crate::{Error, Result, Token, TokenKind, Tokenizer};
+use crate::{Error, Token, TokenKind, Tokenizer};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Lit<'a> {
@@ -36,7 +36,7 @@ impl<'a> Parser<'a> {
     }
 
     #[inline(always)]
-    fn next_token(&mut self) -> Result<Option<Token<'a>>> {
+    fn next_token(&mut self) -> Result<Option<Token<'a>>, Error> {
         if let Some(token) = self.prev_token.take() {
             Ok(Some(token))
         } else {
@@ -45,7 +45,7 @@ impl<'a> Parser<'a> {
     }
 
     #[inline(always)]
-    fn expect_token<F>(&mut self, f: F) -> Result<Token<'a>>
+    fn expect_token<F>(&mut self, f: F) -> Result<Token<'a>, Error>
     where
         F: FnOnce(&TokenKind<'a>) -> bool,
     {
@@ -56,7 +56,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse(&mut self) -> Result<Expr<'a>> {
+    fn parse(&mut self) -> Result<Expr<'a>, Error> {
         let first = self.expect_token(|k| matches!(k, TokenKind::Ident(_)))?;
         let TokenKind::Ident(ident) = first.kind else {
             unreachable!();
@@ -107,7 +107,7 @@ impl<'a> Parser<'a> {
     }
 }
 
-pub fn parse(input: &str) -> Result<Expr> {
+pub fn parse(input: &str) -> Result<Expr, Error> {
     Parser::new(input).parse()
 }
 
@@ -142,7 +142,7 @@ mod tests {
     }
 
     #[test]
-    fn it_works() -> Result<()> {
+    fn it_works() -> Result<(), Error> {
         const INPUTS: [&'static str; 5] = [
             "uint64[256]",
             "CDOTAGameManager*",
@@ -151,7 +151,7 @@ mod tests {
             "CDOTA_AbilityDraftAbilityState[MAX_ABILITY_DRAFT_ABILITIES]",
         ];
 
-        let mut outputs: Vec<Result<Expr<'static>>> = Vec::with_capacity(INPUTS.len());
+        let mut outputs: Vec<Result<Expr<'static>, Error>> = Vec::with_capacity(INPUTS.len());
 
         INPUTS.iter().for_each(|input| outputs.push(parse(input)));
 
