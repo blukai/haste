@@ -19,8 +19,10 @@ pub(crate) mod quantizedfloat;
 pub mod stringtables;
 
 // own crate re-exports
-pub use haste_protos as protos;
 pub(crate) use haste_vartype as vartype;
+
+// external re-resports
+pub use valveprotos;
 
 // TOOD: more optimizations, specifically look into
 // https://agourlay.github.io/rust-performance-retrospective-part2/

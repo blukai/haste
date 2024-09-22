@@ -6,14 +6,17 @@ use crate::{
     fielddecoder::FieldDecodeContext,
     flattenedserializers::FlattenedSerializerContainer,
     instancebaseline::{InstanceBaseline, INSTANCE_BASELINE_TABLE_NAME},
-    protos::{
-        prost::Message, CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoPacket,
-        CDemoSendTables, CDemoStringTables, CsvcMsgCreateStringTable, CsvcMsgPacketEntities,
-        CsvcMsgServerInfo, CsvcMsgUpdateStringTable, EDemoCommands, SvcMessages,
-    },
     stringtables::StringTableContainer,
 };
 use std::io::{Read, Seek, SeekFrom};
+use valveprotos::{
+    common::{
+        CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables,
+        CDemoStringTables, CsvcMsgCreateStringTable, CsvcMsgPacketEntities, CsvcMsgServerInfo,
+        CsvcMsgUpdateStringTable, EDemoCommands, SvcMessages,
+    },
+    prost::Message,
+};
 
 // as can be observed when dumping commands. also as specified in clarity
 // (src/main/java/skadistats/clarity/model/engine/AbstractDotaEngineType.java)

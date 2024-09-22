@@ -1,10 +1,8 @@
-use crate::{
-    bitreader::BitReader,
-    protos::{c_demo_string_tables, CDemoStringTables},
-};
+use crate::bitreader::BitReader;
 use hashbrown::HashMap;
 use nohash::NoHashHasher;
 use std::{cell::UnsafeCell, hash::BuildHasherDefault, mem::MaybeUninit, rc::Rc};
+use valveprotos::common::{c_demo_string_tables, CDemoStringTables};
 
 // NOTE: some info about string tables is available at
 // https://developer.valvesoftware.com/wiki/Networking_Events_%26_Messages#String_Tables

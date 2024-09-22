@@ -13,7 +13,6 @@ edition = "2021"
 # internal
 haste = { path = "." }
 haste_core = { path = "crates/haste_core" }
-haste_protos = { path = "crates/haste_protos" }
 haste_vartype = { path = "crates/haste_vartype" }
 # external
 anyhow = "1.0.86"
@@ -23,12 +22,10 @@ expect-test = "1.5.0"
 hashbrown = { version = "0.14.5", default-features = false, features = ["inline-more"]  }
 lazy_static = "1.5.0"
 nohash = "0.2.0"
-prost = "0.13.2"
-prost-build = "0.13.2"
-protobuf-src = "2.1.0"
 rand = "0.8.5"
 snap = "1.1.1"
 thiserror = "1.0.63"
+valveprotos = { git = "https://github.com/blukai/valveprotos-rs.git", rev = "1c2d9139c4fb373843cbd0915fbfa807c65c4fe1", features = ["protobuf-src"] }
 which = "6.0.3"
 
 [package]

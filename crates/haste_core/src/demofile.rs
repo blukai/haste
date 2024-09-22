@@ -1,9 +1,9 @@
-use crate::protos::{
-    prost::{self, Message},
-    CDemoFileInfo, EDemoCommands,
-};
 use dungers::varint;
 use std::io::{Read, Seek, SeekFrom};
+use valveprotos::{
+    common::{CDemoFileInfo, EDemoCommands},
+    prost::{self, Message},
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {

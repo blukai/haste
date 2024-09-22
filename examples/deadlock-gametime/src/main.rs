@@ -5,7 +5,10 @@ use haste::{
     entities::{fkey_from_path, DeltaHeader, Entity},
     fxhash,
     parser::{self, Context, Parser, Visitor},
-    protos::{self, prost::Message},
+    valveprotos::{
+        common::{CnetMsgTick, EDemoCommands, NetMessages},
+        prost::Message,
+    },
 };
 use std::{fs::File, io::BufReader};
 
@@ -26,7 +29,7 @@ struct MyVisitor {
 
 impl MyVisitor {
     fn handle_net_tick(&mut self, data: &[u8]) -> anyhow::Result<()> {
-        let msg = protos::CnetMsgTick::decode(data)?;
+        let msg = CnetMsgTick::decode(data)?;
         if let Some(net_tick) = msg.tick {
             self.net_tick = net_tick;
         }
@@ -73,15 +76,14 @@ impl Visitor for MyVisitor {
     ) -> parser::Result<()> {
         // DemSyncTick indicates that all initialization messages were handled and now actual data
         // will flow; at this point tick interval is known.
-        if self.tick_interval.is_none() && cmd_header.command == protos::EDemoCommands::DemSyncTick
-        {
+        if self.tick_interval.is_none() && cmd_header.command == EDemoCommands::DemSyncTick {
             self.tick_interval = Some(ctx.tick_interval());
         }
         Ok(())
     }
 
     fn on_packet(&mut self, _ctx: &Context, packet_type: u32, data: &[u8]) -> parser::Result<()> {
-        if packet_type == protos::NetMessages::NetTick as u32 {
+        if packet_type == NetMessages::NetTick as u32 {
             self.handle_net_tick(data)?;
         }
         Ok(())

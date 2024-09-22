@@ -7,17 +7,16 @@ edition.workspace = true
 dungers = { workspace = true, features = ["varint", "bitbuf"] }
 dyn-clone.workspace = true
 hashbrown.workspace = true
-haste_protos.workspace = true
 haste_vartype.workspace = true
+lazy_static.workspace = true
 nohash.workspace = true
-prost.workspace = true
 snap.workspace = true
 thiserror.workspace = true
-lazy_static.workspace = true
+valveprotos.workspace = true
 
 [features]
-deadlock = ["haste_protos/deadlock"]
-dota2 = ["haste_protos/dota2"]
+deadlock = ["valveprotos/deadlock"]
+dota2 = ["valveprotos/dota2"]
 # TODO(blukai): rename preserve-metadata feature into something more meaningful,
 # or get rid of it all together and preserve symbols only in debug builds.
 preserve-metadata = []

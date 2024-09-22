@@ -4,7 +4,10 @@ use anyhow::{Context, Result};
 use dungers::varint;
 use haste::{
     demofile::DemoFile,
-    protos::{prost::Message, CDemoSendTables, CsvcMsgFlattenedSerializer, EDemoCommands},
+    valveprotos::{
+        common::{CDemoSendTables, CsvcMsgFlattenedSerializer, EDemoCommands},
+        prost::Message,
+    },
 };
 use haste_vartype::{TokenKind, Tokenizer};
 

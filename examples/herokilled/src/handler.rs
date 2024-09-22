@@ -1,6 +1,9 @@
 use std::marker::PhantomData;
 
-use haste::parser::{self, Context, Visitor};
+use haste::{
+    parser::{self, Context, Visitor},
+    valveprotos::prost,
+};
 
 pub trait MessageHandler<S, M: prost::Message + Default> {
     fn handle(&self, state: &mut S, ctx: &Context, message: &M) -> parser::Result<()>;

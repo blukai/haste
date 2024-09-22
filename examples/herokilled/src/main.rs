@@ -4,8 +4,8 @@ use handler::HandlerVisitor;
 use haste::{
     entities::{self, Entity},
     parser::{self, Context, Parser},
-    protos::{self, CCitadelUserMsgHeroKilled},
     stringtables::StringTable,
+    valveprotos::deadlock::{CCitadelUserMsgHeroKilled, CitadelUserMessageIds},
 };
 
 mod handler;
@@ -83,7 +83,7 @@ fn main() -> Result<()> {
     let buf_reader = BufReader::new(file);
     let state = State::default();
     let mut visitor = HandlerVisitor::with_state(state).with(
-        protos::CitadelUserMessageIds::KEUserMsgHeroKilled as u32,
+        CitadelUserMessageIds::KEUserMsgHeroKilled as u32,
         hero_killed,
     );
     let mut parser = Parser::from_reader_with_visitor(buf_reader, &mut visitor)?;

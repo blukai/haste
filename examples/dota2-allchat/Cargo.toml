@@ -5,4 +5,3 @@ edition.workspace = true
 
 [dependencies]
 haste = { workspace = true, features = ["dota2"] }
-prost.workspace = true
