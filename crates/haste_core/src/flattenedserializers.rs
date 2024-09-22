@@ -20,7 +20,7 @@ pub enum Error {
     #[error(transparent)]
     Prost(#[from] prost::DecodeError),
     #[error(transparent)]
-    Varint(#[from] varint::Error),
+    ReadVarintError(#[from] varint::ReadVarintError),
     // crate
     #[error(transparent)]
     FieldMetadata(#[from] fieldmetadata::Error),
@@ -66,10 +66,10 @@ impl From<&String> for Symbol {
 // or build a symbol table from symbols (string cache?)
 
 /// note about missing `field_serializer_version` field (from
-/// [crate::protos::ProtoFlattenedSerializerField_t]): i did not find any evidence of it being used
-/// nor any breakage or data corruptions. it is possible that i missed something. but unless proven
-/// otherwise i don't see a reason for incorporating it. field serializers always reference
-/// "highest" version of serializer.
+/// [`valveprotos::common::ProtoFlattenedSerializerFieldT`]): i did not find any evidence of it
+/// being used nor any breakage or data corruptions. it is possible that i missed something. but
+/// unless proven otherwise i don't see a reason for incorporating it. field serializers always
+/// reference "highest" version of serializer.
 ///
 /// it might be reasonable to actually incorporate it if there will be a need to run this parser in
 /// an environment that processes high volumes of replays. theoretically flattened serializers can
@@ -166,10 +166,11 @@ impl FlattenedSerializerField {
 }
 
 /// note about missing `serializer_version` field (from
-/// [crate::protos::ProtoFlattenedSerializerT]): entities resolve their serializers by looking up
-/// their class info within the [crate::entityclasses::EntityClasses] struct (which i parse out of
-/// [crate::protos::CDemoClassInfo] proto). [crate::protos::CDemoClassInfo] carries absolutely no
-/// info about serializer version thus i don't see any need to preserve it.
+/// [`valveprotos::common::ProtoFlattenedSerializerT`]): entities resolve their serializers by
+/// looking up their class info within the [crate::entityclasses::EntityClasses] struct (which i
+/// parse out of [`valveprotos::common::CDemoClassInfo`] proto).
+/// [`valveprotos::common::CDemoClassInfo`] carries absolutely no info about serializer version
+/// thus i don't see any need to preserve it.
 //
 // NOTE: Clone is derived because Entity in entities.rs needs to be clonable which means that all
 // members of it also should be clonable.

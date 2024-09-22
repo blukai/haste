@@ -8,7 +8,7 @@ use valveprotos::common::{
 use valveprotos::prost::Message;
 
 use crate::bitreader::BitReader;
-use crate::demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_BUFFER_SIZE, DEMO_HEADER_SIZE};
+use crate::demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_HEADER_SIZE, DEMO_RECORD_BUFFER_SIZE};
 use crate::entities::{DeltaHeader, Entity, EntityContainer};
 use crate::entityclasses::EntityClasses;
 use crate::fielddecoder::FieldDecodeContext;
@@ -155,7 +155,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
 
         Ok(Self {
             demo_file,
-            buf: vec![0; DEMO_BUFFER_SIZE],
+            buf: vec![0; DEMO_RECORD_BUFFER_SIZE],
             visitor,
             ctx: Context {
                 entities: EntityContainer::new(),
@@ -201,7 +201,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                                     self.visitor.on_tick_end(&self.ctx)?;
                                 }
                             }
-                            ControlFlow::SkipCmd => self.demo_file.skip_cmd(&cmd_header)?,
+                            ControlFlow::SkipCmd => self.demo_file.skip_cmd_body(&cmd_header)?,
                             ControlFlow::IgnoreCmd => {}
                             ControlFlow::Break => {
                                 self.demo_file.unread_cmd_header(&cmd_header)?;
@@ -264,11 +264,11 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
 
             // init string tables, flattened serializers and entity classes
             if !did_handle_first_sync_tick {
-                did_handle_first_sync_tick = cmd_header.command == EDemoCommands::DemSyncTick;
+                did_handle_first_sync_tick = cmd_header.cmd == EDemoCommands::DemSyncTick;
                 return Ok(ControlFlow::HandleCmd);
             }
 
-            let is_full_packet = cmd_header.command == EDemoCommands::DemFullPacket;
+            let is_full_packet = cmd_header.cmd == EDemoCommands::DemFullPacket;
             let distance_to_target_tick = target_tick - notnotself.ctx.tick;
             // TODO: what if there's no full packet ahead? maybe dem file is
             // corrupted or something... scan for full packets before enterint
@@ -276,12 +276,12 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             let has_full_packet_ahead =
                 distance_to_target_tick > notnotself.ctx.full_packet_interval + 100;
             if is_full_packet {
-                let cmd_data = notnotself.demo_file.read_cmd(cmd_header)?;
+                let cmd_body = notnotself.demo_file.read_cmd_body(cmd_header)?;
                 notnotself
                     .visitor
-                    .on_cmd(&notnotself.ctx, cmd_header, cmd_data)?;
+                    .on_cmd(&notnotself.ctx, cmd_header, cmd_body)?;
 
-                let mut cmd = CDemoFullPacket::decode(cmd_data)?;
+                let mut cmd = CDemoFullPacket::decode(cmd_body)?;
                 if has_full_packet_ahead {
                     // NOTE: clarity seem to ignore "intermediary" full packet's
                     // packet
@@ -314,12 +314,12 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     // 2. DemSendTables (flattened serializers; never update)
     // 3. DemClassInfo (never update)
     fn handle_cmd(&mut self, cmd_header: &CmdHeader) -> Result<()> {
-        let data = self.demo_file.read_cmd(cmd_header)?;
-        self.visitor.on_cmd(&self.ctx, cmd_header, data)?;
+        let cmd_body = self.demo_file.read_cmd_body(cmd_header)?;
+        self.visitor.on_cmd(&self.ctx, cmd_header, cmd_body)?;
 
-        match cmd_header.command {
+        match cmd_header.cmd {
             EDemoCommands::DemPacket | EDemoCommands::DemSignonPacket => {
-                let cmd = CDemoPacket::decode(data)?;
+                let cmd = CDemoPacket::decode(cmd_body)?;
                 self.handle_cmd_packet(cmd)?;
             }
 
@@ -330,7 +330,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                     return Ok(());
                 }
 
-                let cmd = CDemoSendTables::decode(data)?;
+                let cmd = CDemoSendTables::decode(cmd_body)?;
                 self.ctx.serializers = Some(FlattenedSerializerContainer::parse(cmd)?);
             }
 
@@ -341,7 +341,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                     return Ok(());
                 }
 
-                let cmd = CDemoClassInfo::decode(data)?;
+                let cmd = CDemoClassInfo::decode(cmd_body)?;
                 self.ctx.entity_classes = Some(EntityClasses::parse(cmd));
 
                 // NOTE: DemClassInfo message becomes available after
@@ -599,7 +599,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     pub fn demo_header(&self) -> &DemoHeader {
         // NOTE: it is safe to call unwrap method here becuase Self's constructor will return an
         // error if demo header check (that is executed during the construction) fails.
-        self.demo_file.unwrap_demo_header()
+        self.demo_file.demo_header()
     }
 
     /// delegated from [`DemoFile`].

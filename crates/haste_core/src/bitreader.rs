@@ -1,4 +1,4 @@
-pub use bitbuf::Error as BitReaderError;
+pub use bitbuf::OverflowError as BitReaderOverflowError;
 use dungers::bitbuf;
 
 // public/coordsize.h
@@ -86,7 +86,7 @@ impl<'a> BitReader<'a> {
     }
 
     #[inline]
-    pub fn is_overflowed(&mut self) -> bitbuf::Result<()> {
+    pub fn is_overflowed(&mut self) -> Result<(), BitReaderOverflowError> {
         self.did_check_overflow = true;
         self.inner.is_overflowed()
     }

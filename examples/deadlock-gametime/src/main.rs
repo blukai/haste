@@ -78,7 +78,7 @@ impl Visitor for MyVisitor {
     ) -> parser::Result<()> {
         // DemSyncTick indicates that all initialization messages were handled and now actual data
         // will flow; at this point tick interval is known.
-        if self.tick_interval.is_none() && cmd_header.command == EDemoCommands::DemSyncTick {
+        if self.tick_interval.is_none() && cmd_header.cmd == EDemoCommands::DemSyncTick {
             self.tick_interval = Some(ctx.tick_interval());
         }
         Ok(())

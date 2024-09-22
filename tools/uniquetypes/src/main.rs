@@ -34,11 +34,11 @@ fn main() -> Result<()> {
     let send_tables = loop {
         let cmd_header = demo_file.read_cmd_header()?;
         assert!(cmd_header.tick <= 0);
-        if cmd_header.command == EDemoCommands::DemSendTables {
-            let data = demo_file.read_cmd(&cmd_header)?;
-            break CDemoSendTables::decode(data)?;
+        if cmd_header.cmd == EDemoCommands::DemSendTables {
+            let cmd_body = demo_file.read_cmd_body(&cmd_header)?;
+            break CDemoSendTables::decode(cmd_body)?;
         } else {
-            demo_file.skip_cmd(&cmd_header)?;
+            demo_file.skip_cmd_body(&cmd_header)?;
         }
     };
 

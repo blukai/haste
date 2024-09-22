@@ -1,44 +1,15 @@
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{self, Read, Seek, SeekFrom};
 
 use dungers::varint;
 use valveprotos::common::{CDemoFileInfo, EDemoCommands};
 use valveprotos::prost::{self, Message};
 
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    // std
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-    // external
-    #[error(transparent)]
-    Snap(#[from] snap::Error),
-    #[error(transparent)]
-    Prost(#[from] prost::DecodeError),
-    #[error(transparent)]
-    Varint(#[from] varint::Error),
-    // mod
-    #[error("unexpected header id (want {want:?}, got {got:?})")]
-    UnexpectedHeaderId { want: [u8; 8], got: [u8; 8] },
-    #[error("unknown cmd {0}")]
-    UnknownCmd(u32),
-    #[error("expected cmd (cmd {0:?}")]
-    ExpectedCmd(EDemoCommands),
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
-
 // #define DEMO_RECORD_BUFFER_SIZE 2*1024*1024
 //
-// NOTE: read_cmd reads bytes (cmd_header.size) from the rdr into buf, if cmd is
-// compressed (cmd_header.is_compresed) it'll decompress the data. buf must be
-// large enough to fit compressed and uncompressed data simultaneously.
-pub const DEMO_BUFFER_SIZE: usize = 2 * 1024 * 1024;
-
-// NOTE: DEMO_HEADER_SIZE can be used as a starting position for DemoFile. there
-// might be situations when it is necessary to find something specific and then
-// go back to the very beginning /
-// demo_file.seek(SeekFrom::Start(DEMO_HEADER_SIZE))
-pub const DEMO_HEADER_SIZE: usize = std::mem::size_of::<DemoHeader>();
+// NOTE: read_cmd reads bytes (cmd_header.body_size) from the rdr into buf, if cmd is compressed
+// (cmd_header.body_compressed) it'll decompress the data. buf must be large enough to fit
+// compressed and uncompressed data simultaneously.
+pub const DEMO_RECORD_BUFFER_SIZE: usize = 2 * 1024 * 1024;
 
 // #define DEMO_HEADER_ID "HL2DEMO"
 //
@@ -54,22 +25,64 @@ pub struct DemoHeader {
     pub spawngroups_offset: i32,
 }
 
+/// can be used as a starting position for [`DemoFile`].
+///
+/// there might be situations when it is necessary to find something specific and then go back to
+/// the very beginning (`demo_file.seek(SeekFrom::Start(DEMO_HEADER_SIZE))`).
+pub const DEMO_HEADER_SIZE: usize = size_of::<DemoHeader>();
+
 #[derive(Debug, Clone)]
 pub struct CmdHeader {
-    // TODO: do not perform useless work - do not convert command to enum, store
-    // it as i32
-    pub command: EDemoCommands,
-    pub is_compressed: bool,
+    pub cmd: EDemoCommands,
+    pub body_compressed: bool,
     pub tick: i32,
-    pub size: u32,
-    // bytes_read is how many bytes were read. bytes_read can be used to do a
-    // backup (/unread cmd header) - calculate bytes_read is cheaper then
-    // calling stream_position method before reading cmd header.
-    pub bytes_read: usize,
+    pub body_size: u32,
+    // NOTE: it is siginficantly cheaper to sum n bytes that were read (cmd, tick body_size) then
+    // to rely on Seek::stream_position.
+    //
+    /// size of the cmd header (/ how many bytes were read). can be used to unread the cmd header.
+    pub size: u8,
 }
 
-// NOTE: you should provide a reader that implements buffering (eg BufReader)
-// because it'll be much more efficient.
+#[derive(thiserror::Error, Debug)]
+pub enum ReadDemoHeaderError {
+    #[error(transparent)]
+    IoError(#[from] io::Error),
+    #[error("invalid demo file stamp (got {got:?}; want id {DEMO_HEADER_ID:?})")]
+    InvalidDemoFileStamp { got: [u8; DEMO_HEADER_ID_SIZE] },
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum ReadCmdHeaderError {
+    #[error(transparent)]
+    IoError(#[from] io::Error),
+    #[error(transparent)]
+    ReadVarintError(#[from] varint::ReadVarintError),
+    #[error("unknown cmd (raw {raw}; uncompressed {uncompressed})")]
+    UnknownCmd { raw: u32, uncompressed: u32 },
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum ReadCmdBodyError {
+    #[error(transparent)]
+    IoError(#[from] io::Error),
+    #[error(transparent)]
+    DecompressError(#[from] snap::Error),
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum ReadFileInfoError {
+    #[error(transparent)]
+    IoError(#[from] io::Error),
+    #[error(transparent)]
+    ReadCmdHeaderError(#[from] ReadCmdHeaderError),
+    #[error(transparent)]
+    ReadCmdBodyError(#[from] ReadCmdBodyError),
+    #[error("unexpected cmd (got {got:?}; want {:?})", EDemoCommands::DemFileInfo)]
+    UnexpectedCmd { got: EDemoCommands },
+    #[error(transparent)]
+    DecodeError(#[from] prost::DecodeError),
+}
 
 #[derive(Debug)]
 pub struct DemoFile<R: Read + Seek> {
@@ -82,31 +95,33 @@ pub struct DemoFile<R: Read + Seek> {
 impl<R: Read + Seek> DemoFile<R> {
     /// creates a new [`DemoFile`] instance from the given reader.
     ///
-    /// # note
+    /// # performance note
     ///
-    /// after creating a [`DemoFile`] instance, you must call [`Self::read_demo_header`] before
+    /// for optimal performance make sure to provide a reader that implements buffering (for
+    /// example [`std::io::BufReader`]).
+    ///
+    /// # usage note
+    ///
+    /// after creating a [`DemoFile`] instance, you must call [`DemoFile::read_demo_header`] before
     /// using any other methods. failure to do so will result in panics!
     pub fn from_reader(rdr: R) -> Self {
         Self {
             rdr,
-            buf: vec![0u8; DEMO_BUFFER_SIZE],
+            buf: vec![0u8; DEMO_RECORD_BUFFER_SIZE],
             demo_header: None,
             file_info: None,
         }
     }
 
+    // stream ops
     // ----
 
-    // void SeekTo( int position, bool bRead );
-    //
     /// delegated from [`std::io::Seek`].
     #[inline]
-    pub fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
-        self.rdr.seek(pos).map_err(Error::Io)
+    pub fn seek(&mut self, pos: SeekFrom) -> Result<u64, io::Error> {
+        self.rdr.seek(pos)
     }
 
-    // unsigned int GetCurPos( bool bRead );
-    //
     /// delegated from [`std::io::Seek`].
     ///
     /// # note
@@ -114,14 +129,12 @@ impl<R: Read + Seek> DemoFile<R> {
     /// be aware that this method can be quite expensive. it might be best to make sure not to call
     /// it too frequently.
     #[inline]
-    pub fn stream_position(&mut self) -> Result<u64> {
-        self.rdr.stream_position().map_err(Error::Io)
+    pub fn stream_position(&mut self) -> Result<u64, io::Error> {
+        self.rdr.stream_position()
     }
 
-    // int GetSize();
-    //
     /// reimplementation of nightly [`std::io::Seek::stream_len`].
-    pub fn stream_len(&mut self) -> Result<u64> {
+    pub fn stream_len(&mut self) -> Result<u64, io::Error> {
         let old_pos = self.rdr.stream_position()?;
         let len = self.rdr.seek(SeekFrom::End(0))?;
 
@@ -134,17 +147,23 @@ impl<R: Read + Seek> DemoFile<R> {
         Ok(len)
     }
 
-    /// when continuously reading cmds in a loop this method can help to determine when to stop.
     #[inline(always)]
-    pub fn is_eof(&mut self) -> Result<bool> {
+    pub fn is_eof(&mut self) -> Result<bool, io::Error> {
         Ok(self.stream_position()? == self.stream_len()?)
     }
 
+    // demo header
     // ----
 
-    // demoheader_t* ReadDemoHeader( CDemoPlaybackParameters_t const *pPlaybackParameters );
-    pub fn read_demo_header(&mut self) -> Result<&DemoHeader> {
-        debug_assert!(
+    /// reads the demo header.
+    ///
+    /// this method should be called only once, immediately after creating a [`DemoFile`] instance.
+    /// subsequent calls will result in panic.
+    ///
+    /// the read header is stored internally for future use and can be accessed using
+    /// [`DemoFile::demo_header`] method.
+    pub fn read_demo_header(&mut self) -> Result<&DemoHeader, ReadDemoHeaderError> {
+        assert!(
             self.demo_header.is_none(),
             "expected demo header not to have been read"
         );
@@ -152,13 +171,10 @@ impl<R: Read + Seek> DemoFile<R> {
         let mut demofilestamp = [0u8; DEMO_HEADER_ID_SIZE];
         self.rdr.read_exact(&mut demofilestamp)?;
         if demofilestamp != DEMO_HEADER_ID {
-            return Err(Error::UnexpectedHeaderId {
-                want: DEMO_HEADER_ID,
-                got: demofilestamp,
-            });
+            return Err(ReadDemoHeaderError::InvalidDemoFileStamp { got: demofilestamp });
         }
 
-        let mut buf = [0u8; 4];
+        let mut buf = [0u8; size_of::<i32>()];
 
         self.rdr.read_exact(&mut buf)?;
         let fileinfo_offset = i32::from_le_bytes(buf);
@@ -171,88 +187,90 @@ impl<R: Read + Seek> DemoFile<R> {
             fileinfo_offset,
             spawngroups_offset,
         });
-
-        Ok(self.unwrap_demo_header())
+        Ok(self.demo_header())
     }
 
-    // NOTE: demo_header will call read_demo_header if demo header have not been
-    // read
-    pub fn demo_header(&mut self) -> Result<&DemoHeader> {
-        if self.demo_header.is_none() {
-            self.read_demo_header()
-        } else {
-            Ok(self.unwrap_demo_header())
-        }
-    }
-
-    /// safe to use when you're sure that [`Self::read_demo_header`] was already called.
-    pub fn unwrap_demo_header(&self) -> &DemoHeader {
+    /// retrieves the demo header without performing any checks.
+    ///
+    /// this method should only be called after [`DemoFile::read_demo_header`] has been successfully
+    /// executed. calling it before reading the header will result in panic.
+    pub fn demo_header(&self) -> &DemoHeader {
         self.demo_header.as_ref().unwrap()
     }
 
+    // cmd header
     // ----
 
-    // void ReadCmdHeader( unsigned char& cmd, int& tick, int &nPlayerSlot );
-    pub fn read_cmd_header(&mut self) -> Result<CmdHeader> {
+    pub fn read_cmd_header(&mut self) -> Result<CmdHeader, ReadCmdHeaderError> {
         debug_assert!(
             self.demo_header.is_some(),
             "expected demo header to have been read"
         );
 
-        let (command, command_ot, is_compressed) = {
-            let (c, ot) = varint::read_uvarint32(&mut self.rdr)?;
+        let (cmd, cmd_n, body_compressed) = {
+            let (cmd_raw, n) = varint::read_uvarint32(&mut self.rdr)?;
 
             const DEM_IS_COMPRESSED: u32 = EDemoCommands::DemIsCompressed as u32;
-            let is_compressed = c & DEM_IS_COMPRESSED == DEM_IS_COMPRESSED;
+            let is_body_compressed = cmd_raw & DEM_IS_COMPRESSED == DEM_IS_COMPRESSED;
 
-            let command = if is_compressed {
-                c & !DEM_IS_COMPRESSED
+            let cmd = if is_body_compressed {
+                cmd_raw & !DEM_IS_COMPRESSED
             } else {
-                c
+                cmd_raw
             };
 
             (
-                EDemoCommands::try_from(command as i32).map_err(|_| Error::UnknownCmd(command))?,
-                ot,
-                is_compressed,
+                // TODO: do not perform useless work - do not convert command to enum, store it as
+                // i32
+                EDemoCommands::try_from(cmd as i32).map_err(|_| {
+                    ReadCmdHeaderError::UnknownCmd {
+                        raw: cmd_raw,
+                        uncompressed: cmd,
+                    }
+                })?,
+                n,
+                is_body_compressed,
             )
         };
 
-        let (tick, tick_ot) = {
-            let (t, ot) = varint::read_uvarint32(&mut self.rdr)?;
-
-            // before the first tick / pre-game initialization messages
-            let tick = if t == u32::MAX { -1 } else { t as i32 };
-            (tick, ot)
+        let (tick, tick_n) = {
+            let (tick, n) = varint::read_uvarint32(&mut self.rdr)?;
+            // tick is set to max value before the first tick / pre-game initialization messages.
+            //
+            // TODO: get rid of this branch. it should be okay to work with u32::MAX.
+            let tick = if tick == u32::MAX { -1 } else { tick as i32 };
+            (tick, n)
         };
 
-        let (size, size_ot) = varint::read_uvarint32(&mut self.rdr)?;
+        let (body_size, body_size_n) = varint::read_uvarint32(&mut self.rdr)?;
 
         Ok(CmdHeader {
-            command,
-            is_compressed,
+            cmd,
+            body_compressed,
             tick,
-            size,
-            bytes_read: command_ot + tick_ot + size_ot,
+            body_size,
+            size: (cmd_n + tick_n + body_size_n) as u8,
         })
     }
 
-    pub fn unread_cmd_header(&mut self, cmd_header: &CmdHeader) -> Result<()> {
-        self.seek(SeekFrom::Current(-(cmd_header.bytes_read as i64)))
+    pub fn unread_cmd_header(&mut self, cmd_header: &CmdHeader) -> Result<(), io::Error> {
+        self.seek(SeekFrom::Current(-(cmd_header.size as i64)))
             .map(|_| ())
-            .map_err(Error::from)
     }
 
-    pub fn read_cmd(&mut self, cmd_header: &CmdHeader) -> Result<&[u8]> {
+    // cmd body
+    // ----
+
+    pub fn read_cmd_body(&mut self, cmd_header: &CmdHeader) -> Result<&[u8], ReadCmdBodyError> {
         debug_assert!(
             self.demo_header.is_some(),
             "expected demo header to have been read"
         );
 
-        let (left, right) = self.buf.split_at_mut(cmd_header.size as usize);
+        let (left, right) = self.buf.split_at_mut(cmd_header.body_size as usize);
         self.rdr.read_exact(left)?;
 
-        if cmd_header.is_compressed {
+        if cmd_header.body_compressed {
             let decompress_len = snap::raw::decompress_len(left)?;
             snap::raw::Decoder::new().decompress(left, right)?;
             // NOTE: we need to slice stuff up, because prost's decode can't
@@ -263,20 +281,20 @@ impl<R: Read + Seek> DemoFile<R> {
         }
     }
 
-    pub fn skip_cmd(&mut self, cmd_header: &CmdHeader) -> Result<()> {
-        self.seek(SeekFrom::Current(cmd_header.size as i64))
+    pub fn skip_cmd_body(&mut self, cmd_header: &CmdHeader) -> Result<(), io::Error> {
+        self.seek(SeekFrom::Current(cmd_header.body_size as i64))
             .map(|_| ())
-            .map_err(Error::from)
     }
 
+    // file info
     // ----
 
-    pub fn read_file_info(&mut self) -> Result<&CDemoFileInfo> {
-        debug_assert!(
+    pub fn read_file_info(&mut self) -> Result<&CDemoFileInfo, ReadFileInfoError> {
+        assert!(
             self.demo_header.is_some(),
             "expected demo header to have been read"
         );
-        debug_assert!(
+        assert!(
             self.file_info.is_none(),
             "expected file info not to have been read"
         );
@@ -286,15 +304,17 @@ impl<R: Read + Seek> DemoFile<R> {
         // NOTE: before any other method of DemoFile can be called consumer must call
         // read_demo_header method. it is safe to unwrap here because otherwise it is a failure of
         // consumer xd.
-        let demo_header = self.unwrap_demo_header();
+        let demo_header = self.demo_header();
         self.seek(SeekFrom::Start(demo_header.fileinfo_offset as u64))?;
 
         let cmd_header = self.read_cmd_header()?;
-        if cmd_header.command != EDemoCommands::DemFileInfo {
-            return Err(Error::ExpectedCmd(EDemoCommands::DemFileInfo));
+        if cmd_header.cmd != EDemoCommands::DemFileInfo {
+            return Err(ReadFileInfoError::UnexpectedCmd {
+                got: EDemoCommands::DemFileInfo,
+            });
         }
 
-        self.file_info = Some(CDemoFileInfo::decode(self.read_cmd(&cmd_header)?)?);
+        self.file_info = Some(CDemoFileInfo::decode(self.read_cmd_body(&cmd_header)?)?);
 
         self.seek(SeekFrom::Start(backup))?;
 
@@ -302,7 +322,7 @@ impl<R: Read + Seek> DemoFile<R> {
     }
 
     // NOTE: file_info will call read_file_info if file info have not been read
-    pub fn file_info(&mut self) -> Result<&CDemoFileInfo> {
+    pub fn file_info(&mut self) -> Result<&CDemoFileInfo, ReadFileInfoError> {
         if self.file_info.is_none() {
             self.read_file_info()
         } else {
@@ -310,25 +330,25 @@ impl<R: Read + Seek> DemoFile<R> {
         }
     }
 
-    /// safe to use when you're sure that [`Self::read_file_info`] was already called.
+    /// safe to use when you're sure that [`DemoFile::read_file_info`] was already called.
     pub fn unwrap_file_info(&self) -> &CDemoFileInfo {
         self.file_info.as_ref().unwrap()
     }
 
     // virtual float GetTicksPerSecond() OVERRIDE;
-    pub fn ticks_per_second(&mut self) -> Result<f32> {
+    pub fn ticks_per_second(&mut self) -> Result<f32, ReadFileInfoError> {
         let file_info = self.file_info()?;
         Ok(file_info.playback_ticks() as f32 / file_info.playback_time())
     }
 
     // virtual float GetTicksPerFrame() OVERRIDE;
-    pub fn ticks_per_frame(&mut self) -> Result<f32> {
+    pub fn ticks_per_frame(&mut self) -> Result<f32, ReadFileInfoError> {
         let file_info = self.file_info()?;
         Ok(file_info.playback_ticks() as f32 / file_info.playback_frames() as f32)
     }
 
-    // virtual int	GetTotalTicks( void ) OVERRIDE;
-    pub fn total_ticks(&mut self) -> Result<i32> {
+    // virtual int GetTotalTicks( void ) OVERRIDE;
+    pub fn total_ticks(&mut self) -> Result<i32, ReadFileInfoError> {
         let file_info = self.file_info()?;
         Ok(file_info.playback_ticks())
     }

@@ -5,7 +5,7 @@ use hashbrown::hash_map::Entry;
 use hashbrown::HashMap;
 use nohash::NoHashHasher;
 
-use crate::bitreader::{BitReader, BitReaderError};
+use crate::bitreader::{BitReader, BitReaderOverflowError};
 use crate::entityclasses::EntityClasses;
 use crate::fielddecoder::{self, FieldDecodeContext};
 use crate::fieldpath::{self, FieldPath};
@@ -22,7 +22,7 @@ pub enum Error {
     #[error(transparent)]
     FieldDecoder(#[from] fielddecoder::Error),
     #[error(transparent)]
-    BitReader(#[from] BitReaderError),
+    BitReaderOverflowError(#[from] BitReaderOverflowError),
     #[error("field does not exist")]
     FieldValueNotExist,
     #[error(transparent)]

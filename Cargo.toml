@@ -16,7 +16,7 @@ haste_core = { path = "crates/haste_core" }
 haste_vartype = { path = "crates/haste_vartype" }
 # external
 anyhow = "1.0.86"
-dungers = { git = "https://github.com/blukai/dungers.git", rev = "b6c2d52d989db66171d74a579fcfc0a5d921cc41", features = ["charsor", "varint", "bitbuf"] }
+dungers = { git = "https://github.com/blukai/dungers.git", rev = "5419784ef771089369bdce5463a6cf6da35d3a79", features = ["charsor", "varint", "bitbuf"] }
 dyn-clone = "1.0.17"
 expect-test = "1.5.0"
 hashbrown = { version = "0.14.5", default-features = false, features = ["inline-more"]  }
@@ -24,7 +24,7 @@ lazy_static = "1.5.0"
 nohash = "0.2.0"
 rand = "0.8.5"
 snap = "1.1.1"
-thiserror = "1.0.63"
+thiserror = "1.0.64"
 valveprotos = { git = "https://github.com/blukai/valveprotos-rs.git", rev = "0d6c6b72ad469db3841d1afd36804fe9043ef7ce", features = ["protobuf-src"] }
 which = "6.0.3"
 

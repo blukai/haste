@@ -23,7 +23,7 @@ pub(crate) enum FieldSpecialDescriptor {
         length: usize,
     },
 
-    /// this variant differs from [FieldSpecialDescriptor::DynamicSerializerArray] in that it can
+    /// this variant differs from [`FieldSpecialDescriptor::DynamicSerializerArray`] in that it can
     /// contain primitive values (e.g., u8, bool) and more complex types (e.g., Vector4D, Vector),
     /// but it can not contain other serializers.
     ///
@@ -45,7 +45,7 @@ pub(crate) enum FieldSpecialDescriptor {
     /// represents a dynamic array of fields that must be deserialized by the serializer specified
     /// by `field_serializer_name`.
     ///
-    /// this variant differs from [FieldSpecialDescriptor::DynamicArray] in that it houses other
+    /// this variant differs from [`FieldSpecialDescriptor::DynamicArray`] in that it houses other
     /// serializers.
     ///
     /// example entity fields:
