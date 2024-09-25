@@ -264,10 +264,15 @@ impl FlattenedSerializerContainer {
 
                 field.field_serializer = match field.metadata.special_descriptor {
                     Some(FieldSpecialDescriptor::FixedArray { length }) => {
+                        let mut field = field.clone();
+                        field.field_serializer = field
+                            .field_serializer_name
+                            .as_ref()
+                            .and_then(|symbol| serializer_map.get(&symbol.hash).cloned());
                         Some(Rc::new(FlattenedSerializer {
                             fields: {
                                 let mut fields = Vec::with_capacity(length);
-                                fields.resize(length, Rc::new(field.clone()));
+                                fields.resize(length, Rc::new(field));
                                 fields
                             },
                             ..Default::default()
@@ -302,7 +307,7 @@ impl FlattenedSerializerContainer {
                     _ => field
                         .field_serializer_name
                         .as_ref()
-                        .and_then(|name| serializer_map.get(&name.hash).cloned()),
+                        .and_then(|symbol| serializer_map.get(&symbol.hash).cloned()),
                 };
 
                 let field = Rc::new(field);
