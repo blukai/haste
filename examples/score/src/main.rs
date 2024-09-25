@@ -1,9 +1,10 @@
 use std::fs::File;
 use std::io::BufReader;
 
+use anyhow::Result;
 use haste::entities::{fkey_from_path, DeltaHeader, Entity};
 use haste::fxhash;
-use haste::parser::{self, Context, Parser, Visitor};
+use haste::parser::{Context, Parser, Visitor};
 
 struct MyVisitor;
 
@@ -13,7 +14,7 @@ impl Visitor for MyVisitor {
         _ctx: &Context,
         _delta_header: DeltaHeader,
         entity: &Entity,
-    ) -> parser::Result<()> {
+    ) -> Result<()> {
         if entity
             .serializer()
             .serializer_name
@@ -32,8 +33,6 @@ impl Visitor for MyVisitor {
         Ok(())
     }
 }
-
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();

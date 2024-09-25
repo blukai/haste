@@ -264,7 +264,7 @@ impl<'a> BitReader<'a> {
     // Returns the number of characters left in out when the routine is complete (this will never
     // exceed buf.len()-1).
     pub fn read_string(&mut self, buf: &mut [u8], line: bool) -> usize {
-        debug_assert!(!buf.is_empty());
+        assert!(!buf.is_empty());
 
         let mut too_small = false;
         let mut num_chars = 0;
@@ -283,11 +283,11 @@ impl<'a> BitReader<'a> {
         }
 
         // make sure it's null-terminated.
-        debug_assert!(num_chars < buf.len());
+        assert!(num_chars < buf.len());
         buf[num_chars] = 0;
 
         // did it fit?
-        debug_assert!(!too_small);
+        assert!(!too_small);
 
         num_chars
     }

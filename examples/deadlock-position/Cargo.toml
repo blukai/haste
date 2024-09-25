@@ -5,4 +5,4 @@ edition.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-haste = { workspace = true, features = ["deadlock"] }
+haste.workspace = true

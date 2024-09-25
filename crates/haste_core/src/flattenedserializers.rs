@@ -11,24 +11,20 @@ use valveprotos::common::{
 };
 use valveprotos::prost::{self, Message};
 
-use crate::fieldmetadata::{self, get_field_metadata, FieldMetadata, FieldSpecialDescriptor};
-use crate::{fxhash, vartype};
+use crate::fieldmetadata::{
+    get_field_metadata, FieldMetadata, FieldMetadataError, FieldSpecialDescriptor,
+};
+use crate::fxhash;
 
 #[derive(thiserror::Error, Debug)]
-pub enum Error {
-    // external
+pub enum FlattenedSerializersError {
     #[error(transparent)]
-    Prost(#[from] prost::DecodeError),
+    DecodeError(#[from] prost::DecodeError),
     #[error(transparent)]
     ReadVarintError(#[from] varint::ReadVarintError),
-    // crate
     #[error(transparent)]
-    FieldMetadata(#[from] fieldmetadata::Error),
-    #[error(transparent)]
-    Vartype(#[from] vartype::Error),
+    FieldMetadataError(#[from] FieldMetadataError),
 }
-
-pub type Result<T> = std::result::Result<T, Error>;
 
 // TODO: symbol table / string cache (but do not use servo's string cache
 // because it's super slow; it relies on rust-phf that uses sip13 cryptograpgic
@@ -89,13 +85,17 @@ pub struct FlattenedSerializerField {
     pub(crate) metadata: FieldMetadata,
 }
 
+// TODO: try to split flattened serializer field initialization into 3 clearly separate stages
+// (protobuf mapping; metadata; field serializer construction).
 impl FlattenedSerializerField {
     fn new(
         msg: &CsvcMsgFlattenedSerializer,
         field: &ProtoFlattenedSerializerFieldT,
-    ) -> Result<Self> {
+    ) -> Result<Self, FieldMetadataError> {
         // SAFETY: some symbols are cricual, if they don't exist - fail early
         // and loudly.
+        //
+        // TODO: do not call get_unchecked here! that's stupid.
         let resolve_sym_unchecked = |i: i32| unsafe { msg.symbols.get_unchecked(i as usize) };
         let resolve_sym = |v: i32| &msg.symbols[v as usize];
 
@@ -105,8 +105,6 @@ impl FlattenedSerializerField {
                 .map(resolve_sym_unchecked)
                 .unwrap_unchecked()
         };
-        let var_type_expr = vartype::parse(var_type.as_str())?;
-
         let var_name = unsafe {
             field
                 .var_name_sym
@@ -130,7 +128,7 @@ impl FlattenedSerializerField {
             field_serializer: None,
             metadata: Default::default(),
         };
-        ret.metadata = get_field_metadata(var_type_expr, &ret)?;
+        ret.metadata = get_field_metadata(&ret, var_type)?;
         Ok(ret)
     }
 
@@ -183,7 +181,7 @@ pub struct FlattenedSerializer {
 }
 
 impl FlattenedSerializer {
-    fn new(msg: &CsvcMsgFlattenedSerializer, fs: &ProtoFlattenedSerializerT) -> Result<Self> {
+    fn new(msg: &CsvcMsgFlattenedSerializer, fs: &ProtoFlattenedSerializerT) -> Self {
         // SAFETY: some symbols are cricual, if they don't exist - fail early
         // and loudly.
         let resolve_sym_unchecked = |i: i32| unsafe { msg.symbols.get_unchecked(i as usize) };
@@ -194,10 +192,10 @@ impl FlattenedSerializer {
                 .unwrap_unchecked()
         };
 
-        Ok(Self {
+        Self {
             serializer_name: Symbol::from(serializer_name),
             fields: Vec::with_capacity(fs.fields_index.len()),
-        })
+        }
     }
 
     #[inline(always)]
@@ -226,7 +224,7 @@ pub struct FlattenedSerializerContainer {
 }
 
 impl FlattenedSerializerContainer {
-    pub fn parse(cmd: CDemoSendTables) -> Result<Self> {
+    pub fn parse(cmd: CDemoSendTables) -> Result<Self, FlattenedSerializersError> {
         let msg = {
             // TODO: make prost work with ByteString and turn data into Bytes
             //
@@ -245,79 +243,70 @@ impl FlattenedSerializerContainer {
             CsvcMsgFlattenedSerializer::decode(data)?
         };
 
-        let mut fields: FieldMap =
+        let mut field_map: FieldMap =
             FieldMap::with_capacity_and_hasher(msg.fields.len(), BuildHasherDefault::default());
         let mut serializer_map: SerializerMap = SerializerMap::with_capacity_and_hasher(
             msg.serializers.len(),
             BuildHasherDefault::default(),
         );
 
-        // TODO: can fields be stored flatly?
-
         for serializer in msg.serializers.iter() {
-            let mut flattened_serializer = FlattenedSerializer::new(&msg, serializer)?;
+            let mut flattened_serializer = FlattenedSerializer::new(&msg, serializer);
 
             for field_index in serializer.fields_index.iter() {
-                let field = if let Some(field) = fields.get(field_index) {
-                    // NOTE: do not chain .cloned() after calling .get(), because .cloned() uses
-                    // match under the hood which adds a branch; that is redunant.
-                    field.clone()
-                } else {
-                    let mut field =
-                        FlattenedSerializerField::new(&msg, &msg.fields[*field_index as usize])?;
+                if let Some(field) = field_map.get(field_index) {
+                    flattened_serializer.fields.push(field.clone());
+                    continue;
+                }
 
-                    if let Some(field_serializer_name) = field.field_serializer_name.as_ref() {
-                        field.field_serializer =
-                            serializer_map.get(&field_serializer_name.hash).cloned();
+                let mut field =
+                    FlattenedSerializerField::new(&msg, &msg.fields[*field_index as usize])?;
+
+                field.field_serializer = match field.metadata.special_descriptor {
+                    Some(FieldSpecialDescriptor::FixedArray { length }) => {
+                        Some(Rc::new(FlattenedSerializer {
+                            fields: {
+                                let mut fields = Vec::with_capacity(length);
+                                fields.resize(length, Rc::new(field.clone()));
+                                fields
+                            },
+                            ..Default::default()
+                        }))
                     }
-
-                    // TODO: maybe extract arms into separate functions
-                    match field.metadata.special_descriptor {
-                        Some(FieldSpecialDescriptor::FixedArray { length }) => {
-                            field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                fields: {
-                                    let mut fields = Vec::with_capacity(length);
-                                    fields.resize(length, Rc::new(field.clone()));
-                                    fields
-                                },
+                    Some(FieldSpecialDescriptor::DynamicArray { ref decoder }) => {
+                        let field = FlattenedSerializerField {
+                            metadata: FieldMetadata {
+                                decoder: decoder.clone(),
                                 ..Default::default()
-                            }));
-                        }
-                        Some(FieldSpecialDescriptor::DynamicArray { ref decoder }) => {
-                            field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                fields: vec![Rc::new(FlattenedSerializerField {
-                                    metadata: FieldMetadata {
-                                        decoder: decoder.clone(),
-                                        ..Default::default()
-                                    },
-                                    ..Default::default()
-                                })],
-                                ..Default::default()
-                            }));
-                        }
-                        Some(FieldSpecialDescriptor::DynamicSerializerArray) => {
-                            field.field_serializer = Some(Rc::new(FlattenedSerializer {
-                                fields: vec![Rc::new(FlattenedSerializerField {
-                                    field_serializer: field
-                                        .field_serializer_name
-                                        .as_ref()
-                                        .and_then(|field_serializer_name| {
-                                            serializer_map.get(&field_serializer_name.hash)
-                                        })
-                                        .cloned(),
-                                    ..Default::default()
-                                })],
-                                ..Default::default()
-                            }));
-                        }
-                        _ => {}
+                            },
+                            ..Default::default()
+                        };
+                        Some(Rc::new(FlattenedSerializer {
+                            fields: vec![Rc::new(field)],
+                            ..Default::default()
+                        }))
                     }
-
-                    let field = Rc::new(field);
-                    let ret = Rc::clone(&field);
-                    fields.insert(*field_index, field);
-                    ret
+                    Some(FieldSpecialDescriptor::DynamicSerializerArray) => {
+                        let field = FlattenedSerializerField {
+                            field_serializer: field
+                                .field_serializer_name
+                                .as_ref()
+                                .and_then(|symbol| serializer_map.get(&symbol.hash).cloned()),
+                            ..Default::default()
+                        };
+                        Some(Rc::new(FlattenedSerializer {
+                            fields: vec![Rc::new(field)],
+                            ..Default::default()
+                        }))
+                    }
+                    _ => field
+                        .field_serializer_name
+                        .as_ref()
+                        .and_then(|name| serializer_map.get(&name.hash).cloned()),
                 };
+
+                let field = Rc::new(field);
+                field_map.insert(*field_index, field.clone());
                 flattened_serializer.fields.push(field);
             }
 

@@ -27,7 +27,7 @@ impl EntityClasses {
             .enumerate()
             .map(|(i, class)| {
                 let class_id = class.class_id() as usize;
-                debug_assert_eq!(class_id, i, "invliad class id");
+                assert_eq!(class_id, i, "invliad class id");
                 ClassInfo {
                     network_name_hash: fxhash::hash_bytes(class.network_name().as_bytes()),
                 }

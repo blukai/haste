@@ -2,9 +2,10 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 
+use anyhow::Result;
 use handler::HandlerVisitor;
 use haste::entities::{self, Entity};
-use haste::parser::{self, Context, Parser};
+use haste::parser::{Context, Parser};
 use haste::stringtables::StringTable;
 use haste::valveprotos::deadlock::{CCitadelUserMsgHeroKilled, CitadelUserMessageIds};
 
@@ -33,11 +34,7 @@ struct State {
     hero_scores: HashMap<String, Score>,
 }
 
-fn hero_killed(
-    state: &mut State,
-    ctx: &Context,
-    msg: &CCitadelUserMsgHeroKilled,
-) -> parser::Result<()> {
+fn hero_killed(state: &mut State, ctx: &Context, msg: &CCitadelUserMsgHeroKilled) -> Result<()> {
     let entities = ctx.entities().unwrap();
 
     let string_tables = ctx.string_tables().unwrap();
@@ -68,8 +65,6 @@ fn hero_killed(
 
     Ok(())
 }
-
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();

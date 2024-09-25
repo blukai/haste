@@ -1,9 +1,8 @@
 use std::fs::File;
 use std::io::BufReader;
 
+use anyhow::Result;
 use haste::parser::Parser;
-
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();

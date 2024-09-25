@@ -3,9 +3,10 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 
+use anyhow::Result;
 use haste::entities::{deadlock_coord_from_cell, fkey_from_path, DeltaHeader, Entity};
 use haste::fxhash;
-use haste::parser::{self, Context, Parser, Visitor};
+use haste::parser::{Context, Parser, Visitor};
 
 fn get_entity_coord(entity: &Entity, cell_key: &u64, vec_key: &u64) -> Option<f32> {
     let cell: u16 = entity.get_value(cell_key)?;
@@ -38,7 +39,7 @@ struct MyVisitor {
 }
 
 impl MyVisitor {
-    fn handle_player_pawn(&mut self, entity: &Entity) -> anyhow::Result<()> {
+    fn handle_player_pawn(&mut self, entity: &Entity) -> Result<()> {
         let position = get_entity_position(entity).expect("player pawn position");
 
         // TODO: get rid of hashmap, parser must supply a list of updated fields.
@@ -69,7 +70,7 @@ impl Visitor for &mut MyVisitor {
         _ctx: &Context,
         _delta_header: DeltaHeader,
         entity: &Entity,
-    ) -> parser::Result<()> {
+    ) -> Result<()> {
         if entity.serializer_name_heq(DEADLOCK_PLAYERPAWN_ENTITY) {
             self.handle_player_pawn(entity)?;
         }
@@ -77,7 +78,7 @@ impl Visitor for &mut MyVisitor {
     }
 }
 
-fn main() -> parser::Result<()> {
+fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let filepath = args.get(1);
     if filepath.is_none() {

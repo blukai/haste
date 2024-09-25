@@ -12,18 +12,6 @@ use crate::bitreader::BitReader;
 // NOTE: some info about string tables is available at
 // https://developer.valvesoftware.com/wiki/Networking_Events_%26_Messages#String_Tables
 
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    // 3rd party crates
-    #[error(transparent)]
-    Snap(#[from] snap::Error),
-    // mod
-    #[error("tried to create string table '{0}' twice")]
-    DuplicateStringTable(String),
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
-
 const HISTORY_SIZE: usize = 32;
 const HISTORY_BITMASK: usize = HISTORY_SIZE - 1;
 
@@ -108,7 +96,11 @@ impl StringTable {
     //
     // some pieces are ported from csgo, some are stolen from butterfly, some
     // comments are stolen from manta.
-    pub fn parse_update(&mut self, br: &mut BitReader, num_entries: i32) -> Result<()> {
+    pub fn parse_update(
+        &mut self,
+        br: &mut BitReader,
+        num_entries: i32,
+    ) -> Result<(), snap::Error> {
         let mut entry_index: i32 = -1;
 
         // TODO: feature flag or something for a static allocation of history,
@@ -317,12 +309,11 @@ impl StringTableContainer {
         user_data_size_bits: i32,
         flags: i32,
         using_varint_bitcounts: bool,
-    ) -> Result<&mut StringTable> {
-        let table = self.find_table(name);
-        // TODO: should this check exist?
-        if table.is_some() {
-            return Err(Error::DuplicateStringTable(name.to_string()));
-        }
+    ) -> &mut StringTable {
+        debug_assert!(
+            self.find_table(name).is_none(),
+            "tried to create string table '{name}' twice",
+        );
 
         let table = StringTable::new(
             name,
@@ -333,10 +324,9 @@ impl StringTableContainer {
             using_varint_bitcounts,
         );
 
-        // TODO: push
         let len = self.tables.len();
-        self.tables.insert(len, table);
-        Ok(&mut self.tables[len])
+        self.tables.push(table);
+        &mut self.tables[len]
     }
 
     pub fn do_full_update(&mut self, cmd: CDemoStringTables) {

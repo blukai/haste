@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 
+use anyhow::Result;
 use haste::entities::{fkey_from_path, DeltaHeader, Entity};
-use haste::parser::{self, Context, Parser, Visitor};
+use haste::parser::{Context, Parser, Visitor};
 
 // public/const.h
 const LIFE_ALIVE: u8 = 0; // alive
@@ -20,7 +21,7 @@ impl Visitor for MyVisitor {
         ctx: &Context,
         _delta_header: DeltaHeader,
         entity: &Entity,
-    ) -> parser::Result<()> {
+    ) -> Result<()> {
         const LIFE_STATE_KEY: u64 = fkey_from_path(&["m_lifeState"]);
         let next_life_state = entity.try_get_value(&LIFE_STATE_KEY)?;
 
@@ -50,8 +51,6 @@ impl Visitor for MyVisitor {
         Ok(())
     }
 }
-
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();

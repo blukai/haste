@@ -17,16 +17,12 @@ use crate::fxhash;
 use crate::instancebaseline::InstanceBaseline;
 
 #[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error(transparent)]
-    BitReaderOverflowError(#[from] BitReaderOverflowError),
+pub enum GetValueError {
     #[error("field does not exist")]
-    FieldValueNotExist,
+    FieldNotExist,
     #[error(transparent)]
-    FieldValueInvalidConversion(#[from] FieldValueConversionError),
+    FieldValueConversionError(#[from] FieldValueConversionError),
 }
-
-pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 // public/const.h (adjusted)
 
@@ -216,7 +212,7 @@ impl Entity {
         field_decode_ctx: &mut FieldDecodeContext,
         br: &mut BitReader,
         fps: &mut [FieldPath],
-    ) -> Result<()> {
+    ) -> Result<(), BitReaderOverflowError> {
         // eprintln!("-- {:?}", self.serializer.serializer_name);
 
         unsafe {
@@ -301,13 +297,19 @@ impl Entity {
     /// - if the value is missing, it returns [`Error::FieldValueNotExist`]
     /// - if the value is present but convesion failed, returns
     /// [`Error::FieldValueInvalidConversion`]
-    pub fn try_get_value<T>(&self, key: &u64) -> Result<T>
+    pub fn try_get_value<T>(&self, key: &u64) -> Result<T, GetValueError>
     where
         FieldValue: TryInto<T, Error = FieldValueConversionError>,
     {
         self.fields.get(key).map_or_else(
-            || Err(Error::FieldValueNotExist),
-            |entity_field| entity_field.value.clone().try_into().map_err(Error::from),
+            || Err(GetValueError::FieldNotExist),
+            |entity_field| {
+                entity_field
+                    .value
+                    .clone()
+                    .try_into()
+                    .map_err(GetValueError::from)
+            },
         )
     }
 
@@ -378,7 +380,7 @@ impl EntityContainer {
         entity_classes: &EntityClasses,
         instance_baseline: &InstanceBaseline,
         serializers: &FlattenedSerializerContainer,
-    ) -> Result<&Entity> {
+    ) -> Result<&Entity, BitReaderOverflowError> {
         let class_id = br.read_ubit64(entity_classes.bits) as i32;
         let _serial = br.read_ubit64(NUM_SERIAL_NUM_BITS as usize);
         let _unknown = br.read_uvarint32();
@@ -434,7 +436,7 @@ impl EntityContainer {
         index: i32,
         field_decode_ctx: &mut FieldDecodeContext,
         br: &mut BitReader,
-    ) -> Result<&Entity> {
+    ) -> Result<&Entity, BitReaderOverflowError> {
         let entity = unsafe { self.entities.get_mut(&index).unwrap_unchecked() };
         entity.parse(field_decode_ctx, br, &mut self.field_paths)?;
         Ok(entity)

@@ -1,28 +1,24 @@
 use std::marker::PhantomData;
 
-use haste::parser::{self, Context, Visitor};
+use anyhow::Result;
+use haste::parser::{Context, Visitor};
 use haste::valveprotos::prost;
 
 pub trait MessageHandler<S, M: prost::Message + Default> {
-    fn handle(&self, state: &mut S, ctx: &Context, message: &M) -> parser::Result<()>;
+    fn handle(&self, state: &mut S, ctx: &Context, message: &M) -> Result<()>;
 }
 
-impl<S, M: prost::Message + Default, F: Fn(&mut S, &Context, &M) -> parser::Result<()>>
-    MessageHandler<S, M> for F
+impl<S, M: prost::Message + Default, F: Fn(&mut S, &Context, &M) -> Result<()>> MessageHandler<S, M>
+    for F
 {
-    fn handle(&self, state: &mut S, ctx: &Context, message: &M) -> parser::Result<()> {
+    fn handle(&self, state: &mut S, ctx: &Context, message: &M) -> Result<()> {
         self(state, ctx, message)
     }
 }
 
 trait Handler<S> {
-    fn handle(
-        &mut self,
-        state: &mut S,
-        ctx: &Context,
-        packet_type: u32,
-        data: &[u8],
-    ) -> parser::Result<()>;
+    fn handle(&mut self, state: &mut S, ctx: &Context, packet_type: u32, data: &[u8])
+    -> Result<()>;
 }
 
 struct HandlerImpl<S, M: prost::Message + Default, H: MessageHandler<S, M>> {
@@ -50,7 +46,7 @@ impl<S, M: prost::Message + Default, H: MessageHandler<S, M>> Handler<S> for Han
         ctx: &Context,
         packet_type: u32,
         data: &[u8],
-    ) -> parser::Result<()> {
+    ) -> Result<()> {
         if packet_type != self.id {
             return Ok(());
         }
@@ -90,7 +86,7 @@ impl<S: 'static> HandlerVisitor<S> {
 }
 
 impl<S> Visitor for &mut HandlerVisitor<S> {
-    fn on_packet(&mut self, ctx: &Context, packet_type: u32, data: &[u8]) -> parser::Result<()> {
+    fn on_packet(&mut self, ctx: &Context, packet_type: u32, data: &[u8]) -> Result<()> {
         for handler in self.handlers.iter_mut() {
             handler.handle(&mut self.state, ctx, packet_type, data)?
         }

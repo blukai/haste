@@ -2,16 +2,22 @@ use crate::bitreader::BitReader;
 
 // NOTE: this is composite of stuff from butterfly, clarity, manta and leaked csgo.
 
+#[derive(thiserror::Error, Debug)]
+#[error("encode flags are both round up and down, these flags are mutually exclusive")]
+pub struct InvalidEncodeFlagsError;
+
+#[derive(thiserror::Error, Debug)]
+#[error("invalid range")]
+pub struct InvalidRangeError;
+
 // TODO: more errors, treat what clarity treats as warnings as errors?
 #[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("encode flags are both round up and down, these flags are mutually exclusive")]
-    InvalidEncodeFlags,
-    #[error("invalid range")]
-    InvalidRange,
+pub enum QuantizedFloatError {
+    #[error(transparent)]
+    InvalidEncodeFlags(#[from] InvalidEncodeFlagsError),
+    #[error(transparent)]
+    InvalidRange(#[from] InvalidRangeError),
 }
-
-pub type Result<T> = std::result::Result<T, Error>;
 
 const QFE_ROUNDDOWN: i32 = 1 << 0;
 const QFE_ROUNDUP: i32 = 1 << 1;
@@ -19,7 +25,11 @@ const QFE_ENCODE_ZERO_EXACTLY: i32 = 1 << 2;
 const QFE_ENCODE_INTEGERS_EXACTLY: i32 = 1 << 3;
 
 // stolen from quantizedfloat.go in manta
-fn compute_encode_flags(encode_flags: i32, low_value: f32, high_value: f32) -> Result<i32> {
+fn compute_encode_flags(
+    encode_flags: i32,
+    low_value: f32,
+    high_value: f32,
+) -> Result<i32, InvalidEncodeFlagsError> {
     let mut efs = encode_flags;
 
     if efs == 0 {
@@ -56,7 +66,7 @@ fn compute_encode_flags(encode_flags: i32, low_value: f32, high_value: f32) -> R
 
     // Verify that we don;t have roundup / rounddown set
     if efs & (QFE_ROUNDDOWN | QFE_ROUNDUP) == (QFE_ROUNDDOWN | QFE_ROUNDUP) {
-        return Err(Error::InvalidEncodeFlags);
+        return Err(InvalidEncodeFlagsError);
     }
 
     Ok(efs)
@@ -70,7 +80,7 @@ fn close_enough(a: f32, b: f32, epsilon: f32) -> bool {
 }
 
 // public/dt_send.cpp
-fn assign_range_multiplier(bit_count: i32, range: f64) -> Result<f32> {
+fn assign_range_multiplier(bit_count: i32, range: f64) -> Result<f32, InvalidRangeError> {
     // NOTE(blukai): actually it should not be possible for bit_count to be 32 here - for that
     // there's noscale decoder. but i'm not going to change this piece of code to comform original.
     let high_value = if bit_count == 32 {
@@ -117,7 +127,7 @@ fn assign_range_multiplier(bit_count: i32, range: f64) -> Result<f32> {
 
         if i == MULTIPLIERS.len() {
             // Doh! We seem to be unable to represent this range.
-            return Err(Error::InvalidRange);
+            return Err(InvalidRangeError);
         }
     }
 
@@ -156,7 +166,7 @@ impl QuantizedFloat {
         encode_flags: i32,
         low_value: f32,
         high_value: f32,
-    ) -> Result<Self> {
+    ) -> Result<Self, QuantizedFloatError> {
         let mut qf = Self {
             bit_count,
             encode_flags,
@@ -168,7 +178,7 @@ impl QuantizedFloat {
 
         // NOTE(blukai): quantized float decoder wouldn't be able to decode non-quantized float
         // correctly.
-        debug_assert!(bit_count > 0 && bit_count < 32);
+        assert!(bit_count > 0 && bit_count < 32);
 
         qf.encode_flags = compute_encode_flags(qf.encode_flags, qf.low_value, qf.high_value)?;
         let mut steps = 1 << qf.bit_count;

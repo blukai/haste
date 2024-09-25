@@ -1,5 +1,6 @@
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{self, Read, Seek, SeekFrom};
 
+use anyhow::Result;
 use valveprotos::common::{
     CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables,
     CDemoStringTables, CsvcMsgCreateStringTable, CsvcMsgPacketEntities, CsvcMsgServerInfo,
@@ -8,7 +9,10 @@ use valveprotos::common::{
 use valveprotos::prost::Message;
 
 use crate::bitreader::BitReader;
-use crate::demofile::{CmdHeader, DemoFile, DemoHeader, DEMO_HEADER_SIZE, DEMO_RECORD_BUFFER_SIZE};
+use crate::demofile::{
+    CmdHeader, DemoFile, DemoHeader, ReadDemoHeaderError, ReadFileInfoError, DEMO_HEADER_SIZE,
+    DEMO_RECORD_BUFFER_SIZE,
+};
 use crate::entities::{DeltaHeader, Entity, EntityContainer};
 use crate::entityclasses::EntityClasses;
 use crate::fielddecoder::FieldDecodeContext;
@@ -26,12 +30,6 @@ const DEFAULT_FULL_PACKET_INTERVAL: i32 = 1800;
 // NOTE: tick interval is needed to be able to correctly decide simulation time values.
 // dota2's tick interval is 1 / 30; deadlock's 1 / 60 - they are constant.
 const DEFAULT_TICK_INTERVAL: f32 = 1.0 / 30.0;
-
-// TODO: unfuck result and error types; make them public-friendly. consider definint all possible
-// errors in one place (possibly similar to hyper?
-// https://github.com/hyperium/hyper/blob/master/src/error.rs).
-pub type Error = Box<dyn std::error::Error>;
-pub type Result<T> = std::result::Result<T, Error>;
 
 // NOTE: primary purpose of Context is to to be able to expose state to the
 // public; attempts to put parser into arguments of Visitor's method did not
@@ -149,7 +147,7 @@ pub struct Parser<R: Read + Seek, V: Visitor> {
 }
 
 impl<R: Read + Seek, V: Visitor> Parser<R, V> {
-    pub fn from_reader_with_visitor(rdr: R, visitor: V) -> Result<Self> {
+    pub fn from_reader_with_visitor(rdr: R, visitor: V) -> Result<Self, ReadDemoHeaderError> {
         let mut demo_file = DemoFile::from_reader(rdr);
         let _demo_header = demo_file.read_demo_header()?;
 
@@ -209,14 +207,14 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                                 return Ok(());
                             }
                         },
-                        Err(err) => return Err(Error::from(err)),
+                        Err(err) => return Err(err),
                     }
                 }
                 Err(err) => {
                     if self.demo_file.is_eof().unwrap_or_default() {
                         return Ok(());
                     }
-                    return Err(Error::from(err));
+                    return Err(err.into());
                 }
             }
         }
@@ -226,7 +224,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         self.run(|_notnotself, _cmd_header| Ok(ControlFlow::HandleCmd))
     }
 
-    fn reset(&mut self) -> Result<()> {
+    fn reset(&mut self) -> Result<(), io::Error> {
         self.demo_file
             .seek(SeekFrom::Start(DEMO_HEADER_SIZE as u64))?;
 
@@ -433,7 +431,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             msg.user_data_size_bits(),
             msg.flags(),
             msg.using_varint_bitcounts(),
-        )?;
+        );
 
         let string_data = if msg.data_compressed() {
             let sd = msg.string_data();
@@ -597,33 +595,31 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     /// delegated from [`DemoFile`].
     #[inline]
     pub fn demo_header(&self) -> &DemoHeader {
-        // NOTE: it is safe to call unwrap method here becuase Self's constructor will return an
-        // error if demo header check (that is executed during the construction) fails.
         self.demo_file.demo_header()
     }
 
     /// delegated from [`DemoFile`].
     #[inline]
-    pub fn file_info(&mut self) -> Result<&CDemoFileInfo> {
-        self.demo_file.file_info().map_err(Error::from)
+    pub fn file_info(&mut self) -> Result<&CDemoFileInfo, ReadFileInfoError> {
+        self.demo_file.file_info()
     }
 
     /// delegated from [`DemoFile`].
     #[inline]
-    pub fn ticks_per_second(&mut self) -> Result<f32> {
-        self.demo_file.ticks_per_second().map_err(Error::from)
+    pub fn ticks_per_second(&mut self) -> Result<f32, ReadFileInfoError> {
+        self.demo_file.ticks_per_second()
     }
 
     /// delegated from [`DemoFile`].
     #[inline]
-    pub fn ticks_per_frame(&mut self) -> Result<f32> {
-        self.demo_file.ticks_per_frame().map_err(Error::from)
+    pub fn ticks_per_frame(&mut self) -> Result<f32, ReadFileInfoError> {
+        self.demo_file.ticks_per_frame()
     }
 
     /// delegated from [`DemoFile`].
     #[inline]
-    pub fn total_ticks(&mut self) -> Result<i32> {
-        self.demo_file.total_ticks().map_err(Error::from)
+    pub fn total_ticks(&mut self) -> Result<i32, ReadFileInfoError> {
+        self.demo_file.total_ticks()
     }
 
     /// delegated from [`Context`].
@@ -668,7 +664,7 @@ impl Visitor for NopVisitor {}
 
 impl<R: Read + Seek> Parser<R, NopVisitor> {
     #[inline]
-    pub fn from_reader(rdr: R) -> Result<Self> {
+    pub fn from_reader(rdr: R) -> Result<Self, ReadDemoHeaderError> {
         Self::from_reader_with_visitor(rdr, NopVisitor)
     }
 }

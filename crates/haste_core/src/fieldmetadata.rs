@@ -1,20 +1,20 @@
 use crate::fielddecoder::{
-    BoolDecoder, F32Decoder, FieldDecode, I64Decoder, InvalidDecoder, QAngleDecoder, StringDecoder,
-    U64Decoder, Vector2Decoder, Vector3Decoder, Vector4Decoder,
+    BoolDecoder, F32Decoder, FieldDecode, FieldDecoderConstructionError, I64Decoder,
+    InvalidDecoder, QAngleDecoder, StringDecoder, U64Decoder, Vector2Decoder, Vector3Decoder,
+    Vector4Decoder,
 };
 use crate::flattenedserializers::FlattenedSerializerField;
-use crate::quantizedfloat;
-use crate::vartype::{Expr, Lit};
+use crate::vartype::{self, Expr, Lit};
 
 #[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("unknown array length ident: {0}")]
-    UnknownArrayLenIdent(String),
+pub enum FieldMetadataError {
     #[error(transparent)]
-    QuantizedFloatError(#[from] quantizedfloat::Error),
+    VarTypeParseError(#[from] vartype::Error),
+    #[error(transparent)]
+    FieldDecoderConstructionError(#[from] FieldDecoderConstructionError),
+    #[error("unknown array length ident: {0}")]
+    UnknownArrayLengthIdent(String),
 }
-
-pub type Result<T> = std::result::Result<T, Error>;
 
 // NOTE: Clone is derived because FlattenedSerializerField needs to be clonable.
 #[derive(Debug, Clone)]
@@ -94,7 +94,10 @@ impl Default for FieldMetadata {
 }
 
 #[inline]
-fn visit_ident(ident: &str, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
+fn visit_ident(
+    ident: &str,
+    field: &FlattenedSerializerField,
+) -> Result<FieldMetadata, FieldMetadataError> {
     macro_rules! non_special {
         ($decoder:ident) => {
             Ok(FieldMetadata {
@@ -184,7 +187,7 @@ fn visit_template(
     expr: Expr,
     arg: Expr,
     field: &FlattenedSerializerField,
-) -> Result<FieldMetadata> {
+) -> Result<FieldMetadata, FieldMetadataError> {
     let Expr::Ident(ident) = expr else {
         unreachable!();
     };
@@ -212,7 +215,11 @@ fn visit_template(
 }
 
 #[inline]
-fn visit_array(expr: Expr, len: Expr, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
+fn visit_array(
+    expr: Expr,
+    len: Expr,
+    field: &FlattenedSerializerField,
+) -> Result<FieldMetadata, FieldMetadataError> {
     if let Expr::Ident(ident) = expr {
         if ident == "char" {
             return Ok(FieldMetadata {
@@ -228,7 +235,9 @@ fn visit_array(expr: Expr, len: Expr, field: &FlattenedSerializerField) -> Resul
             // https://github.com/SteamDatabase/GameTracking-CS2/blob/6b3bf6ad44266e3ee4440a0b9b2fee1268812840/game/core/tools/demoinfo2/demoinfo2.txt#L160
             // TODO: test ability draft game
             "MAX_ABILITY_DRAFT_ABILITIES" => Ok(48),
-            _ => Err(Error::UnknownArrayLenIdent(ident.to_owned())),
+            _ => Err(FieldMetadataError::UnknownArrayLengthIdent(
+                ident.to_owned(),
+            )),
         },
         Expr::Lit(Lit::Num(length)) => Ok(length),
         _ => unreachable!(),
@@ -241,7 +250,7 @@ fn visit_array(expr: Expr, len: Expr, field: &FlattenedSerializerField) -> Resul
 }
 
 #[inline]
-fn visit_pointer() -> Result<FieldMetadata> {
+fn visit_pointer() -> Result<FieldMetadata, FieldMetadataError> {
     Ok(FieldMetadata {
         special_descriptor: Some(FieldSpecialDescriptor::Pointer),
         decoder: Box::<BoolDecoder>::default(),
@@ -249,7 +258,10 @@ fn visit_pointer() -> Result<FieldMetadata> {
 }
 
 #[inline]
-fn visit_any(expr: Expr, field: &FlattenedSerializerField) -> Result<FieldMetadata> {
+fn visit_any(
+    expr: Expr,
+    field: &FlattenedSerializerField,
+) -> Result<FieldMetadata, FieldMetadataError> {
     match expr {
         Expr::Ident(ident) => visit_ident(ident, field),
         Expr::Template { expr, arg } => visit_template(*expr, *arg, field),
@@ -260,49 +272,9 @@ fn visit_any(expr: Expr, field: &FlattenedSerializerField) -> Result<FieldMetada
 }
 
 pub(crate) fn get_field_metadata(
-    expr: Expr,
     field: &FlattenedSerializerField,
-) -> Result<FieldMetadata> {
+    var_type: &String,
+) -> Result<FieldMetadata, FieldMetadataError> {
+    let expr = vartype::parse(var_type.as_str())?;
     visit_any(expr, field)
 }
-
-// NOTE: a lot of values are enums, some were discovered in ocratine thing,
-// some in kisak-strike, others in
-// https://github.com/SteamDatabase/GameTracking-CS2/blob/6b3bf6ad44266e3ee4440a0b9b2fee1268812840/game/core/tools/demoinfo2/demoinfo2.txt#L155C83-L155C111
-//
-// BeamClipStyle_t // enum
-// BeamType_t // enum
-// CNetworkUtlVectorBase< CTransform > // public/mathlib/transform.h
-// Color // public/color.h
-// CourierState_t // enum
-// DOTACustomHeroPickRulesPhase_t // enum
-// DOTATeam_t // enum
-// DOTA_HeroPickState // enum
-// DOTA_SHOP_TYPE // enum
-// DamageOptions_t // enum
-// ERoshanSpawnPhase // enum
-// EntityDisolveType_t // enum
-// FowBlockerShape_t // enum
-// MoveCollide_t // enum
-// MoveType_t // enum
-// PingConfirmationIconType // enum
-// PlayerConnectedState // enum
-// PointWorldTextJustifyHorizontal_t // enum
-// PointWorldTextJustifyVertical_t // enum
-// PointWorldTextReorientMode_t // enum
-// RenderFx_t // enum
-// RenderMode_t // enum
-// ShopItemViewMode_t // enum
-// SolidType_t // enum
-// SurroundingBoundsType_t // enum
-// ValueRemapperHapticsType_t // enum
-// ValueRemapperInputType_t // enum
-// ValueRemapperMomentumType_t // enum
-// ValueRemapperOutputType_t // enum
-// ValueRemapperRatchetType_t // enum
-// WeaponState_t // enum
-// attrib_definition_index_t // game/shared/econ/econ_item_constants.h
-// attributeprovidertypes_t // game/shared/econ/attribute_manager.h
-// item_definition_index_t // game/shared/econ/econ_item_constants.h
-// itemid_t // game/shared/econ/econ_item_constants.h
-// style_index_t // game/shared/econ/econ_item_constants.h

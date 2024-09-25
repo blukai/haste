@@ -1,18 +1,15 @@
-use std::fs::File;
-use std::io::BufReader;
-
 /// this example shows how to compute game time in deadlock.
 ///
 /// logic for dota 2 would be different. if you need an example - open an issue on github.
-use haste::{
-    entities::{fkey_from_path, DeltaHeader, Entity},
-    fxhash,
-    parser::{self, Context, Parser, Visitor},
-    valveprotos::{
-        common::{CnetMsgTick, EDemoCommands, NetMessages},
-        prost::Message,
-    },
-};
+use std::fs::File;
+use std::io::BufReader;
+
+use anyhow::Result;
+use haste::entities::{fkey_from_path, DeltaHeader, Entity};
+use haste::fxhash;
+use haste::parser::{Context, Parser, Visitor};
+use haste::valveprotos::common::{CnetMsgTick, EDemoCommands, NetMessages};
+use haste::valveprotos::prost::Message;
 
 const DEADLOCK_GAMERULES_ENTITY: u64 = fxhash::hash_bytes(b"CCitadelGameRulesProxy");
 
@@ -75,7 +72,7 @@ impl Visitor for MyVisitor {
         ctx: &Context,
         cmd_header: &haste::demofile::CmdHeader,
         _data: &[u8],
-    ) -> parser::Result<()> {
+    ) -> Result<()> {
         // DemSyncTick indicates that all initialization messages were handled and now actual data
         // will flow; at this point tick interval is known.
         if self.tick_interval.is_none() && cmd_header.cmd == EDemoCommands::DemSyncTick {
@@ -84,7 +81,7 @@ impl Visitor for MyVisitor {
         Ok(())
     }
 
-    fn on_packet(&mut self, _ctx: &Context, packet_type: u32, data: &[u8]) -> parser::Result<()> {
+    fn on_packet(&mut self, _ctx: &Context, packet_type: u32, data: &[u8]) -> Result<()> {
         if packet_type == NetMessages::NetTick as u32 {
             self.handle_net_tick(data)?;
         }
@@ -96,20 +93,20 @@ impl Visitor for MyVisitor {
         _ctx: &Context,
         _delta_header: DeltaHeader,
         entity: &Entity,
-    ) -> parser::Result<()> {
+    ) -> Result<()> {
         if entity.serializer_name_heq(DEADLOCK_GAMERULES_ENTITY) {
             self.handle_game_rules(entity)?;
         }
         Ok(())
     }
 
-    fn on_tick_end(&mut self, _ctx: &Context) -> parser::Result<()> {
+    fn on_tick_end(&mut self, _ctx: &Context) -> Result<()> {
         eprintln!("game_time: {:?}", self.get_game_time());
         Ok(())
     }
 }
 
-fn main() -> parser::Result<()> {
+fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let filepath = args.get(1);
     if filepath.is_none() {
