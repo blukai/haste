@@ -25,7 +25,7 @@ nohash = "0.2.0"
 rand = "0.8.5"
 snap = "1.1.1"
 thiserror = "1.0.64"
-valveprotos = { git = "https://github.com/blukai/valveprotos-rs.git", rev = "0d6c6b72ad469db3841d1afd36804fe9043ef7ce", features = ["protobuf-src"] }
+valveprotos = { git = "https://github.com/blukai/valveprotos-rs.git", rev = "0d6c6b72ad469db3841d1afd36804fe9043ef7ce" }
 which = "6.0.3"
 
 [package]
@@ -42,3 +42,8 @@ dota2 = ["haste_core/dota2"]
 # TODO(blukai): rename preserve-metadata feature into something more meaningful,
 # or get rid of it all together and preserve symbols only in debug builds.
 preserve-metadata = ["haste_core/preserve-metadata"]
+protobuf-src = ["haste_core/protobuf-src"]
+
+# enable more optimizations in dev (/debug) builds for dependencies
+[profile.dev.package."*"]
+opt-level = 3
