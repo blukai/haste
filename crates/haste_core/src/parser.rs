@@ -161,15 +161,12 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 instance_baseline: InstanceBaseline::default(),
                 serializers: None,
                 entity_classes: None,
-                tick_interval: DEFAULT_TICK_INTERVAL,
-                full_packet_interval: DEFAULT_FULL_PACKET_INTERVAL,
+                tick_interval: 0.0,
+                full_packet_interval: 0,
                 tick: -1,
                 prev_tick: -1,
             },
-            field_decode_ctx: FieldDecodeContext {
-                tick_interval: DEFAULT_TICK_INTERVAL,
-                ..Default::default()
-            },
+            field_decode_ctx: FieldDecodeContext::default(),
         })
     }
 
