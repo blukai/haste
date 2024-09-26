@@ -25,7 +25,7 @@ nohash = "0.2.0"
 rand = "0.8.5"
 snap = "1.1.1"
 thiserror = "1.0.64"
-valveprotos = { git = "https://github.com/blukai/valveprotos-rs.git", rev = "0d6c6b72ad469db3841d1afd36804fe9043ef7ce" }
+valveprotos = { git = "https://github.com/blukai/valveprotos-rs.git", rev = "63620c46236ed0f03a9e8b75954a4dafd0fe8e53" }
 which = "6.0.3"
 
 [package]
