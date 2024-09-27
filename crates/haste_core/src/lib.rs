@@ -3,7 +3,7 @@
 #![deny(clippy::panic)]
 
 // TODO: figure pub scopes for all the things
-pub(crate) mod bitreader;
+pub mod bitreader;
 pub mod demofile;
 pub mod entities;
 pub mod entityclasses;
