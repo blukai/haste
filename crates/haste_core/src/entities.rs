@@ -45,8 +45,8 @@ pub fn is_ehandle_valid(handle: u32) -> bool {
 // int iEntity = pData->m_Value.m_Int & ((1 << MAX_EDICT_BITS) - 1);
 // int iSerialNum = pData->m_Value.m_Int >> MAX_EDICT_BITS;
 
-pub fn ehandle_to_index(handle: u32) -> usize {
-    (handle & ((1 << MAX_EDICT_BITS) - 1)) as usize
+pub fn ehandle_to_index(handle: u32) -> i32 {
+    (handle & ((1 << MAX_EDICT_BITS) - 1)) as i32
 }
 
 // TODO(blukai): investigate this (from public/basehandle.h):
