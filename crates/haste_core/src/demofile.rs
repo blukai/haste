@@ -235,10 +235,11 @@ impl<R: Read + Seek> DemoFile<R> {
 
         let (tick, tick_n) = {
             let (tick, n) = varint::read_uvarint32(&mut self.rdr)?;
-            // tick is set to max value before the first tick / pre-game initialization messages.
-            //
-            // TODO: get rid of this branch. it should be okay to work with u32::MAX.
-            let tick = if tick == u32::MAX { -1 } else { tick as i32 };
+            // NOTE: tick is set to u32::MAX before before all pre-game initialization messages are
+            // sent.
+            // ticks everywhere are represented as i32, casting u32::MAX to i32 is okay because
+            // bits in u32::MAX == bits in -1 i32.
+            let tick = tick as i32;
             (tick, n)
         };
 

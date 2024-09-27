@@ -188,23 +188,20 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 Ok(cmd_header) => {
                     self.ctx.prev_tick = self.ctx.tick;
                     self.ctx.tick = cmd_header.tick;
-                    match handler(self, &cmd_header) {
-                        Ok(cf) => match cf {
-                            ControlFlow::HandleCmd => {
-                                self.handle_cmd(&cmd_header)?;
-                                if self.ctx.prev_tick != self.ctx.tick {
-                                    self.visitor.on_tick_end(&self.ctx)?;
-                                }
+                    match handler(self, &cmd_header)? {
+                        ControlFlow::HandleCmd => {
+                            self.handle_cmd(&cmd_header)?;
+                            if self.ctx.prev_tick != self.ctx.tick {
+                                self.visitor.on_tick_end(&self.ctx)?;
                             }
-                            ControlFlow::SkipCmd => self.demo_file.skip_cmd_body(&cmd_header)?,
-                            ControlFlow::IgnoreCmd => {}
-                            ControlFlow::Break => {
-                                self.demo_file.unread_cmd_header(&cmd_header)?;
-                                self.ctx.tick = self.ctx.prev_tick;
-                                return Ok(());
-                            }
-                        },
-                        Err(err) => return Err(err),
+                        }
+                        ControlFlow::SkipCmd => self.demo_file.skip_cmd_body(&cmd_header)?,
+                        ControlFlow::IgnoreCmd => {}
+                        ControlFlow::Break => {
+                            self.demo_file.unread_cmd_header(&cmd_header)?;
+                            self.ctx.tick = self.ctx.prev_tick;
+                            return Ok(());
+                        }
                     }
                 }
                 Err(err) => {
@@ -286,12 +283,10 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                     cmd.packet = None;
                 }
                 notnotself.handle_cmd_full_packet(cmd)?;
+                // NOTE: there's absolutely no reason to check if tick changed because it changed.
+                notnotself.visitor.on_tick_end(&notnotself.ctx)?;
 
                 did_handle_last_full_packet = !has_full_packet_ahead;
-
-                if notnotself.ctx.prev_tick != notnotself.ctx.tick {
-                    notnotself.visitor.on_tick_end(&notnotself.ctx)?;
-                }
 
                 return Ok(ControlFlow::IgnoreCmd);
             }
