@@ -1,7 +1,7 @@
 # haste
 
-world's fastest dota 2 and deadlock replay parser. more then two times faster
-than comically fast.
+world's fastest dota 2 and deadlock (the game) replay parser. more then two
+times faster than comically fast.
 
 haste attempts to squeeze maximum single-core performance from the cpu, which
 enables efficient utilization of all cores for parsing multiple replays
@@ -105,6 +105,8 @@ other notable resources:
 - [ValveSoftware/source-sdk-2013](https://github.com/ValveSoftware/source-sdk-2013)
 - [SwagSoftware/Kisak-Strike](https://github.com/SwagSoftware/Kisak-Strike)
 - [markus-wa/demoinfocs-golang](https://github.com/markus-wa/demoinfocs-golang)
+(some info about how pointer serializer fields work)
+- [demofile-net](https://github.com/saul/demofile-net) (tv broadcasts)
 
 ## performance / profiling
 

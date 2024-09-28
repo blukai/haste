@@ -162,9 +162,6 @@ impl<R: Read + Seek> DemoFile<R> {
     ///
     /// the read header is stored internally for future use and can be accessed using
     /// [`DemoFile::demo_header`] method.
-    ///
-    /// **Note:** do not use this when parsing HLTV fragments, instead use
-    /// [`DemoFile::read_cmd_header_hltv`] directly from the start of the stream.
     pub fn read_demo_header(&mut self) -> Result<&DemoHeader, ReadDemoHeaderError> {
         assert!(
             self.demo_header.is_none(),
@@ -214,17 +211,15 @@ impl<R: Read + Seek> DemoFile<R> {
             let (cmd_raw, n) = varint::read_uvarint32(&mut self.rdr)?;
 
             const DEM_IS_COMPRESSED: u32 = EDemoCommands::DemIsCompressed as u32;
-            let is_body_compressed = cmd_raw & DEM_IS_COMPRESSED == DEM_IS_COMPRESSED;
+            let body_compressed = cmd_raw & DEM_IS_COMPRESSED == DEM_IS_COMPRESSED;
 
-            let cmd = if is_body_compressed {
+            let cmd = if body_compressed {
                 cmd_raw & !DEM_IS_COMPRESSED
             } else {
                 cmd_raw
             };
 
             (
-                // TODO: do not perform useless work - do not convert command to enum, store it as
-                // i32
                 EDemoCommands::try_from(cmd as i32).map_err(|_| {
                     ReadCmdHeaderError::UnknownCmd {
                         raw: cmd_raw,
@@ -232,7 +227,7 @@ impl<R: Read + Seek> DemoFile<R> {
                     }
                 })?,
                 n,
-                is_body_compressed,
+                body_compressed,
             )
         };
 
@@ -254,88 +249,6 @@ impl<R: Read + Seek> DemoFile<R> {
             tick,
             body_size,
             size: (cmd_n + tick_n + body_size_n) as u8,
-        })
-    }
-
-    /// This is used to read HLTV demo fragments, *not* cmds from a normal Demo file.
-    ///
-    /// HLTV fragments can be parsed nearly the same as normal Demo files, however they have a
-    /// slightly different way of separating commands, and they don't have a header.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let mut demo_file = DemoFile::from_reader(buf_reader);
-    /// loop {
-    ///     match demo_file.read_cmd_header_hltv() {
-    ///         Ok(cmd_header) => {
-    ///             eprintln!("{:?}", &cmd_header);
-    ///             // read this in real code, of course
-    ///             demo_file.skip_cmd_body(&cmd_header)?;
-    ///         }
-    ///         Err(err) => {
-    ///             if demo_file.is_eof().unwrap_or_default() {
-    ///                 println!("hit the end of the fragment(s)!");
-    ///                 return Ok(());
-    ///             }
-    ///             return Err(err.into());
-    ///         }
-    ///     }
-    /// }
-    /// ```
-    pub fn read_cmd_header_hltv(&mut self) -> Result<CmdHeader, ReadCmdHeaderError> {
-        let (cmd, cmd_n, body_compressed) = {
-            let (cmd_raw, n) = varint::read_uvarint32(&mut self.rdr)?;
-
-            const DEM_IS_COMPRESSED: u32 = EDemoCommands::DemIsCompressed as u32;
-            let is_body_compressed = cmd_raw & DEM_IS_COMPRESSED == DEM_IS_COMPRESSED;
-
-            let cmd = if is_body_compressed {
-                cmd_raw & !DEM_IS_COMPRESSED
-            } else {
-                cmd_raw
-            };
-
-            (
-                // TODO: do not perform useless work - do not convert command to enum, store it as
-                // i32
-                EDemoCommands::try_from(cmd as i32).map_err(|_| {
-                    ReadCmdHeaderError::UnknownCmd {
-                        raw: cmd_raw,
-                        uncompressed: cmd,
-                    }
-                })?,
-                n,
-                is_body_compressed,
-            )
-        };
-
-        let mut buf = [0u8; size_of::<u32>()];
-
-        let (tick, tick_n) = {
-            self.rdr.read_exact(&mut buf)?;
-            let tick = u32::from_le_bytes(buf) as i32;
-            (tick, size_of::<u32>())
-        };
-
-        // https://github.com/saul/demofile-net/blob/7d3d59e478dbd2b000f4efa2dac70ed1bf2e2b7f/src/DemoFile/HttpBroadcastReader.cs#L150
-        let (_unknown, unknown_n) = {
-            self.rdr.read_exact(&mut buf[..1])?;
-            (buf[0], 1)
-        };
-
-        let (body_size, body_size_n) = {
-            self.rdr.read_exact(&mut buf)?;
-            let body_size = u32::from_le_bytes(buf);
-            (body_size, size_of::<u32>())
-        };
-
-        Ok(CmdHeader {
-            cmd,
-            body_compressed,
-            tick,
-            body_size,
-            size: (cmd_n + tick_n + body_size_n + unknown_n) as u8,
         })
     }
 
