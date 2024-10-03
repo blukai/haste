@@ -5,13 +5,17 @@ use bytes::Bytes;
 // http client
 // ----
 
+// NOTE: http::Response's body (Bytes) is wrapped into Result because aparantely there are
+// situations when server speifies the gzip encoding within the content-encoding header but does
+// not actually encode the body (curl with --trace flag is helpful). very xd, thank you valve.
+
 pub trait HttpClient {
     type Error: std::error::Error + Send + Sync + 'static;
 
     fn execute(
         &self,
         request: http::Request<Bytes>,
-    ) -> impl Future<Output = Result<http::Response<Bytes>, Self::Error>>;
+    ) -> impl Future<Output = Result<http::Response<Result<Bytes, Self::Error>>, Self::Error>>;
 }
 
 // reqwest impl
@@ -29,7 +33,7 @@ mod reqwest_impl {
         async fn execute(
             &self,
             request: http::Request<Bytes>,
-        ) -> Result<http::Response<Bytes>, Self::Error> {
+        ) -> Result<http::Response<Result<Bytes, Self::Error>>, Self::Error> {
             let (parts, body) = request.into_parts();
             let http::request::Parts {
                 method,
@@ -58,7 +62,7 @@ mod reqwest_impl {
                 result.headers_mut().expect("could not get result headers"),
             );
             let result = result
-                .body(response.bytes().await?)
+                .body(response.bytes().await)
                 .expect("could not transpose body");
             Ok(result)
         }

@@ -1,5 +1,5 @@
 mod httpbroadcast;
 mod httpclient;
 
-pub use httpbroadcast::{HttpBroadcast, HttpBroadcastClient};
+pub use httpbroadcast::{AppId, HttpBroadcast, HttpBroadcastClient};
 pub use httpclient::HttpClient;
