@@ -1,7 +1,5 @@
-use std::{
-    marker::PhantomData,
-    time::{Duration, Instant},
-};
+use std::marker::PhantomData;
+use std::time::{Duration, Instant};
 
 use bytes::Bytes;
 use serde::Deserialize;

@@ -5,6 +5,7 @@
 // TODO: figure pub scopes for all the things
 pub mod bitreader;
 pub mod demofile;
+pub mod demostream;
 pub mod entities;
 pub mod entityclasses;
 pub(crate) mod fielddecoder;
@@ -17,7 +18,6 @@ pub(crate) mod instancebaseline;
 pub mod parser;
 pub(crate) mod quantizedfloat;
 pub mod stringtables;
-pub mod tvbroadcast;
 
 // own crate re-exports
 pub(crate) use haste_vartype as vartype;

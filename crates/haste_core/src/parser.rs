@@ -2,17 +2,15 @@ use std::io::{self, Read, Seek, SeekFrom};
 
 use anyhow::Result;
 use valveprotos::common::{
-    CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables,
-    CDemoStringTables, CsvcMsgCreateStringTable, CsvcMsgPacketEntities, CsvcMsgServerInfo,
-    CsvcMsgUpdateStringTable, EDemoCommands, SvcMessages,
+    CDemoClassInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables, CDemoStringTables,
+    CsvcMsgCreateStringTable, CsvcMsgPacketEntities, CsvcMsgServerInfo, CsvcMsgUpdateStringTable,
+    EDemoCommands, SvcMessages,
 };
 use valveprotos::prost::Message;
 
 use crate::bitreader::BitReader;
-use crate::demofile::{
-    CmdHeader, DemoFile, DemoHeader, ReadDemoHeaderError, ReadFileInfoError, DEMO_HEADER_SIZE,
-    DEMO_RECORD_BUFFER_SIZE,
-};
+use crate::demofile::{DemoHeader, ReadDemoHeaderError, DEMO_RECORD_BUFFER_SIZE};
+use crate::demostream::{CmdHeader, DemoStream};
 use crate::entities::{DeltaHeader, Entity, EntityContainer};
 use crate::entityclasses::EntityClasses;
 use crate::fielddecoder::FieldDecodeContext;
@@ -137,22 +135,23 @@ enum ControlFlow {
 }
 
 // TODO: maybe rename to DemoPlayer (or DemoRunner?)
-pub struct Parser<R: Read + Seek, V: Visitor> {
-    demo_file: DemoFile<R>,
+pub struct Parser<R: Read + Seek, D: DemoStream<R>, V: Visitor> {
+    demo_stream: D,
     buf: Vec<u8>,
     visitor: V,
     ctx: Context,
     // NOTE(blukai): is this the place for this? can it be moved "closer" to entities somewhere?
     field_decode_ctx: FieldDecodeContext,
+    _r: std::marker::PhantomData<R>,
 }
 
-impl<R: Read + Seek, V: Visitor> Parser<R, V> {
-    pub fn from_reader_with_visitor(rdr: R, visitor: V) -> Result<Self, ReadDemoHeaderError> {
-        let mut demo_file = DemoFile::from_reader(rdr);
-        let _demo_header = demo_file.read_demo_header()?;
-
+impl<R: Read + Seek, D: DemoStream<R>, V: Visitor> Parser<R, D, V> {
+    pub fn from_reader_with_visitor(
+        demo_stream: D,
+        visitor: V,
+    ) -> Result<Self, ReadDemoHeaderError> {
         Ok(Self {
-            demo_file,
+            demo_stream,
             buf: vec![0; DEMO_RECORD_BUFFER_SIZE],
             visitor,
             ctx: Context {
@@ -167,6 +166,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                 prev_tick: -1,
             },
             field_decode_ctx: FieldDecodeContext::default(),
+            _r: std::marker::PhantomData,
         })
     }
 
@@ -184,7 +184,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
         F: FnMut(&mut Self, &CmdHeader) -> Result<ControlFlow>,
     {
         loop {
-            match self.demo_file.read_cmd_header() {
+            match self.demo_stream.read_cmd_header() {
                 Ok(cmd_header) => {
                     self.ctx.prev_tick = self.ctx.tick;
                     self.ctx.tick = cmd_header.tick;
@@ -195,17 +195,17 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                                 self.visitor.on_tick_end(&self.ctx)?;
                             }
                         }
-                        ControlFlow::SkipCmd => self.demo_file.skip_cmd_body(&cmd_header)?,
+                        ControlFlow::SkipCmd => self.demo_stream.skip_cmd_body(&cmd_header)?,
                         ControlFlow::IgnoreCmd => {}
                         ControlFlow::Break => {
-                            self.demo_file.unread_cmd_header(&cmd_header)?;
+                            self.demo_stream.unread_cmd_header(&cmd_header)?;
                             self.ctx.tick = self.ctx.prev_tick;
                             return Ok(());
                         }
                     }
                 }
                 Err(err) => {
-                    if self.demo_file.is_eof().unwrap_or_default() {
+                    if self.demo_stream.is_eof().unwrap_or_default() {
                         return Ok(());
                     }
                     return Err(err.into());
@@ -219,8 +219,8 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     }
 
     fn reset(&mut self) -> Result<(), io::Error> {
-        self.demo_file
-            .seek(SeekFrom::Start(DEMO_HEADER_SIZE as u64))?;
+        self.demo_stream
+            .seek(SeekFrom::Start(size_of::<DemoHeader> as u64))?;
 
         self.ctx.entities.clear();
         self.ctx.string_tables.clear();
@@ -268,12 +268,12 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
             let has_full_packet_ahead =
                 distance_to_target_tick > notnotself.ctx.full_packet_interval + 100;
             if is_full_packet {
-                let cmd_body = notnotself.demo_file.read_cmd_body(cmd_header)?;
+                let cmd_body = notnotself.demo_stream.read_cmd_body(cmd_header)?;
                 notnotself
                     .visitor
                     .on_cmd(&notnotself.ctx, cmd_header, cmd_body)?;
 
-                let mut cmd = CDemoFullPacket::decode(cmd_body)?;
+                let mut cmd: CDemoFullPacket = D::decode_cmd_body(cmd_body)?;
                 if has_full_packet_ahead {
                     // NOTE: clarity seem to ignore "intermediary" full packet's
                     // packet
@@ -304,12 +304,15 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     // 2. DemSendTables (flattened serializers; never update)
     // 3. DemClassInfo (never update)
     fn handle_cmd(&mut self, cmd_header: &CmdHeader) -> Result<()> {
-        let cmd_body = self.demo_file.read_cmd_body(cmd_header)?;
+        // TODO: consider introducing CmdInstance thing that would allow to decode body once and
+        // not read it, but skip, if unconsumed. note that to work temporary ownership of
+        // demo_stream will need to be taken.
+        let cmd_body = self.demo_stream.read_cmd_body(cmd_header)?;
         self.visitor.on_cmd(&self.ctx, cmd_header, cmd_body)?;
 
         match cmd_header.cmd {
             EDemoCommands::DemPacket | EDemoCommands::DemSignonPacket => {
-                let cmd = CDemoPacket::decode(cmd_body)?;
+                let cmd: CDemoPacket = D::decode_cmd_body(cmd_body)?;
                 self.handle_cmd_packet(cmd)?;
             }
 
@@ -320,7 +323,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                     return Ok(());
                 }
 
-                let cmd = CDemoSendTables::decode(cmd_body)?;
+                let cmd: CDemoSendTables = D::decode_cmd_body(cmd_body)?;
                 self.ctx.serializers = Some(FlattenedSerializerContainer::parse(cmd)?);
             }
 
@@ -331,7 +334,7 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
                     return Ok(());
                 }
 
-                let cmd = CDemoClassInfo::decode(cmd_body)?;
+                let cmd: CDemoClassInfo = D::decode_cmd_body(cmd_body)?;
                 self.ctx.entity_classes = Some(EntityClasses::parse(cmd));
 
                 // NOTE: DemClassInfo message becomes available after
@@ -584,36 +587,6 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
     // because it'll violate encapsulation; parser will lack control over the
     // DemoFile's internal state which may lead to to unintended consequences.
 
-    /// delegated from [`DemoFile`].
-    #[inline]
-    pub fn demo_header(&self) -> &DemoHeader {
-        self.demo_file.demo_header()
-    }
-
-    /// delegated from [`DemoFile`].
-    #[inline]
-    pub fn file_info(&mut self) -> Result<&CDemoFileInfo, ReadFileInfoError> {
-        self.demo_file.file_info()
-    }
-
-    /// delegated from [`DemoFile`].
-    #[inline]
-    pub fn ticks_per_second(&mut self) -> Result<f32, ReadFileInfoError> {
-        self.demo_file.ticks_per_second()
-    }
-
-    /// delegated from [`DemoFile`].
-    #[inline]
-    pub fn ticks_per_frame(&mut self) -> Result<f32, ReadFileInfoError> {
-        self.demo_file.ticks_per_frame()
-    }
-
-    /// delegated from [`DemoFile`].
-    #[inline]
-    pub fn total_ticks(&mut self) -> Result<i32, ReadFileInfoError> {
-        self.demo_file.total_ticks()
-    }
-
     /// delegated from [`Context`].
     #[inline]
     pub fn string_tables(&self) -> Option<&StringTableContainer> {
@@ -654,9 +627,9 @@ impl<R: Read + Seek, V: Visitor> Parser<R, V> {
 pub struct NopVisitor;
 impl Visitor for NopVisitor {}
 
-impl<R: Read + Seek> Parser<R, NopVisitor> {
+impl<R: Read + Seek, D: DemoStream<R>> Parser<R, D, NopVisitor> {
     #[inline]
-    pub fn from_reader(rdr: R) -> Result<Self, ReadDemoHeaderError> {
-        Self::from_reader_with_visitor(rdr, NopVisitor)
+    pub fn from_reader(demo_stream: D) -> Result<Self, ReadDemoHeaderError> {
+        Self::from_reader_with_visitor(demo_stream, NopVisitor)
     }
 }

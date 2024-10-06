@@ -1,10 +1,12 @@
-use std::{fs::File, io::Write, time::Duration};
+use std::fs::File;
+use std::io::Write;
+use std::time::Duration;
 
 use anyhow::Result;
 use haste_broadcast::httpbroadcast::{default_headers, HttpBroadcast};
 
 #[derive(argh::FromArgs)]
-/// Hanyanya fuwa
+/// hanyanya fuwa
 struct Args {
     /// broadcast url
     #[argh(option)]
