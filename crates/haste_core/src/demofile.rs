@@ -179,7 +179,7 @@ impl<R: Read + Seek> DemoStream<R> for DemoFile<R> {
     where
         T: CmdBody,
     {
-        Ok(T::decode(data)?)
+        Ok(T::decode_protobuf(data)?)
     }
 }
 

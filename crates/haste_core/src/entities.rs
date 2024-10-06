@@ -1,3 +1,4 @@
+use std::fmt::{self, Binary};
 use std::hash::BuildHasherDefault;
 use std::rc::Rc;
 
@@ -160,6 +161,13 @@ pub const fn fkey_from_path(path: &[&str]) -> u64 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct DeltaHeader(u8);
+
+// NOTE: this impl can be usefule for debugging. i do not want to expose tuple's inner value.
+impl Binary for DeltaHeader {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> std::fmt::Result {
+        fmt::Binary::fmt(&self.0, f)
+    }
+}
 
 impl DeltaHeader {
     // NOTE: each variant is annotated with branches from CL_ParseDeltaHeader
@@ -425,7 +433,14 @@ impl EntityContainer {
     // there's a risk (that only should exist if replay is corrupted).
     #[inline]
     pub(crate) unsafe fn handle_delete_unchecked(&mut self, index: i32) -> Entity {
-        unsafe { self.entities.remove(&(index)).unwrap_unchecked() }
+        let entity = self.entities.remove(&index);
+
+        debug_assert!(
+            entity.is_some(),
+            "tried to delete non-existent entity #{index}"
+        );
+
+        entity.unwrap_unchecked()
     }
 
     // SAFETY: if entity was ever created, and not deleted, it can be updated!
@@ -437,7 +452,14 @@ impl EntityContainer {
         field_decode_ctx: &mut FieldDecodeContext,
         br: &mut BitReader,
     ) -> Result<&Entity, BitReaderOverflowError> {
-        let entity = unsafe { self.entities.get_mut(&index).unwrap_unchecked() };
+        let entity = self.entities.get_mut(&index);
+
+        debug_assert!(
+            entity.is_some(),
+            "tried to update non-existent entity #{index}"
+        );
+
+        let entity = entity.unwrap_unchecked();
         entity.parse(field_decode_ctx, br, &mut self.field_paths)?;
         Ok(entity)
     }

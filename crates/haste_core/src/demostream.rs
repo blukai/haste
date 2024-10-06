@@ -1,3 +1,4 @@
+use std::any::type_name;
 use std::error::Error;
 use std::io::{self, Read, Seek, SeekFrom};
 
@@ -16,17 +17,59 @@ pub struct CmdHeader {
     pub size: u8,
 }
 
-pub trait CmdBody: Default + prost::Message {}
+// TODO: proper name for non-protobuf decoder error
+#[derive(thiserror::Error, Debug)]
+pub enum CmdBodyDecodeAltError {
+    #[error(transparent)]
+    DecodeProtobufError(#[from] prost::DecodeError),
+}
+
+pub trait CmdBody: Default + prost::Message {
+    #[inline(always)]
+    fn decode_protobuf(data: &[u8]) -> Result<Self, prost::DecodeError> {
+        Self::decode(data)
+    }
+
+    // TODO: proper name for non-protobuf decoder
+    fn decode_alt(_data: &[u8]) -> Result<Self, CmdBodyDecodeAltError> {
+        unimplemented!("TODO: impl alt decoder for {}", type_name::<Self>())
+    }
+}
 
 // Error
 impl CmdBody for protos::CDemoStop {}
 impl CmdBody for protos::CDemoFileHeader {}
 impl CmdBody for protos::CDemoFileInfo {}
 impl CmdBody for protos::CDemoSyncTick {}
-impl CmdBody for protos::CDemoSendTables {}
-impl CmdBody for protos::CDemoClassInfo {}
+
+impl CmdBody for protos::CDemoSendTables {
+    fn decode_alt(data: &[u8]) -> Result<Self, CmdBodyDecodeAltError> {
+        Ok(protos::CDemoSendTables {
+            // TODO: no-copy for send tables cmd
+            // also think about how to do no-copy when decoding protobuf.
+            data: Some((&data[4..]).to_vec()),
+        })
+    }
+}
+
+impl CmdBody for protos::CDemoClassInfo {
+    fn decode_alt(data: &[u8]) -> Result<Self, CmdBodyDecodeAltError> {
+        Self::decode_protobuf(data).map_err(CmdBodyDecodeAltError::DecodeProtobufError)
+    }
+}
+
 impl CmdBody for protos::CDemoStringTables {}
-impl CmdBody for protos::CDemoPacket {}
+
+impl CmdBody for protos::CDemoPacket {
+    fn decode_alt(data: &[u8]) -> Result<Self, CmdBodyDecodeAltError> {
+        Ok(protos::CDemoPacket {
+            // TODO: no-copy for packet cmd.
+            // also think about how to do no-copy when decoding protobuf.
+            data: Some(data.to_vec()),
+        })
+    }
+}
+
 // SignonPacket
 impl CmdBody for protos::CDemoConsoleCmd {}
 impl CmdBody for protos::CDemoCustomData {}

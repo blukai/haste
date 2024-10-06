@@ -6,7 +6,9 @@ use serde::Deserialize;
 
 use crate::httpclient::HttpClient;
 
-// TODO: figure DemoStream trait
+// thanks to Bulbasaur (/ johnpyp) for bringing up tv broadcasts in discord, see
+// https://discord.com/channels/1275127765879754874/1276578605836668969/1289323757403504734; and
+// for beginning implementing support for them in https://github.com/blukai/haste/pull/2.
 
 // links to dig into:
 // - https://developer.valvesoftware.com/wiki/Counter-Strike:_Global_Offensive_Broadcast
@@ -288,10 +290,14 @@ impl<'client, C: HttpClient + 'client> HttpBroadcast<'client, C> {
             let start = Instant::now();
             match self
                 .client
-                .get_fragment(self.stream_fragment + 1, FragmentType::Delta)
+                .get_fragment(self.stream_fragment, FragmentType::Delta)
                 .await
             {
                 Ok(delta) => {
+                    // NOTE: when state transitions from StreamState::Fullframe into
+                    // StreamState::Deltaframes stream_fragment must not be incremented. both, full
+                    // fragment and delta framgnet, are needed; otherwise it'll not be possible to
+                    // parse packet entities.
                     self.stream_fragment += 1;
                     self.stream_state = StreamState::Deltaframes {
                         num_retries: 0,
