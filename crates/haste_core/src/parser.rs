@@ -2,9 +2,8 @@ use std::io::{self, SeekFrom};
 
 use anyhow::Result;
 use valveprotos::common::{
-    CDemoClassInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables, CDemoStringTables,
-    CsvcMsgCreateStringTable, CsvcMsgPacketEntities, CsvcMsgServerInfo, CsvcMsgUpdateStringTable,
-    EDemoCommands, SvcMessages,
+    CDemoFullPacket, CDemoPacket, CDemoStringTables, CsvcMsgCreateStringTable,
+    CsvcMsgPacketEntities, CsvcMsgServerInfo, CsvcMsgUpdateStringTable, EDemoCommands, SvcMessages,
 };
 use valveprotos::prost::Message;
 
@@ -193,7 +192,7 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
                                 self.visitor.on_tick_end(&self.ctx)?;
                             }
                         }
-                        ControlFlow::SkipCmd => self.demo_stream.skip_cmd_body(&cmd_header)?,
+                        ControlFlow::SkipCmd => self.demo_stream.skip_cmd(&cmd_header)?,
                         ControlFlow::IgnoreCmd => {}
                         ControlFlow::Break => {
                             self.demo_stream.unread_cmd_header(&cmd_header)?;
@@ -266,12 +265,12 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
             let has_full_packet_ahead =
                 distance_to_target_tick > notnotself.ctx.full_packet_interval + 100;
             if is_full_packet {
-                let cmd_body = notnotself.demo_stream.read_cmd_body(cmd_header)?;
+                let cmd_body = notnotself.demo_stream.read_cmd(cmd_header)?;
                 notnotself
                     .visitor
                     .on_cmd(&notnotself.ctx, cmd_header, cmd_body)?;
 
-                let mut cmd: CDemoFullPacket = D::decode_cmd_body(cmd_body)?;
+                let mut cmd = D::decode_cmd_full_packet(cmd_body)?;
                 if has_full_packet_ahead {
                     // NOTE: clarity seem to ignore "intermediary" full packet's
                     // packet
@@ -305,12 +304,12 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
         // TODO: consider introducing CmdInstance thing that would allow to decode body once and
         // not read it, but skip, if unconsumed. note that to work temporary ownership of
         // demo_stream will need to be taken.
-        let cmd_body = self.demo_stream.read_cmd_body(cmd_header)?;
+        let cmd_body = self.demo_stream.read_cmd(cmd_header)?;
         self.visitor.on_cmd(&self.ctx, cmd_header, cmd_body)?;
 
         match cmd_header.cmd {
             EDemoCommands::DemPacket | EDemoCommands::DemSignonPacket => {
-                let cmd: CDemoPacket = D::decode_cmd_body(cmd_body)?;
+                let cmd = D::decode_cmd_packet(cmd_body)?;
                 self.handle_cmd_packet(cmd)?;
             }
 
@@ -321,7 +320,7 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
                     return Ok(());
                 }
 
-                let cmd: CDemoSendTables = D::decode_cmd_body(cmd_body)?;
+                let cmd = D::decode_cmd_send_tables(cmd_body)?;
                 self.ctx.serializers = Some(FlattenedSerializerContainer::parse(cmd)?);
             }
 
@@ -332,7 +331,7 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
                     return Ok(());
                 }
 
-                let cmd: CDemoClassInfo = D::decode_cmd_body(cmd_body)?;
+                let cmd = D::decode_cmd_class_info(cmd_body)?;
                 self.ctx.entity_classes = Some(EntityClasses::parse(cmd));
 
                 // NOTE: DemClassInfo message becomes available after

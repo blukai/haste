@@ -1,10 +1,13 @@
 use std::io::{self, Read, Seek, SeekFrom};
 
 use dungers::varint;
-use valveprotos::common::EDemoCommands;
+use prost::Message;
+use valveprotos::common::{
+    CDemoClassInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables, EDemoCommands,
+};
 use valveprotos::prost;
 
-use crate::demostream::{CmdBody, CmdHeader, DemoStream};
+use crate::demostream::{CmdHeader, DemoStream};
 
 // #define DEMO_RECORD_BUFFER_SIZE 2*1024*1024
 //
@@ -68,7 +71,7 @@ pub enum ReadCmdHeaderError {
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum ReadCmdBodyError {
+pub enum ReadCmdError {
     #[error(transparent)]
     IoError(#[from] io::Error),
     #[error(transparent)]
@@ -86,8 +89,8 @@ pub struct DemoFile<R: Read + Seek> {
 
 impl<R: Read + Seek> DemoStream for DemoFile<R> {
     type ReadCmdHeaderError = ReadCmdHeaderError;
-    type ReadCmdBodyError = ReadCmdBodyError;
-    type DecodeCmdBodyError = prost::DecodeError;
+    type ReadCmdError = ReadCmdError;
+    type DecodeCmdError = prost::DecodeError;
 
     // stream ops
     // ----
@@ -161,7 +164,7 @@ impl<R: Read + Seek> DemoStream for DemoFile<R> {
     // cmd body
     // ----
 
-    fn read_cmd_body(&mut self, cmd_header: &CmdHeader) -> Result<&[u8], ReadCmdBodyError> {
+    fn read_cmd(&mut self, cmd_header: &CmdHeader) -> Result<&[u8], ReadCmdError> {
         let (left, right) = self.buf.split_at_mut(cmd_header.body_size as usize);
         self.rdr.read_exact(left)?;
 
@@ -176,11 +179,24 @@ impl<R: Read + Seek> DemoStream for DemoFile<R> {
         }
     }
 
-    fn decode_cmd_body<T>(data: &[u8]) -> Result<T, Self::DecodeCmdBodyError>
-    where
-        T: CmdBody,
-    {
-        Ok(T::decode_protobuf(data)?)
+    #[inline(always)]
+    fn decode_cmd_send_tables(data: &[u8]) -> Result<CDemoSendTables, Self::DecodeCmdError> {
+        CDemoSendTables::decode(data)
+    }
+
+    #[inline(always)]
+    fn decode_cmd_class_info(data: &[u8]) -> Result<CDemoClassInfo, Self::DecodeCmdError> {
+        CDemoClassInfo::decode(data)
+    }
+
+    #[inline(always)]
+    fn decode_cmd_packet(data: &[u8]) -> Result<CDemoPacket, Self::DecodeCmdError> {
+        CDemoPacket::decode(data)
+    }
+
+    #[inline(always)]
+    fn decode_cmd_full_packet(data: &[u8]) -> Result<CDemoFullPacket, Self::DecodeCmdError> {
+        CDemoFullPacket::decode(data)
     }
 }
 

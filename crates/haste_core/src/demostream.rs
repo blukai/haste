@@ -1,12 +1,13 @@
-use std::any::type_name;
 use std::error::Error;
 use std::io::{self, SeekFrom};
 
-use valveprotos::common as protos;
+use valveprotos::common::{
+    CDemoClassInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables, EDemoCommands,
+};
 
 #[derive(Debug, Clone)]
 pub struct CmdHeader {
-    pub cmd: protos::EDemoCommands,
+    pub cmd: EDemoCommands,
     pub body_compressed: bool,
     pub tick: i32,
     pub body_size: u32,
@@ -17,76 +18,10 @@ pub struct CmdHeader {
     pub size: u8,
 }
 
-// TODO: proper name for non-protobuf decoder error
-#[derive(thiserror::Error, Debug)]
-pub enum CmdBodyDecodeAltError {
-    #[error(transparent)]
-    DecodeProtobufError(#[from] prost::DecodeError),
-}
-
-pub trait CmdBody: Default + prost::Message {
-    #[inline(always)]
-    fn decode_protobuf(data: &[u8]) -> Result<Self, prost::DecodeError> {
-        Self::decode(data)
-    }
-
-    // TODO: proper name for non-protobuf decoder
-    fn decode_alt(_data: &[u8]) -> Result<Self, CmdBodyDecodeAltError> {
-        unimplemented!("TODO: impl alt decoder for {}", type_name::<Self>())
-    }
-}
-
-// Error
-impl CmdBody for protos::CDemoStop {}
-impl CmdBody for protos::CDemoFileHeader {}
-impl CmdBody for protos::CDemoFileInfo {}
-impl CmdBody for protos::CDemoSyncTick {}
-
-impl CmdBody for protos::CDemoSendTables {
-    fn decode_alt(data: &[u8]) -> Result<Self, CmdBodyDecodeAltError> {
-        Ok(protos::CDemoSendTables {
-            // TODO: no-copy for send tables cmd
-            // also think about how to do no-copy when decoding protobuf.
-            data: Some((&data[4..]).to_vec()),
-        })
-    }
-}
-
-impl CmdBody for protos::CDemoClassInfo {
-    fn decode_alt(data: &[u8]) -> Result<Self, CmdBodyDecodeAltError> {
-        Self::decode_protobuf(data).map_err(CmdBodyDecodeAltError::DecodeProtobufError)
-    }
-}
-
-impl CmdBody for protos::CDemoStringTables {}
-
-impl CmdBody for protos::CDemoPacket {
-    fn decode_alt(data: &[u8]) -> Result<Self, CmdBodyDecodeAltError> {
-        Ok(protos::CDemoPacket {
-            // TODO: no-copy for packet cmd.
-            // also think about how to do no-copy when decoding protobuf.
-            data: Some(data.to_vec()),
-        })
-    }
-}
-
-// SignonPacket
-impl CmdBody for protos::CDemoConsoleCmd {}
-impl CmdBody for protos::CDemoCustomData {}
-impl CmdBody for protos::CDemoCustomDataCallbacks {}
-impl CmdBody for protos::CDemoUserCmd {}
-impl CmdBody for protos::CDemoFullPacket {}
-impl CmdBody for protos::CDemoSaveGame {}
-impl CmdBody for protos::CDemoSpawnGroups {}
-impl CmdBody for protos::CDemoAnimationData {}
-impl CmdBody for protos::CDemoAnimationHeader {}
-// Max
-// IsCompressed
-
 pub trait DemoStream {
     type ReadCmdHeaderError: Error + Send + Sync + 'static;
-    type ReadCmdBodyError: Error + Send + Sync + 'static;
-    type DecodeCmdBodyError: Error + Send + Sync + 'static;
+    type ReadCmdError: Error + Send + Sync + 'static;
+    type DecodeCmdError: Error + Send + Sync + 'static;
 
     // stream ops
     // ----
@@ -123,16 +58,36 @@ pub trait DemoStream {
             .map(|_| ())
     }
 
-    // cmd body
+    // cmd
     // ----
 
-    fn read_cmd_body(&mut self, cmd_header: &CmdHeader) -> Result<&[u8], Self::ReadCmdBodyError>;
+    fn read_cmd(&mut self, cmd_header: &CmdHeader) -> Result<&[u8], Self::ReadCmdError>;
 
-    fn decode_cmd_body<T>(data: &[u8]) -> Result<T, Self::DecodeCmdBodyError>
-    where
-        T: CmdBody;
+    // TODO: should DemoStream require decoders for all cmds to be implemented?
+    //
+    // Error (no msg)
+    // Stop (empty msg)
+    // fn decode_cmd_file_header(data: &[u8]) -> Result<CDemoFileHeader, Self::DecodeCmdError>;
+    // fn decode_cmd_file_info(data: &[u8]) -> Result<CDemoFileInfo, Self::DecodeCmdError>;
+    // SyncTick (empty msg)
+    fn decode_cmd_send_tables(data: &[u8]) -> Result<CDemoSendTables, Self::DecodeCmdError>;
+    fn decode_cmd_class_info(data: &[u8]) -> Result<CDemoClassInfo, Self::DecodeCmdError>;
+    // fn decode_cmd_string_tables(data: &[u8]) -> Result<CDemoStringTables, Self::DecodeCmdError>;
+    fn decode_cmd_packet(data: &[u8]) -> Result<CDemoPacket, Self::DecodeCmdError>;
+    // SignonPacket (same as Packet)
+    // fn decode_cmd_console_cmd(data: &[u8]) -> Result<CDemoConsoleCmd, Self::DecodeCmdError>;
+    // fn decode_cmd_custom_data(data: &[u8]) -> Result<CDemoCustomData, Self::DecodeCmdError>;
+    // fn decode_cmd_custom_data_callbacks(data: &[u8]) -> Result<CDemoCustomDataCallbacks, Self::DecodeCmdError>;
+    // fn decode_cmd_user_cmd(data: &[u8]) -> Result<CDemoUserCmd, Self::DecodeCmdError>;
+    fn decode_cmd_full_packet(data: &[u8]) -> Result<CDemoFullPacket, Self::DecodeCmdError>;
+    // fn decode_cmd_save_game(data: &[u8]) -> Result<CDemoSaveGame, Self::DecodeCmdError>;
+    // fn decode_cmd_spawn_groups(data: &[u8]) -> Result<CDemoSpawnGroups, Self::DecodeCmdError>;
+    // fn decode_cmd_animation_data(data: &[u8]) -> Result<CDemoAnimationData, Self::DecodeCmdError>;
+    // fn decode_cmd_animation_header(data: &[u8]) -> Result<CDemoAnimationHeader, Self::DecodeCmdError>;
+    // Max
+    // IsCompressed (flag)
 
-    fn skip_cmd_body(&mut self, cmd_header: &CmdHeader) -> Result<(), io::Error> {
+    fn skip_cmd(&mut self, cmd_header: &CmdHeader) -> Result<(), io::Error> {
         self.seek(SeekFrom::Current(cmd_header.body_size as i64))
             .map(|_| ())
     }
