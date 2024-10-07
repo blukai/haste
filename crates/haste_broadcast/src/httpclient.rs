@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::future::Future;
 
 use bytes::Bytes;
@@ -10,7 +11,7 @@ use bytes::Bytes;
 // not actually encode the body (curl with --trace flag is helpful). very xd, thank you valve.
 
 pub trait HttpClient {
-    type Error: std::error::Error + Send + Sync + 'static;
+    type Error: Error + Send + Sync + 'static;
 
     fn execute(
         &self,

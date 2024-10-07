@@ -84,9 +84,10 @@ pub struct DemoFile<R: Read + Seek> {
     demo_header: DemoHeader,
 }
 
-impl<R: Read + Seek> DemoStream<R> for DemoFile<R> {
+impl<R: Read + Seek> DemoStream for DemoFile<R> {
     type ReadCmdHeaderError = ReadCmdHeaderError;
     type ReadCmdBodyError = ReadCmdBodyError;
+    type DecodeCmdBodyError = prost::DecodeError;
 
     // stream ops
     // ----
@@ -175,7 +176,7 @@ impl<R: Read + Seek> DemoStream<R> for DemoFile<R> {
         }
     }
 
-    fn decode_cmd_body<T>(data: &[u8]) -> Result<T, Self::ReadCmdBodyError>
+    fn decode_cmd_body<T>(data: &[u8]) -> Result<T, Self::DecodeCmdBodyError>
     where
         T: CmdBody,
     {

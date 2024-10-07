@@ -1,4 +1,4 @@
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::{self, SeekFrom};
 
 use anyhow::Result;
 use valveprotos::common::{
@@ -135,18 +135,17 @@ enum ControlFlow {
 }
 
 // TODO: maybe rename to DemoPlayer (or DemoRunner?)
-pub struct Parser<R: Read + Seek, D: DemoStream<R>, V: Visitor> {
+pub struct Parser<D: DemoStream, V: Visitor> {
     demo_stream: D,
     buf: Vec<u8>,
     visitor: V,
     ctx: Context,
     // NOTE(blukai): is this the place for this? can it be moved "closer" to entities somewhere?
     field_decode_ctx: FieldDecodeContext,
-    _r: std::marker::PhantomData<R>,
 }
 
-impl<R: Read + Seek, D: DemoStream<R>, V: Visitor> Parser<R, D, V> {
-    pub fn from_reader_with_visitor(
+impl<D: DemoStream, V: Visitor> Parser<D, V> {
+    pub fn from_stream_with_visitor(
         demo_stream: D,
         visitor: V,
     ) -> Result<Self, ReadDemoHeaderError> {
@@ -166,7 +165,6 @@ impl<R: Read + Seek, D: DemoStream<R>, V: Visitor> Parser<R, D, V> {
                 prev_tick: -1,
             },
             field_decode_ctx: FieldDecodeContext::default(),
-            _r: std::marker::PhantomData,
         })
     }
 
@@ -627,9 +625,9 @@ impl<R: Read + Seek, D: DemoStream<R>, V: Visitor> Parser<R, D, V> {
 pub struct NopVisitor;
 impl Visitor for NopVisitor {}
 
-impl<R: Read + Seek, D: DemoStream<R>> Parser<R, D, NopVisitor> {
+impl<D: DemoStream> Parser<D, NopVisitor> {
     #[inline]
-    pub fn from_reader(demo_stream: D) -> Result<Self, ReadDemoHeaderError> {
-        Self::from_reader_with_visitor(demo_stream, NopVisitor)
+    pub fn from_stream(demo_stream: D) -> Result<Self, ReadDemoHeaderError> {
+        Self::from_stream_with_visitor(demo_stream, NopVisitor)
     }
 }

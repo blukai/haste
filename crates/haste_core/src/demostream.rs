@@ -1,6 +1,6 @@
 use std::any::type_name;
 use std::error::Error;
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::{self, SeekFrom};
 
 use valveprotos::common as protos;
 
@@ -83,9 +83,10 @@ impl CmdBody for protos::CDemoAnimationHeader {}
 // Max
 // IsCompressed
 
-pub trait DemoStream<R: Read + Seek> {
+pub trait DemoStream {
     type ReadCmdHeaderError: Error + Send + Sync + 'static;
     type ReadCmdBodyError: Error + Send + Sync + 'static;
+    type DecodeCmdBodyError: Error + Send + Sync + 'static;
 
     // stream ops
     // ----
@@ -127,7 +128,7 @@ pub trait DemoStream<R: Read + Seek> {
 
     fn read_cmd_body(&mut self, cmd_header: &CmdHeader) -> Result<&[u8], Self::ReadCmdBodyError>;
 
-    fn decode_cmd_body<T>(data: &[u8]) -> Result<T, Self::ReadCmdBodyError>
+    fn decode_cmd_body<T>(data: &[u8]) -> Result<T, Self::DecodeCmdBodyError>
     where
         T: CmdBody;
 

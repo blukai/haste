@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::marker::PhantomData;
 use std::time::{Duration, Instant};
 
@@ -91,7 +92,7 @@ pub enum FragmentType {
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum HttpBroadcastClientError<HttpClientError: std::error::Error + Send + Sync + 'static> {
+pub enum BroadcastHttpClientError<HttpClientError: Error + Send + Sync + 'static> {
     #[error("could not build request")]
     BuildRequestError(#[source] http::Error),
     #[error("http client error")]
@@ -102,14 +103,14 @@ pub enum HttpBroadcastClientError<HttpClientError: std::error::Error + Send + Sy
     JsonError(#[source] serde_json::Error),
 }
 
-pub struct HttpBroadcastClient<'client, C: HttpClient + 'client> {
+pub struct BroadcasHttpClient<'client, C: HttpClient + 'client> {
     http_client: C,
     base_url: String,
     _marker: PhantomData<&'client ()>,
 }
 
 // TODO: don't ask for app_id + don't set default headers
-impl<'client, C: HttpClient + 'client> HttpBroadcastClient<'client, C> {
+impl<'client, C: HttpClient + 'client> BroadcasHttpClient<'client, C> {
     pub fn new(http_client: C, base_url: impl Into<String>) -> Self {
         Self {
             http_client,
@@ -121,15 +122,15 @@ impl<'client, C: HttpClient + 'client> HttpBroadcastClient<'client, C> {
     async fn get(
         &self,
         url: &str,
-    ) -> Result<http::Response<Result<Bytes, C::Error>>, HttpBroadcastClientError<C::Error>> {
+    ) -> Result<http::Response<Result<Bytes, C::Error>>, BroadcastHttpClientError<C::Error>> {
         let request = http::Request::builder()
             .method(http::Method::GET)
             .uri(url)
             .body(Bytes::default())
-            .map_err(HttpBroadcastClientError::BuildRequestError)?;
+            .map_err(BroadcastHttpClientError::BuildRequestError)?;
         let response = self.http_client.execute(request).await?;
         if response.status().is_client_error() || response.status().is_server_error() {
-            Err(HttpBroadcastClientError::StatusCode(response.status()))
+            Err(BroadcastHttpClientError::StatusCode(response.status()))
         } else {
             Ok(response)
         }
@@ -138,10 +139,10 @@ impl<'client, C: HttpClient + 'client> HttpBroadcastClient<'client, C> {
     // `SendGet( request, new CSyncRequest( m_SyncParams, nResync ) )`
     // call within the
     // `void CDemoStreamHttp::SendSync( int nResync )`
-    pub async fn get_sync(&self) -> Result<SyncResponse, HttpBroadcastClientError<C::Error>> {
+    pub async fn get_sync(&self) -> Result<SyncResponse, BroadcastHttpClientError<C::Error>> {
         let url = format!("{}/sync", &self.base_url);
         serde_json::from_slice(&self.get(&url).await?.into_body()?)
-            .map_err(HttpBroadcastClientError::JsonError)
+            .map_err(BroadcastHttpClientError::JsonError)
     }
 
     // `SendGet( CFmtStr( "/%d/start", m_SyncResponse.nSignupFragment ), new CStartRequest( ) )`
@@ -150,7 +151,7 @@ impl<'client, C: HttpClient + 'client> HttpBroadcastClient<'client, C> {
     pub async fn get_start(
         &self,
         signup_fragment: i32,
-    ) -> Result<Bytes, HttpBroadcastClientError<C::Error>> {
+    ) -> Result<Bytes, BroadcastHttpClientError<C::Error>> {
         assert!(signup_fragment >= 0);
         let url = format!("{}/{}/start", &self.base_url, signup_fragment);
         Ok(self.get(&url).await?.into_body()?)
@@ -161,7 +162,7 @@ impl<'client, C: HttpClient + 'client> HttpBroadcastClient<'client, C> {
         &self,
         fragment: i32,
         typ: FragmentType,
-    ) -> Result<Bytes, HttpBroadcastClientError<C::Error>> {
+    ) -> Result<Bytes, BroadcastHttpClientError<C::Error>> {
         let path = match typ {
             FragmentType::Delta => "delta",
             FragmentType::Full => "full",
@@ -193,21 +194,21 @@ enum StreamState {
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum HttpBroadcastError<HttpClientError: std::error::Error + Send + Sync + 'static> {
+pub enum BroadcastHttpError<HttpClientError: Error + Send + Sync + 'static> {
     #[error("could not get sync")]
-    GetSyncError(#[source] HttpBroadcastClientError<HttpClientError>),
+    GetSyncError(#[source] BroadcastHttpClientError<HttpClientError>),
     #[error("could not get start")]
-    GetStartError(#[source] HttpBroadcastClientError<HttpClientError>),
+    GetStartError(#[source] BroadcastHttpClientError<HttpClientError>),
     #[error("could not {typ:?} fragment")]
     GetFragmentError {
         typ: FragmentType,
         #[source]
-        source: HttpBroadcastClientError<HttpClientError>,
+        source: BroadcastHttpClientError<HttpClientError>,
     },
 }
 
-pub struct HttpBroadcast<'client, C: HttpClient + 'client> {
-    client: HttpBroadcastClient<'client, C>,
+pub struct BroadcastHttp<'client, C: HttpClient + 'client> {
+    client: BroadcasHttpClient<'client, C>,
     stream_state: StreamState,
     stream_fragment: i32,
     keyframe_interval: Duration,
@@ -215,12 +216,12 @@ pub struct HttpBroadcast<'client, C: HttpClient + 'client> {
     stream_signup: Bytes,
 }
 
-impl<'client, C: HttpClient + 'client> HttpBroadcast<'client, C> {
+impl<'client, C: HttpClient + 'client> BroadcastHttp<'client, C> {
     pub async fn start_streaming(
         http_client: C,
         base_url: impl Into<String>,
-    ) -> Result<Self, HttpBroadcastError<C::Error>> {
-        let client = HttpBroadcastClient::new(http_client, base_url);
+    ) -> Result<Self, BroadcastHttpError<C::Error>> {
+        let client = BroadcasHttpClient::new(http_client, base_url);
 
         // in-game stream state flow:
         // -> STATE_START
@@ -233,7 +234,7 @@ impl<'client, C: HttpClient + 'client> HttpBroadcast<'client, C> {
         let sync_response = client
             .get_sync()
             .await
-            .map_err(HttpBroadcastError::GetSyncError)?;
+            .map_err(BroadcastHttpError::GetSyncError)?;
 
         // bool CDemoStreamHttp::OnSync( int nResync )
         // DevMsg( "Broadcast: Buffering stream tick %d fragment %d signup fragment %d\n", m_SyncResponse.nStartTick, m_SyncResponse.nSignupFragment, m_SyncResponse.nSignupFragment );
@@ -241,7 +242,7 @@ impl<'client, C: HttpClient + 'client> HttpBroadcast<'client, C> {
         let stream_signup = client
             .get_start(sync_response.signup_fragment)
             .await
-            .map_err(HttpBroadcastError::GetStartError)?;
+            .map_err(BroadcastHttpError::GetStartError)?;
 
         Ok(Self {
             client,
@@ -257,7 +258,7 @@ impl<'client, C: HttpClient + 'client> HttpBroadcast<'client, C> {
         &self.sync_response
     }
 
-    async fn next_deltaframe(&mut self) -> Result<Bytes, HttpBroadcastError<C::Error>> {
+    async fn next_deltaframe(&mut self) -> Result<Bytes, BroadcastHttpError<C::Error>> {
         // NOTE: loop simply allows to avoid going recursive, which is problematic in async context
         // and cannot be done without boxed futures.
         loop {
@@ -309,11 +310,11 @@ impl<'client, C: HttpClient + 'client> HttpBroadcast<'client, C> {
                     return Ok(delta);
                 }
 
-                Err(HttpBroadcastClientError::StatusCode(http::StatusCode::NOT_FOUND)) => {
+                Err(BroadcastHttpClientError::StatusCode(http::StatusCode::NOT_FOUND)) => {
                     if num_retries >= MAX_DELTAFRAME_RETRIES {
-                        return Err(HttpBroadcastError::GetFragmentError {
+                        return Err(BroadcastHttpError::GetFragmentError {
                             typ: FragmentType::Delta,
-                            source: HttpBroadcastClientError::StatusCode(
+                            source: BroadcastHttpClientError::StatusCode(
                                 http::StatusCode::NOT_FOUND,
                             ),
                         });
@@ -330,7 +331,7 @@ impl<'client, C: HttpClient + 'client> HttpBroadcast<'client, C> {
                 }
 
                 Err(source) => {
-                    return Err(HttpBroadcastError::GetFragmentError {
+                    return Err(BroadcastHttpError::GetFragmentError {
                         typ: FragmentType::Delta,
                         source,
                     });
@@ -340,7 +341,7 @@ impl<'client, C: HttpClient + 'client> HttpBroadcast<'client, C> {
     }
 
     // TODO: can a user pass buffer to http client to read body into?
-    pub async fn next_packet(&mut self) -> Result<Bytes, HttpBroadcastError<C::Error>> {
+    pub async fn next_packet(&mut self) -> Result<Bytes, BroadcastHttpError<C::Error>> {
         match self.stream_state {
             StreamState::Start => {
                 self.stream_state = StreamState::Fullframe;
@@ -354,7 +355,7 @@ impl<'client, C: HttpClient + 'client> HttpBroadcast<'client, C> {
                     .client
                     .get_fragment(self.stream_fragment, FragmentType::Full)
                     .await
-                    .map_err(|source| HttpBroadcastError::GetFragmentError {
+                    .map_err(|source| BroadcastHttpError::GetFragmentError {
                         typ: FragmentType::Full,
                         source,
                     })?;
