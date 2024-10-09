@@ -1,6 +1,6 @@
-use std::error::Error;
 use std::io::{self, SeekFrom};
 
+use dungers::varint;
 use valveprotos::common::{
     CDemoClassInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables, EDemoCommands,
 };
@@ -18,11 +18,31 @@ pub struct CmdHeader {
     pub size: u8,
 }
 
-pub trait DemoStream {
-    type ReadCmdHeaderError: Error + Send + Sync + 'static;
-    type ReadCmdError: Error + Send + Sync + 'static;
-    type DecodeCmdError: Error + Send + Sync + 'static;
+#[derive(thiserror::Error, Debug)]
+pub enum ReadCmdHeaderError {
+    #[error(transparent)]
+    IoError(#[from] io::Error),
+    #[error(transparent)]
+    ReadVarintError(#[from] varint::ReadVarintError),
+    #[error("unknown cmd (raw {raw}; uncompressed {uncompressed})")]
+    UnknownCmd { raw: u32, uncompressed: u32 },
+}
 
+#[derive(thiserror::Error, Debug)]
+pub enum ReadCmdError {
+    #[error(transparent)]
+    IoError(#[from] io::Error),
+    #[error(transparent)]
+    DecompressError(#[from] snap::Error),
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum DecodeCmdError {
+    #[error(transparent)]
+    DecodeError(#[from] prost::DecodeError),
+}
+
+pub trait DemoStream {
     // stream ops
     // ----
 
@@ -30,29 +50,14 @@ pub trait DemoStream {
 
     fn stream_position(&mut self) -> Result<u64, io::Error>;
 
-    /// reimplementation of nightly [`std::io::Seek::stream_len`].
-    fn stream_len(&mut self) -> Result<u64, io::Error> {
-        let old_pos = self.stream_position()?;
-        let len = self.seek(SeekFrom::End(0))?;
-
-        // avoid seeking a third time when we were already at the end of the stream. the branch is
-        // usually way cheaper than a seek operation.
-        if old_pos != len {
-            self.seek(SeekFrom::Start(old_pos))?;
-        }
-
-        Ok(len)
-    }
-
-    fn is_eof(&mut self) -> Result<bool, io::Error> {
-        Ok(self.stream_position()? == self.stream_len()?)
-    }
+    fn is_at_eof(&mut self) -> Result<bool, io::Error>;
 
     // cmd header
     // ----
 
-    fn read_cmd_header(&mut self) -> Result<CmdHeader, Self::ReadCmdHeaderError>;
+    fn read_cmd_header(&mut self) -> Result<CmdHeader, ReadCmdHeaderError>;
 
+    #[inline]
     fn unread_cmd_header(&mut self, cmd_header: &CmdHeader) -> Result<(), io::Error> {
         self.seek(SeekFrom::Current(-(cmd_header.size as i64)))
             .map(|_| ())
@@ -61,32 +66,33 @@ pub trait DemoStream {
     // cmd
     // ----
 
-    fn read_cmd(&mut self, cmd_header: &CmdHeader) -> Result<&[u8], Self::ReadCmdError>;
+    fn read_cmd(&mut self, cmd_header: &CmdHeader) -> Result<&[u8], ReadCmdError>;
 
     // TODO: should DemoStream require decoders for all cmds to be implemented?
     //
     // Error (no msg)
     // Stop (empty msg)
-    // fn decode_cmd_file_header(data: &[u8]) -> Result<CDemoFileHeader, Self::DecodeCmdError>;
-    // fn decode_cmd_file_info(data: &[u8]) -> Result<CDemoFileInfo, Self::DecodeCmdError>;
+    // fn decode_cmd_file_header(data: &[u8]) -> Result<CDemoFileHeader, DecodeCmdError>;
+    // fn decode_cmd_file_info(data: &[u8]) -> Result<CDemoFileInfo, DecodeCmdError>;
     // SyncTick (empty msg)
-    fn decode_cmd_send_tables(data: &[u8]) -> Result<CDemoSendTables, Self::DecodeCmdError>;
-    fn decode_cmd_class_info(data: &[u8]) -> Result<CDemoClassInfo, Self::DecodeCmdError>;
-    // fn decode_cmd_string_tables(data: &[u8]) -> Result<CDemoStringTables, Self::DecodeCmdError>;
-    fn decode_cmd_packet(data: &[u8]) -> Result<CDemoPacket, Self::DecodeCmdError>;
+    fn decode_cmd_send_tables(data: &[u8]) -> Result<CDemoSendTables, DecodeCmdError>;
+    fn decode_cmd_class_info(data: &[u8]) -> Result<CDemoClassInfo, DecodeCmdError>;
+    // fn decode_cmd_string_tables(data: &[u8]) -> Result<CDemoStringTables, DecodeCmdError>;
+    fn decode_cmd_packet(data: &[u8]) -> Result<CDemoPacket, DecodeCmdError>;
     // SignonPacket (same as Packet)
-    // fn decode_cmd_console_cmd(data: &[u8]) -> Result<CDemoConsoleCmd, Self::DecodeCmdError>;
-    // fn decode_cmd_custom_data(data: &[u8]) -> Result<CDemoCustomData, Self::DecodeCmdError>;
-    // fn decode_cmd_custom_data_callbacks(data: &[u8]) -> Result<CDemoCustomDataCallbacks, Self::DecodeCmdError>;
-    // fn decode_cmd_user_cmd(data: &[u8]) -> Result<CDemoUserCmd, Self::DecodeCmdError>;
-    fn decode_cmd_full_packet(data: &[u8]) -> Result<CDemoFullPacket, Self::DecodeCmdError>;
-    // fn decode_cmd_save_game(data: &[u8]) -> Result<CDemoSaveGame, Self::DecodeCmdError>;
-    // fn decode_cmd_spawn_groups(data: &[u8]) -> Result<CDemoSpawnGroups, Self::DecodeCmdError>;
-    // fn decode_cmd_animation_data(data: &[u8]) -> Result<CDemoAnimationData, Self::DecodeCmdError>;
-    // fn decode_cmd_animation_header(data: &[u8]) -> Result<CDemoAnimationHeader, Self::DecodeCmdError>;
+    // fn decode_cmd_console_cmd(data: &[u8]) -> Result<CDemoConsoleCmd, DecodeCmdError>;
+    // fn decode_cmd_custom_data(data: &[u8]) -> Result<CDemoCustomData, DecodeCmdError>;
+    // fn decode_cmd_custom_data_callbacks(data: &[u8]) -> Result<CDemoCustomDataCallbacks, DecodeCmdError>;
+    // fn decode_cmd_user_cmd(data: &[u8]) -> Result<CDemoUserCmd, DecodeCmdError>;
+    fn decode_cmd_full_packet(data: &[u8]) -> Result<CDemoFullPacket, DecodeCmdError>;
+    // fn decode_cmd_save_game(data: &[u8]) -> Result<CDemoSaveGame, DecodeCmdError>;
+    // fn decode_cmd_spawn_groups(data: &[u8]) -> Result<CDemoSpawnGroups, DecodeCmdError>;
+    // fn decode_cmd_animation_data(data: &[u8]) -> Result<CDemoAnimationData, DecodeCmdError>;
+    // fn decode_cmd_animation_header(data: &[u8]) -> Result<CDemoAnimationHeader, DecodeCmdError>;
     // Max
     // IsCompressed (flag)
 
+    #[inline]
     fn skip_cmd(&mut self, cmd_header: &CmdHeader) -> Result<(), io::Error> {
         self.seek(SeekFrom::Current(cmd_header.body_size as i64))
             .map(|_| ())

@@ -1,9 +1,9 @@
 use std::fs::File;
-use std::io::{self, BufReader};
+use std::io::{self, BufRead, BufReader};
 use std::time::Duration;
 
 use anyhow::{bail, Result};
-use haste_broadcast::broadcastfile::BroadcastFile;
+use haste_broadcast::broadcast::Broadcast;
 use haste_broadcast::broadcasthttp::BroadcastHttp;
 use haste_core::demostream::CmdHeader;
 use haste_core::parser::{Context, Parser, Visitor};
@@ -25,10 +25,8 @@ struct DownloadCommand {
     #[argh(option)]
     url: String,
     /// write broadcast to the given file;
-    /// if not provided nothing will be written anywhere (can be ok to not provide when debugging
-    /// stuff and the goal is to stare at logs or something)
     #[argh(option)]
-    output: Option<String>,
+    output: String,
 }
 
 impl DownloadCommand {
@@ -37,19 +35,15 @@ impl DownloadCommand {
             .timeout(Duration::from_secs(3))
             .build()?;
         let mut broadcast = BroadcastHttp::start_streaming(http_client, &self.url).await?;
-
-        let mut file = if let Some(output) = self.output {
-            Some(File::create(output)?)
-        } else {
-            None
-        };
-
-        loop {
-            let mut packet = broadcast.prepare_packet().await?;
-            if let Some(ref mut file) = file {
-                io::copy(&mut packet, file)?;
+        let mut file = File::create(&self.output)?;
+        match io::copy(&mut broadcast, &mut file) {
+            Ok(_) => Ok(()),
+            Err(err) => {
+                if broadcast.fill_buf()?.is_empty() {
+                    return Ok(());
+                }
+                return Err(err.into());
             }
-            // TODO: look for stop command or something, figure out how to stop gracefuly
         }
     }
 }
@@ -71,7 +65,8 @@ impl ParseCommand {
         let http_client = reqwest::Client::builder()
             .timeout(Duration::from_secs(3))
             .build()?;
-        let broadcast = BroadcastHttp::start_streaming(http_client, url).await?;
+        let broadcast_http = BroadcastHttp::start_streaming(http_client, url).await?;
+        let broadcast = Broadcast::start_reading(broadcast_http);
         let mut parser = Parser::from_stream_with_visitor(broadcast, MyVisitor)?;
         parser.run_to_end()
     }
@@ -79,9 +74,9 @@ impl ParseCommand {
     fn parse_from_filepath(filepath: &str) -> Result<()> {
         let file = File::open(filepath)?;
         let buf_reader = BufReader::new(file);
-        let demo_stream = BroadcastFile::start_reading(buf_reader);
+        let broadcast = Broadcast::start_reading(buf_reader);
 
-        let mut parser = Parser::from_stream_with_visitor(demo_stream, MyVisitor)?;
+        let mut parser = Parser::from_stream_with_visitor(broadcast, MyVisitor)?;
         parser.run_to_end()
     }
 

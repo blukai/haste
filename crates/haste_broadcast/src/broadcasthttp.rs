@@ -1,18 +1,12 @@
 use std::error::Error;
-use std::io::{self, Read};
+use std::io::{self, BufRead, Read};
 use std::marker::PhantomData;
 use std::time::{Duration, Instant};
 
 use bytes::buf::Reader;
 use bytes::{Buf, Bytes};
-use haste_core::demostream::{CmdHeader, DemoStream};
 use serde::Deserialize;
-use valveprotos::common::{CDemoClassInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables};
 
-use crate::demostream::{
-    decode_cmd_class_info, decode_cmd_packet, decode_cmd_send_tables, read_cmd_header,
-    DecodeCmdError, ReadCmdHeaderError,
-};
 use crate::httpclient::HttpClient;
 
 // thanks to Bulbasaur (/ johnpyp) for bringing up tv broadcasts in discord, see
@@ -196,26 +190,13 @@ impl<'client, C: HttpClient + 'client> BroadcasHttpClient<'client, C> {
 // StreamStateEnum_t (not 1:1, but similar enough);
 #[derive(Debug)]
 enum StreamState {
+    Stop,
     Start,
     Fullframe,
     Deltaframes {
         num_retries: u32,
         fetch_after: Instant,
         catchup: bool,
-    },
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum BroadcastHttpError<HttpClientError: Error + Send + Sync + 'static> {
-    #[error("could not get sync")]
-    GetSyncError(#[source] BroadcastHttpClientError<HttpClientError>),
-    #[error("could not get start")]
-    GetStartError(#[source] BroadcastHttpClientError<HttpClientError>),
-    #[error("could not get {typ:?} fragment")]
-    GetFragmentError {
-        typ: FragmentType,
-        #[source]
-        source: BroadcastHttpClientError<HttpClientError>,
     },
 }
 
@@ -233,13 +214,10 @@ impl<'client, C: HttpClient + 'client> BroadcastHttp<'client, C> {
     pub async fn start_streaming(
         http_client: C,
         base_url: impl Into<String>,
-    ) -> Result<Self, BroadcastHttpError<C::Error>> {
+    ) -> Result<Self, BroadcastHttpClientError<C::Error>> {
         let client = BroadcasHttpClient::new(http_client, base_url);
 
-        let sync_response = client
-            .get_sync()
-            .await
-            .map_err(BroadcastHttpError::GetSyncError)?;
+        let sync_response = client.get_sync().await?;
 
         Ok(Self {
             client,
@@ -256,15 +234,11 @@ impl<'client, C: HttpClient + 'client> BroadcastHttp<'client, C> {
         &self.sync_response
     }
 
-    async fn handle_start(&mut self) -> Result<Bytes, BroadcastHttpError<C::Error>> {
+    async fn handle_start(&mut self) -> Result<Bytes, BroadcastHttpClientError<C::Error>> {
         // bool CDemoStreamHttp::OnSync( int nResync )
         // DevMsg( "Broadcast: Buffering stream tick %d fragment %d signup fragment %d\n", m_SyncResponse.nStartTick, m_SyncResponse.nSignupFragment, m_SyncResponse.nSignupFragment );
         // m_nState = STATE_START;
-        let stream_signup = self
-            .client
-            .get_start(self.signup_fragment)
-            .await
-            .map_err(BroadcastHttpError::GetStartError)?;
+        let stream_signup = self.client.get_start(self.signup_fragment).await?;
 
         self.stream_state = StreamState::Fullframe;
         log::debug!("entering state: {:?}", self.stream_state);
@@ -272,15 +246,11 @@ impl<'client, C: HttpClient + 'client> BroadcastHttp<'client, C> {
         Ok(stream_signup)
     }
 
-    async fn handle_fullframe(&mut self) -> Result<Bytes, BroadcastHttpError<C::Error>> {
+    async fn handle_fullframe(&mut self) -> Result<Bytes, BroadcastHttpClientError<C::Error>> {
         let full = self
             .client
             .get_fragment(self.stream_fragment, FragmentType::Full)
-            .await
-            .map_err(|source| BroadcastHttpError::GetFragmentError {
-                typ: FragmentType::Full,
-                source,
-            })?;
+            .await?;
 
         self.stream_state = StreamState::Deltaframes {
             num_retries: 0,
@@ -292,7 +262,7 @@ impl<'client, C: HttpClient + 'client> BroadcastHttp<'client, C> {
         Ok(full)
     }
 
-    async fn handle_deltaframes(&mut self) -> Result<Bytes, BroadcastHttpError<C::Error>> {
+    async fn handle_deltaframes(&mut self) -> Result<Bytes, BroadcastHttpClientError<C::Error>> {
         // NOTE: loop simply allows to avoid going recursive, which is problematic in async context
         // and cannot be done without boxed futures.
         loop {
@@ -348,12 +318,9 @@ impl<'client, C: HttpClient + 'client> BroadcastHttp<'client, C> {
 
                 Err(BroadcastHttpClientError::StatusCode(http::StatusCode::NOT_FOUND)) => {
                     if num_retries >= MAX_DELTAFRAME_RETRIES {
-                        return Err(BroadcastHttpError::GetFragmentError {
-                            typ: FragmentType::Delta,
-                            source: BroadcastHttpClientError::StatusCode(
-                                http::StatusCode::NOT_FOUND,
-                            ),
-                        });
+                        return Err(BroadcastHttpClientError::StatusCode(
+                            http::StatusCode::NOT_FOUND,
+                        ));
                     }
 
                     self.stream_state = StreamState::Deltaframes {
@@ -366,139 +333,80 @@ impl<'client, C: HttpClient + 'client> BroadcastHttp<'client, C> {
                     continue;
                 }
 
-                Err(source) => {
-                    return Err(BroadcastHttpError::GetFragmentError {
-                        typ: FragmentType::Delta,
-                        source,
-                    });
-                }
+                Err(source) => return Err(source),
             }
         }
     }
 
     // TODO: can a consumer pass buffer to http client to read body into to avoid allocations / or
     // what is the alternative?
-    async fn next_packet(&mut self) -> Result<Bytes, BroadcastHttpError<C::Error>> {
-        match self.stream_state {
+    async fn next_packet(&mut self) -> Option<Result<Bytes, BroadcastHttpClientError<C::Error>>> {
+        match match self.stream_state {
+            StreamState::Stop => return None,
             StreamState::Start => self.handle_start().await,
             StreamState::Fullframe => self.handle_fullframe().await,
             StreamState::Deltaframes { .. } => self.handle_deltaframes().await,
+        } {
+            Ok(packet) => Some(Ok(packet)),
+            Err(err) => {
+                self.stream_state = StreamState::Stop;
+                match err {
+                    // tried hard, coudn't fetch. match ended (or maybe became unavailable)
+                    BroadcastHttpClientError::StatusCode(http::StatusCode::NOT_FOUND) => None,
+                    err => Some(Err(err)),
+                }
+            }
         }
     }
 
-    pub async fn prepare_packet<'a>(
-        &'a mut self,
-    ) -> Result<impl Read + 'a, BroadcastHttpError<C::Error>> {
-        if !matches!(self.buf.as_ref(), Some(buf) if buf.get_ref().has_remaining()) {
-            self.buf = Some(self.next_packet().await?.reader());
+    async fn prepare_packet(
+        &mut self,
+    ) -> Option<Result<&mut Reader<Bytes>, BroadcastHttpClientError<C::Error>>> {
+        let stop = matches!(self.stream_state, StreamState::Stop);
+        let has_remaining = matches!(self.buf.as_ref(), Some(buf) if buf.get_ref().has_remaining());
+        if !stop && !has_remaining {
+            if let Ok(packet) = self.next_packet().await? {
+                self.buf = Some(packet.reader());
+            }
         }
-        Ok(self.buf.as_mut().unwrap())
+        Some(Ok(self.buf.as_mut().unwrap()))
     }
 }
 
 // ----
-// demo stream
+// read + buf read
 
-impl<'client, C: HttpClient + 'client> DemoStream for BroadcastHttp<'client, C> {
-    type ReadCmdHeaderError = ReadCmdHeaderError;
-    type ReadCmdError = io::Error;
-    type DecodeCmdError = DecodeCmdError;
+// NOTE: by implementing DemoStream trait directly on BroadcastHttp in read_cmd method it is
+// possible to do a no-copy read by getting Bytes from Reader and calling slice + advance:
+// - https://docs.rs/bytes/latest/bytes/struct.Bytes.html#method.slice
+// - https://docs.rs/bytes/latest/bytes/buf/trait.Buf.html#tymethod.advance
 
-    // stream ops
-    // ----
+// TODO: is there a better way to get value out of async fn into sync then using pollster? don't
+// even try to get ideas that this can be done with tokio's task spawn or runtime block on - it
+// can't.
 
-    fn seek(&mut self, _pos: std::io::SeekFrom) -> Result<u64, io::Error> {
-        unimplemented!()
+impl<'client, C: HttpClient + 'client> Read for BroadcastHttp<'client, C> {
+    #[inline]
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match pollster::block_on(self.prepare_packet()) {
+            Some(Ok(rdr)) => rdr.read(buf),
+            Some(Err(err)) => Err(io::Error::other(err).into()),
+            None => Err(io::ErrorKind::UnexpectedEof.into()),
+        }
+    }
+}
+
+impl<'client, C: HttpClient + 'client> BufRead for BroadcastHttp<'client, C> {
+    #[inline]
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        match pollster::block_on(self.prepare_packet()) {
+            Some(Ok(rdr)) => rdr.fill_buf(),
+            Some(Err(err)) => Err(io::Error::other(err).into()),
+            None => Err(io::ErrorKind::UnexpectedEof.into()),
+        }
     }
 
-    fn stream_position(&mut self) -> Result<u64, io::Error> {
-        unimplemented!()
-    }
-
-    fn stream_len(&mut self) -> Result<u64, io::Error> {
-        unimplemented!()
-    }
-
-    fn is_eof(&mut self) -> Result<bool, io::Error> {
-        todo!()
-    }
-
-    // cmd header
-    // ----
-    //
-    // cmd headers are broadcasts are similar to demo file cmd headers, but encoding is different.
-    //
-    // thanks to saul for figuring it out. see
-    // https://github.com/saul/demofile-net/blob/7d3d59e478dbd2b000f4efa2dac70ed1bf2e2b7f/src/DemoFile/HttpBroadcastReader.cs#L150
-
-    fn read_cmd_header(
-        &mut self,
-    ) -> Result<haste_core::demostream::CmdHeader, Self::ReadCmdHeaderError> {
-        let mut rdr = pollster::block_on(self.prepare_packet())
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-        read_cmd_header(&mut rdr)
-    }
-
-    fn unread_cmd_header(&mut self, _cmd_header: &CmdHeader) -> Result<(), io::Error> {
-        unimplemented!()
-    }
-
-    // cmd
-    // ----
-
-    fn read_cmd(&mut self, cmd_header: &CmdHeader) -> Result<&[u8], Self::ReadCmdError> {
-        // NOTE: current implementation is somewhat iffy. the idea/assumption is that
-        // read_cmd_header was called right before and buf is at the correct position.
-
-        let Some(buf) = self.buf.as_mut() else {
-            unreachable!();
-        };
-
-        let size = cmd_header.body_size as usize;
-
-        let bytes = buf.get_mut();
-        // TODO: it might be not a bad idea to treat this not as an assertion, but as an error
-        // because theoretically it could be possible that body of the response was not transferred
-        // / read correctly?
-        assert!(bytes.remaining() >= size);
-
-        // SAFETY: safe rust does not allowe to return a slice of bytes because slice lives in the
-        // current scope where bytes are borrowed, thus unsafe shenanigans are needed to avoid
-        // copying. this is actually safe, i think.
-        let data = unsafe {
-            let ptr = bytes
-                // NOTE: start is 0 because Reader advances position of underlying Bytes
-                .slice(0..size)
-                .as_ref()
-                .as_ptr();
-            std::slice::from_raw_parts(ptr, size)
-        };
-
-        bytes.advance(size);
-
-        Ok(data)
-    }
-
-    #[inline(always)]
-    fn decode_cmd_send_tables(data: &[u8]) -> Result<CDemoSendTables, Self::DecodeCmdError> {
-        decode_cmd_send_tables(data)
-    }
-
-    #[inline(always)]
-    fn decode_cmd_class_info(data: &[u8]) -> Result<CDemoClassInfo, Self::DecodeCmdError> {
-        decode_cmd_class_info(data)
-    }
-
-    #[inline(always)]
-    fn decode_cmd_packet(data: &[u8]) -> Result<CDemoPacket, Self::DecodeCmdError> {
-        decode_cmd_packet(data)
-    }
-
-    fn decode_cmd_full_packet(_data: &[u8]) -> Result<CDemoFullPacket, Self::DecodeCmdError> {
-        unimplemented!()
-    }
-
-    fn skip_cmd(&mut self, _cmd_header: &CmdHeader) -> Result<(), io::Error> {
-        unimplemented!()
+    fn consume(&mut self, amt: usize) {
+        self.buf.as_mut().expect("invalid consume").consume(amt);
     }
 }

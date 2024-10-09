@@ -1,4 +1,4 @@
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::{self, BufRead, Read, Seek, SeekFrom};
 
 use dungers::varint;
 use prost::Message;
@@ -7,7 +7,7 @@ use valveprotos::common::{
 };
 use valveprotos::prost;
 
-use crate::demostream::{CmdHeader, DemoStream};
+use crate::demostream::{CmdHeader, DecodeCmdError, DemoStream, ReadCmdError, ReadCmdHeaderError};
 
 // #define DEMO_RECORD_BUFFER_SIZE 2*1024*1024
 //
@@ -38,7 +38,7 @@ pub enum ReadDemoHeaderError {
     InvalidDemoFileStamp { got: [u8; DEMO_HEADER_ID_SIZE] },
 }
 
-pub fn read_demo_header<R: Read>(mut rdr: R) -> Result<DemoHeader, ReadDemoHeaderError> {
+fn read_demo_header<R: Read>(mut rdr: R) -> Result<DemoHeader, ReadDemoHeaderError> {
     let mut demofilestamp = [0u8; DEMO_HEADER_ID_SIZE];
     rdr.read_exact(&mut demofilestamp)?;
     if demofilestamp != DEMO_HEADER_ID {
@@ -60,24 +60,6 @@ pub fn read_demo_header<R: Read>(mut rdr: R) -> Result<DemoHeader, ReadDemoHeade
     })
 }
 
-#[derive(thiserror::Error, Debug)]
-pub enum ReadCmdHeaderError {
-    #[error(transparent)]
-    IoError(#[from] io::Error),
-    #[error(transparent)]
-    ReadVarintError(#[from] varint::ReadVarintError),
-    #[error("unknown cmd (raw {raw}; uncompressed {uncompressed})")]
-    UnknownCmd { raw: u32, uncompressed: u32 },
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum ReadCmdError {
-    #[error(transparent)]
-    IoError(#[from] io::Error),
-    #[error(transparent)]
-    DecompressError(#[from] snap::Error),
-}
-
 #[derive(Debug)]
 pub struct DemoFile<R: Read + Seek> {
     rdr: R,
@@ -85,11 +67,7 @@ pub struct DemoFile<R: Read + Seek> {
     demo_header: DemoHeader,
 }
 
-impl<R: Read + Seek> DemoStream for DemoFile<R> {
-    type ReadCmdHeaderError = ReadCmdHeaderError;
-    type ReadCmdError = ReadCmdError;
-    type DecodeCmdError = prost::DecodeError;
-
+impl<R: BufRead + Seek> DemoStream for DemoFile<R> {
     // stream ops
     // ----
 
@@ -108,6 +86,10 @@ impl<R: Read + Seek> DemoStream for DemoFile<R> {
     #[inline]
     fn stream_position(&mut self) -> Result<u64, io::Error> {
         self.rdr.stream_position()
+    }
+
+    fn is_at_eof(&mut self) -> Result<bool, io::Error> {
+        Ok(self.rdr.fill_buf()?.is_empty())
     }
 
     // cmd header
@@ -178,27 +160,27 @@ impl<R: Read + Seek> DemoStream for DemoFile<R> {
     }
 
     #[inline(always)]
-    fn decode_cmd_send_tables(data: &[u8]) -> Result<CDemoSendTables, Self::DecodeCmdError> {
-        CDemoSendTables::decode(data)
+    fn decode_cmd_send_tables(data: &[u8]) -> Result<CDemoSendTables, DecodeCmdError> {
+        CDemoSendTables::decode(data).map_err(DecodeCmdError::DecodeError)
     }
 
     #[inline(always)]
-    fn decode_cmd_class_info(data: &[u8]) -> Result<CDemoClassInfo, Self::DecodeCmdError> {
-        CDemoClassInfo::decode(data)
+    fn decode_cmd_class_info(data: &[u8]) -> Result<CDemoClassInfo, DecodeCmdError> {
+        CDemoClassInfo::decode(data).map_err(DecodeCmdError::DecodeError)
     }
 
     #[inline(always)]
-    fn decode_cmd_packet(data: &[u8]) -> Result<CDemoPacket, Self::DecodeCmdError> {
-        CDemoPacket::decode(data)
+    fn decode_cmd_packet(data: &[u8]) -> Result<CDemoPacket, DecodeCmdError> {
+        CDemoPacket::decode(data).map_err(DecodeCmdError::DecodeError)
     }
 
     #[inline(always)]
-    fn decode_cmd_full_packet(data: &[u8]) -> Result<CDemoFullPacket, Self::DecodeCmdError> {
-        CDemoFullPacket::decode(data)
+    fn decode_cmd_full_packet(data: &[u8]) -> Result<CDemoFullPacket, DecodeCmdError> {
+        CDemoFullPacket::decode(data).map_err(DecodeCmdError::DecodeError)
     }
 }
 
-impl<R: Read + Seek> DemoFile<R> {
+impl<R: BufRead + Seek> DemoFile<R> {
     /// creates a new [`DemoFile`] instance from the given reader.
     ///
     /// # performance note
@@ -214,6 +196,7 @@ impl<R: Read + Seek> DemoFile<R> {
         })
     }
 
+    #[inline]
     pub fn demo_header(&self) -> &DemoHeader {
         &self.demo_header
     }

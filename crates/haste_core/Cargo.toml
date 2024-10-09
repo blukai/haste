@@ -7,7 +7,7 @@ edition.workspace = true
 anyhow.workspace = true
 dungers = { workspace = true, features = ["varint", "bitbuf"] }
 dyn-clone.workspace = true
-hashbrown.workspace = true
+hashbrown = { workspace = true, features = ["inline-more"] }
 haste_vartype.workspace = true
 lazy_static.workspace = true
 nohash.workspace = true

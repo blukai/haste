@@ -202,7 +202,7 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
                     }
                 }
                 Err(err) => {
-                    if self.demo_stream.is_eof().unwrap_or_default() {
+                    if self.demo_stream.is_at_eof().unwrap_or_default() {
                         return Ok(());
                     }
                     return Err(err.into());

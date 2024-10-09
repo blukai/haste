@@ -23,16 +23,16 @@ dungers = { git = "https://github.com/blukai/dungers.git", rev = "5419784ef77108
 dyn-clone = "1.0.17"
 env_logger = "0.11.5"
 expect-test = "1.5.0"
-hashbrown = { version = "0.14.5", default-features = false, features = ["inline-more"] }
+hashbrown = { version = "0.14.5", default-features = false }
 http = "1.1.0"
 lazy_static = "1.5.0"
-log.version = "0.4.22"
+log = "0.4.22"
 nohash = "0.2.0"
 pollster = "0.3.0"
 prost = "0.13.3"
 rand = "0.8.5"
 reqwest = { version = "0.12.8", default-features = false }
-serde = { version = "1.0.210", features = ["derive"] }
+serde = "1.0.210"
 serde_json = "1.0.128"
 snap = "1.1.1"
 thiserror = "1.0.64"
