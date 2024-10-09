@@ -16,6 +16,6 @@ fn main() -> Result<()> {
     let file = File::open(filepath.unwrap())?;
     let buf_reader = BufReader::new(file);
     let demo_file = DemoFile::start_reading(buf_reader)?;
-    let mut parser = Parser::from_reader(demo_file)?;
+    let mut parser = Parser::from_stream(demo_file)?;
     parser.run_to_end()
 }

@@ -5,12 +5,23 @@ edition.workspace = true
 
 [dependencies]
 bytes.workspace = true
+haste_core.workspace = true
 http.workspace = true
 log.workspace = true
-reqwest = { workspace = true, optional = true }
+pollster.workspace = true
+prost.workspace = true
+reqwest = { workspace = true, features = ["gzip"], optional = true }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+tokio = { workspace = true, features = ["time", "sync"], optional = true }
+valveprotos.workspace = true
 
 [features]
-reqwest = ["dep:reqwest", "reqwest/gzip"]
+default = ["reqwest", "tokio"]
+# "standard" http client
+reqwest = ["dep:reqwest", "tokio"]
+# reqwest is built on top of hyper, hyper need tokio; but that is not all, tokio
+# also provides async-friendly sleep function and block_on for dealing with
+# async rust in sync code (DemoStream)
+tokio = ["dep:tokio"] 

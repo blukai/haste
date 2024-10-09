@@ -76,8 +76,6 @@ pub enum ReadCmdError {
     IoError(#[from] io::Error),
     #[error(transparent)]
     DecompressError(#[from] snap::Error),
-    #[error(transparent)]
-    DecodeError(#[from] prost::DecodeError),
 }
 
 #[derive(Debug)]

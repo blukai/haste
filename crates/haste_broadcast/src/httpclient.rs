@@ -10,6 +10,11 @@ use bytes::Bytes;
 // situations when server speifies the gzip encoding within the content-encoding header but does
 // not actually encode the body (curl with --trace flag is helpful). very xd, thank you valve.
 
+// TODO: might want to box futures, see:
+// https://docs.rs/futures/latest/futures/future/type.BoxFuture.html
+//
+// pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
 pub trait HttpClient {
     type Error: Error + Send + Sync + 'static;
 

@@ -5,7 +5,6 @@ edition.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-bytes.workspace = true
 dungers = { workspace = true, features = ["varint", "bitbuf"] }
 dyn-clone.workspace = true
 hashbrown.workspace = true
