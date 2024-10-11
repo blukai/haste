@@ -8,7 +8,7 @@ use valveprotos::common::{
 use valveprotos::prost::Message;
 
 use crate::bitreader::BitReader;
-use crate::demofile::{DemoHeader, DemoHeaderError, DEMO_RECORD_BUFFER_SIZE};
+use crate::demofile::{DemoHeaderError, DEMO_RECORD_BUFFER_SIZE};
 use crate::demostream::{CmdHeader, DemoStream};
 use crate::entities::{DeltaHeader, Entity, EntityContainer};
 use crate::entityclasses::EntityClasses;
@@ -214,7 +214,7 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
 
     fn reset(&mut self) -> Result<(), io::Error> {
         self.demo_stream
-            .seek(SeekFrom::Start(size_of::<DemoHeader>() as u64))?;
+            .seek(SeekFrom::Start(self.demo_stream.start_position()))?;
 
         self.ctx.entities.clear();
         self.ctx.string_tables.clear();
@@ -575,10 +575,11 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
         Ok(())
     }
 
-    // NOTE: following methods are public-facing api; do not use them internally.
+    // public api
+    // ----
 
     #[inline]
-    pub fn demo_stream(&mut self) -> &D {
+    pub fn demo_stream(&self) -> &D {
         &self.demo_stream
     }
 
@@ -587,45 +588,9 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
         &mut self.demo_stream
     }
 
-    // context
-    // ----
-    //
-    // TODO: consider just exposing context without this bullshit delegation.
-
-    /// delegated from [`Context`].
     #[inline]
-    pub fn string_tables(&self) -> Option<&StringTableContainer> {
-        self.ctx.string_tables()
-    }
-
-    /// delegated from [`Context`].
-    #[inline]
-    pub fn serializers(&self) -> Option<&FlattenedSerializerContainer> {
-        self.ctx.serializers()
-    }
-
-    /// delegated from [`Context`].
-    #[inline]
-    pub fn entity_classes(&self) -> Option<&EntityClasses> {
-        self.ctx.entity_classes()
-    }
-
-    /// delegated from [`Context`].
-    #[inline]
-    pub fn entities(&self) -> Option<&EntityContainer> {
-        self.ctx.entities()
-    }
-
-    /// delegated from [`Context`].
-    #[inline]
-    pub fn tick(&self) -> i32 {
-        self.ctx.tick()
-    }
-
-    /// delegated from [`Context`].
-    #[inline]
-    pub fn tick_interval(&self) -> f32 {
-        self.ctx.tick_interval()
+    pub fn context(&self) -> &Context {
+        &self.ctx
     }
 }
 

@@ -41,28 +41,25 @@ mod reqwest_impl {
             request: http::Request<Bytes>,
         ) -> Result<http::Response<Result<Bytes, Self::Error>>, Self::Error> {
             let (parts, body) = request.into_parts();
-            let http::request::Parts {
-                method,
-                uri,
-                version,
-                headers,
-                ..
-            } = parts;
-            let request = self
-                .request(method, uri.to_string())
-                .version(version)
-                .headers(headers)
-                .body(body);
+            let mut request = self
+                .request(parts.method, parts.uri.to_string())
+                .body(body)
+                .headers(parts.headers);
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                request = request.version(parts.version);
+            }
 
             // reqwest's Response is so fucking obnoxiously gate keeping
             let mut response = request.send().await?;
 
+            let mut result = http::Response::builder().status(response.status());
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                result = result.version(response.version());
+            }
             // NOTE: expects should never be called - otherwise this is either http or reqwest
             // library error.
-
-            let mut result = http::Response::builder()
-                .status(response.status())
-                .version(response.version());
             std::mem::swap(
                 response.headers_mut(),
                 result.headers_mut().expect("could not get result headers"),

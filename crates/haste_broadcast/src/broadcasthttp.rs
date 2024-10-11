@@ -134,7 +134,6 @@ struct BroadcasHttpClient<'client, C: HttpClient + 'client> {
     _marker: PhantomData<&'client ()>,
 }
 
-// TODO: don't ask for app_id + don't set default headers
 impl<'client, C: HttpClient + 'client> BroadcasHttpClient<'client, C> {
     fn new(http_client: C, base_url: impl Into<String>) -> Self {
         Self {
@@ -199,9 +198,6 @@ impl<'client, C: HttpClient + 'client> BroadcasHttpClient<'client, C> {
 
 // ----
 // broadcast http
-
-// TODO: is there a way to let the consumer supply their own buffer so that http client can write
-// bodies directly into it?
 
 // StreamStateEnum_t (not 1:1, but similar enough);
 #[derive(Debug)]
@@ -561,6 +557,14 @@ impl<'client, C: HttpClient + 'client> DemoStream for BroadcastHttp<'client, C> 
 
     // other
     // ----
+
+    /// panics if [`BroadcastHttp`] was not constructed with `start_reading_and_buffer`.
+    fn start_position(&self) -> u64 {
+        match self.stream_buffer {
+            StreamBuffer::Last(_) => not_seekable_panic!(),
+            StreamBuffer::Seekable(_) => 0,
+        }
+    }
 
     /// panics if [`BroadcastHttp`] was not constructed with `start_reading_and_buffer`.
     fn total_ticks(&mut self) -> Result<i32, anyhow::Error> {

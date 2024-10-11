@@ -36,7 +36,6 @@ impl DownloadCommand {
         let mut broadcast = BroadcastHttp::start_streaming(http_client, &self.url).await?;
         let mut file = File::create(&self.output)?;
         while let Some(packet) = broadcast.next_packet().await {
-            // TODO: graceful stop? atm this will error out on "eof".
             file.write_all(packet?.as_ref())?;
         }
         Ok(())

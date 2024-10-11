@@ -216,6 +216,10 @@ impl<R: Read + Seek> DemoStream for DemoFile<R> {
     // other
     // ----
 
+    fn start_position(&self) -> u64 {
+        size_of::<DemoHeader>() as u64
+    }
+
     fn total_ticks(&mut self) -> Result<i32, anyhow::Error> {
         self.file_info().map(|file_info| file_info.playback_ticks())
     }

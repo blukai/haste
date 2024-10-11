@@ -103,6 +103,10 @@ impl<R: Read + Seek> DemoStream for BroadcastFile<R> {
     // other
     // ----
 
+    fn start_position(&self) -> u64 {
+        0
+    }
+
     fn total_ticks(&mut self) -> Result<i32, anyhow::Error> {
         if self.total_ticks.is_none() {
             self.total_ticks = Some(scan_for_last_tick(self)?);

@@ -96,7 +96,10 @@ pub(crate) fn scan_for_last_tick(demo_stream: &mut impl DemoStream) -> Result<i3
     let backup = demo_stream.stream_position()?;
     loop {
         match demo_stream.read_cmd_header() {
-            Ok(cmd_header) => last_tick = cmd_header.tick,
+            Ok(cmd_header) => {
+                last_tick = cmd_header.tick;
+                demo_stream.skip_cmd(&cmd_header)?;
+            }
             Err(_) if demo_stream.is_at_eof().unwrap_or_default() => {
                 demo_stream.seek(SeekFrom::Start(backup))?;
                 return Ok(last_tick);

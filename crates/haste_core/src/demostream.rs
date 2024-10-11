@@ -122,6 +122,8 @@ pub trait DemoStream {
     // other
     // ----
 
+    fn start_position(&self) -> u64;
+
     // TODO: how not cool is it to rely on anyhow here?
     fn total_ticks(&mut self) -> Result<i32, anyhow::Error>;
 }

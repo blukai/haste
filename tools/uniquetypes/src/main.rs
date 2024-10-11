@@ -2,9 +2,10 @@ use std::collections::HashSet;
 use std::fs::File;
 use std::io::BufReader;
 
-use anyhow::{Context, Result};
+use anyhow::{Context as _, Result};
 use dungers::varint;
 use haste::demofile::DemoFile;
+use haste::demostream::DemoStream;
 use haste::valveprotos::common::{CDemoSendTables, CsvcMsgFlattenedSerializer, EDemoCommands};
 use haste::valveprotos::prost::Message;
 use haste_vartype::{TokenKind, Tokenizer};
@@ -19,26 +20,20 @@ fn resolve_sym(
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    let filepath = args.get(1);
-    if filepath.is_none() {
-        eprintln!("usage: uniquetypes <filepath>");
-        std::process::exit(42);
-    }
+    let filepath = args.get(1).context("usage: uniquetypes <filepath>")?;
 
-    let file = File::open(filepath.unwrap())?;
+    let file = File::open(filepath)?;
     let buf_reader = BufReader::new(file);
-
-    let mut demo_file = DemoFile::from_reader(buf_reader);
-    let _demo_header = demo_file.read_demo_header()?;
+    let mut demo_file = DemoFile::start_reading(buf_reader)?;
 
     let send_tables = loop {
         let cmd_header = demo_file.read_cmd_header()?;
         assert!(cmd_header.tick <= 0);
         if cmd_header.cmd == EDemoCommands::DemSendTables {
-            let cmd_body = demo_file.read_cmd_body(&cmd_header)?;
+            let cmd_body = demo_file.read_cmd(&cmd_header)?;
             break CDemoSendTables::decode(cmd_body)?;
         } else {
-            demo_file.skip_cmd_body(&cmd_header)?;
+            demo_file.skip_cmd(&cmd_header)?;
         }
     };
 
