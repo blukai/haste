@@ -214,7 +214,7 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
 
     fn reset(&mut self) -> Result<(), io::Error> {
         self.demo_stream
-            .seek(SeekFrom::Start(size_of::<DemoHeader> as u64))?;
+            .seek(SeekFrom::Start(size_of::<DemoHeader>() as u64))?;
 
         self.ctx.entities.clear();
         self.ctx.string_tables.clear();
