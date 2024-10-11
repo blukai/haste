@@ -24,19 +24,19 @@ bevy game engine).
 
 notable examples to check out for detailed usage:
 
-- [deadlock-position](examples/deadlock-position) demonstrates how to work with
+- [deadlock-position](examples/deadlock-position.rs) demonstrates how to work with
 entities and how to get player (or any other entity, if desired) positions in
 deadlock (the game);
-- [deadlock-gametime](examples/deadlock-gametime) also demonstrates how to work
+- [deadlock-gametime](examples/deadlock-gametime.rs) also demonstrates how to work
 with entities and how to compute game time (not a very straightforward thing to
 do, thanks valve).
-- [dota2-allchat](examples/dota2-allchat) shows how to work with packet
+- [dota2-allchat](examples/dota2-allchat.rs) shows how to work with packet
 messages.
 
 to run these examples navigate to haste directory and run
 
 ```console
-$ cargo run --package <example-name> -- <path-to-dem-file>
+$ cargo run --example <example-name> -- <path-to-dem-file>
 ```
 
 ### usage
@@ -62,6 +62,7 @@ tools) to explore all the entities that are present in replays.
 
 ## feature flags
 
+- `broadcast`: enables http broadcasts.
 - `deadlock`: enables deadlock protos and some utilities.
 - `dota2`: enabled dota2 protos and some utilities.
 - `protobuf-src`: enables
