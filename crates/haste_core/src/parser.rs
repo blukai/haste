@@ -8,7 +8,7 @@ use valveprotos::common::{
 use valveprotos::prost::Message;
 
 use crate::bitreader::BitReader;
-use crate::demofile::{DemoHeader, ReadDemoHeaderError, DEMO_RECORD_BUFFER_SIZE};
+use crate::demofile::{DemoHeader, DemoHeaderError, DEMO_RECORD_BUFFER_SIZE};
 use crate::demostream::{CmdHeader, DemoStream};
 use crate::entities::{DeltaHeader, Entity, EntityContainer};
 use crate::entityclasses::EntityClasses;
@@ -144,10 +144,7 @@ pub struct Parser<D: DemoStream, V: Visitor> {
 }
 
 impl<D: DemoStream, V: Visitor> Parser<D, V> {
-    pub fn from_stream_with_visitor(
-        demo_stream: D,
-        visitor: V,
-    ) -> Result<Self, ReadDemoHeaderError> {
+    pub fn from_stream_with_visitor(demo_stream: D, visitor: V) -> Result<Self, DemoHeaderError> {
         Ok(Self {
             demo_stream,
             buf: vec![0; DEMO_RECORD_BUFFER_SIZE],
@@ -578,11 +575,22 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
         Ok(())
     }
 
-    // NOTE: following methods are public-facing api; do not use them internally
+    // NOTE: following methods are public-facing api; do not use them internally.
 
-    // NOTE: it wouldn't be very nice to expose DemoFile that is owned by Parser
-    // because it'll violate encapsulation; parser will lack control over the
-    // DemoFile's internal state which may lead to to unintended consequences.
+    #[inline]
+    pub fn demo_stream(&mut self) -> &D {
+        &self.demo_stream
+    }
+
+    #[inline]
+    pub fn demo_stream_mut(&mut self) -> &mut D {
+        &mut self.demo_stream
+    }
+
+    // context
+    // ----
+    //
+    // TODO: consider just exposing context without this bullshit delegation.
 
     /// delegated from [`Context`].
     #[inline]
@@ -626,7 +634,7 @@ impl Visitor for NopVisitor {}
 
 impl<D: DemoStream> Parser<D, NopVisitor> {
     #[inline]
-    pub fn from_stream(demo_stream: D) -> Result<Self, ReadDemoHeaderError> {
+    pub fn from_stream(demo_stream: D) -> Result<Self, DemoHeaderError> {
         Self::from_stream_with_visitor(demo_stream, NopVisitor)
     }
 }

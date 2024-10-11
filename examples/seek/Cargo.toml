@@ -1,8 +1,0 @@
-[package]
-name = "seek"
-version = "0.0.0"
-edition.workspace = true
-
-[dependencies]
-haste.workspace = true
-rand.workspace = true

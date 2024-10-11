@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use handler::HandlerVisitor;
+use haste::demofile::DemoFile;
 use haste::entities::{self, Entity};
 use haste::parser::{Context, Parser};
 use haste::stringtables::StringTable;
@@ -15,10 +16,7 @@ fn get_entity_name<'a>(entity: &'a Entity, entity_names: &'a StringTable) -> Opt
     const NAME_STRINGTABLE_INDEX_KEY: u64 =
         entities::fkey_from_path(&["m_pEntity", "m_nameStringableIndex"]);
     let name_stringtable_index: i32 = entity.get_value(&NAME_STRINGTABLE_INDEX_KEY)?;
-
-    let (_, name_stringtable_item) = entity_names
-        .items()
-        .find(|(i, _)| **i == name_stringtable_index)?;
+    let name_stringtable_item = entity_names.get_item(&name_stringtable_index)?;
     let raw_string = name_stringtable_item.string.as_ref()?;
     std::str::from_utf8(raw_string).ok()
 }
@@ -68,20 +66,20 @@ fn hero_killed(state: &mut State, ctx: &Context, msg: &CCitadelUserMsgHeroKilled
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    let filepath = args.get(1);
-    if filepath.is_none() {
-        eprintln!("usage: herokilled <filepath>");
-        std::process::exit(42);
-    }
-
-    let file = File::open(filepath.unwrap())?;
+    let filepath = args
+        .get(1)
+        .context("usage: experiemnt-messagehandler <filepath>")?;
+    let file = File::open(filepath)?;
     let buf_reader = BufReader::new(file);
+    let demo_file = DemoFile::start_reading(buf_reader)?;
+
     let state = State::default();
     let mut visitor = HandlerVisitor::with_state(state).with(
         CitadelUserMessageIds::KEUserMsgHeroKilled as u32,
         hero_killed,
     );
-    let mut parser = Parser::from_reader_with_visitor(buf_reader, &mut visitor)?;
+
+    let mut parser = Parser::from_stream_with_visitor(demo_file, &mut visitor)?;
     parser.run_to_end()?;
 
     println!();

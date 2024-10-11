@@ -1,12 +1,11 @@
 use std::fs::File;
-use std::io::{self, BufRead, BufReader};
+use std::io::{BufReader, Write};
 use std::time::Duration;
 
 use anyhow::{bail, Result};
-use haste_broadcast::broadcast::Broadcast;
-use haste_broadcast::broadcasthttp::BroadcastHttp;
-use haste_core::demostream::CmdHeader;
-use haste_core::parser::{Context, Parser, Visitor};
+use haste::broadcast::{BroadcastFile, BroadcastHttp};
+use haste::demostream::CmdHeader;
+use haste::parser::{Context, Parser, Visitor};
 
 struct MyVisitor;
 
@@ -36,15 +35,11 @@ impl DownloadCommand {
             .build()?;
         let mut broadcast = BroadcastHttp::start_streaming(http_client, &self.url).await?;
         let mut file = File::create(&self.output)?;
-        match io::copy(&mut broadcast, &mut file) {
-            Ok(_) => Ok(()),
-            Err(err) => {
-                if broadcast.fill_buf()?.is_empty() {
-                    return Ok(());
-                }
-                return Err(err.into());
-            }
+        while let Some(packet) = broadcast.next_packet().await {
+            // TODO: graceful stop? atm this will error out on "eof".
+            file.write_all(packet?.as_ref())?;
         }
+        Ok(())
     }
 }
 
@@ -65,18 +60,31 @@ impl ParseCommand {
         let http_client = reqwest::Client::builder()
             .timeout(Duration::from_secs(3))
             .build()?;
-        let broadcast_http = BroadcastHttp::start_streaming(http_client, url).await?;
-        let broadcast = Broadcast::start_reading(broadcast_http);
-        let mut parser = Parser::from_stream_with_visitor(broadcast, MyVisitor)?;
-        parser.run_to_end()
+
+        let demo_stream = BroadcastHttp::start_streaming(http_client, url).await?;
+        let mut parser = Parser::from_stream_with_visitor(demo_stream, MyVisitor)?;
+
+        loop {
+            // you have to "drive" broadcast manualy in order to parse it
+            let demo_stream = parser.demo_stream_mut();
+            match demo_stream.next_packet().await {
+                Some(Ok(_)) => {
+                    // run_to_end does not mean to end of the replay, but rather to end of current
+                    // data; it is okay to run it again when you know that more data was supplied,
+                    // it'll continue from where it stopped at.
+                    parser.run_to_end()?;
+                }
+                Some(Err(err)) => return Err(err.into()),
+                None => return Ok(()),
+            }
+        }
     }
 
     fn parse_from_filepath(filepath: &str) -> Result<()> {
         let file = File::open(filepath)?;
         let buf_reader = BufReader::new(file);
-        let broadcast = Broadcast::start_reading(buf_reader);
-
-        let mut parser = Parser::from_stream_with_visitor(broadcast, MyVisitor)?;
+        let broadcast_file = BroadcastFile::start_reading(buf_reader);
+        let mut parser = Parser::from_stream_with_visitor(broadcast_file, MyVisitor)?;
         parser.run_to_end()
     }
 

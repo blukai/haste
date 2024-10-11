@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
   "crates/*",
-  "examples/*",
   "tools/*"
 ]
 
@@ -12,7 +11,7 @@ edition = "2021"
 [workspace.dependencies]
 # internal
 haste = { path = "." }
-haste_broadcast = { path = "crates/haste_broadcast" }
+haste_broadcast = { path = "crates/haste_broadcast", default-features = false }
 haste_core = { path = "crates/haste_core" }
 haste_vartype = { path = "crates/haste_vartype" }
 # external
@@ -39,24 +38,51 @@ thiserror = "1.0.64"
 tokio = { version = "1.40.0", default-features = false }
 valveprotos = { git = "https://github.com/blukai/valveprotos-rs.git", rev = "63620c46236ed0f03a9e8b75954a4dafd0fe8e53" }
 
+# enable more optimizations in dev (/debug) builds for dependencies
+[profile.dev.package."*"]
+opt-level = 3
+
 [package]
 name = "haste"
 version = "0.0.0"
 edition.workspace = true
 
 [dependencies]
+haste_broadcast = { workspace = true, optional = true }
 haste_core.workspace = true
 
+[dev-dependencies]
+anyhow.workspace = true
+rand.workspace = true
+
 [features]
+broadcast = ["haste_broadcast/reqwest", "haste_broadcast/tokio"]
 deadlock = ["haste_core/deadlock"]
 dota2 = ["haste_core/dota2"]
 # TODO(blukai): rename preserve-metadata feature into something more meaningful,
 # or get rid of it all together and preserve symbols only in debug builds.
 preserve-metadata = ["haste_core/preserve-metadata"]
 protobuf-src = ["haste_core/protobuf-src"]
-# TODO(blukai): re-export broadcast from haste
-# broadcast = ["haste_core/broadcast"]
 
-# enable more optimizations in dev (/debug) builds for dependencies
-[profile.dev.package."*"]
-opt-level = 3
+[[example]]
+name = "deadlock-gametime"
+
+[[example]]
+name = "deadlock-position"
+required-features = ["deadlock"]
+
+[[example]]
+name = "dota2-allchat"
+required-features = ["dota2"]
+
+[[example]]
+name = "messagehandler-experiment"
+required-features = ["deadlock"]
+
+[[example]]
+name = "lifestate"
+required-features = ["preserve-metadata"]
+
+[[example]]
+name = "seek"
+

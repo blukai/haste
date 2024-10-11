@@ -291,6 +291,11 @@ impl StringTable {
     pub fn items(&self) -> impl Iterator<Item = (&i32, &StringTableItem)> {
         self.items.iter()
     }
+
+    #[inline]
+    pub fn get_item(&self, entry_index: &i32) -> Option<&StringTableItem> {
+        self.items.get(entry_index)
+    }
 }
 
 // NOTE: this is modelled after CNetworkStringTableContainer

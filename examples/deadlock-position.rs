@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
+use haste::demofile::DemoFile;
 use haste::entities::{deadlock_coord_from_cell, fkey_from_path, DeltaHeader, Entity};
 use haste::fxhash;
 use haste::parser::{Context, Parser, Visitor};
@@ -64,7 +65,7 @@ impl MyVisitor {
     }
 }
 
-impl Visitor for &mut MyVisitor {
+impl Visitor for MyVisitor {
     fn on_entity(
         &mut self,
         _ctx: &Context,
@@ -80,16 +81,10 @@ impl Visitor for &mut MyVisitor {
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    let filepath = args.get(1);
-    if filepath.is_none() {
-        eprintln!("usage: deadlock-position <filepath>");
-        std::process::exit(42);
-    }
-
-    let mut visitor = MyVisitor::default();
-
-    let file = File::open(filepath.unwrap())?;
+    let filepath = args.get(1).context("usage: deadlock-position <filepath>")?;
+    let file = File::open(filepath)?;
     let buf_reader = BufReader::new(file);
-    let mut parser = Parser::from_reader_with_visitor(buf_reader, &mut visitor)?;
+    let demo_file = DemoFile::start_reading(buf_reader)?;
+    let mut parser = Parser::from_stream_with_visitor(demo_file, MyVisitor::default())?;
     parser.run_to_end()
 }

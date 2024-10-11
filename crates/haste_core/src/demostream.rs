@@ -39,8 +39,13 @@ pub enum ReadCmdError {
 #[derive(thiserror::Error, Debug)]
 pub enum DecodeCmdError {
     #[error(transparent)]
-    DecodeError(#[from] prost::DecodeError),
+    DecodeProtobufError(#[from] prost::DecodeError),
 }
+
+// TODO: is there a way to restrict (idk if this is a correct word) DemoStream trait so that it'll
+// require seek ops to be implemented only if the underlying thing binds to io::Seek trait? thus
+// making so that Parser will not provide methods (such as run_to_tick) that need seeking
+// capabilities?
 
 pub trait DemoStream {
     // stream ops
@@ -50,7 +55,23 @@ pub trait DemoStream {
 
     fn stream_position(&mut self) -> Result<u64, io::Error>;
 
-    fn is_at_eof(&mut self) -> Result<bool, io::Error>;
+    /// reimplementation of nightly [`std::io::Seek::stream_len`].
+    fn stream_len(&mut self) -> Result<u64, io::Error> {
+        let old_pos = self.stream_position()?;
+        let len = self.seek(SeekFrom::End(0))?;
+
+        // avoid seeking a third time when we were already at the end of the
+        // stream. the branch is usually way cheaper than a seek operation.
+        if old_pos != len {
+            self.seek(SeekFrom::Start(old_pos))?;
+        }
+
+        Ok(len)
+    }
+
+    fn is_at_eof(&mut self) -> Result<bool, io::Error> {
+        Ok(self.stream_position()? == self.stream_len()?)
+    }
 
     // cmd header
     // ----
@@ -97,4 +118,10 @@ pub trait DemoStream {
         self.seek(SeekFrom::Current(cmd_header.body_size as i64))
             .map(|_| ())
     }
+
+    // other
+    // ----
+
+    // TODO: how not cool is it to rely on anyhow here?
+    fn total_ticks(&mut self) -> Result<i32, anyhow::Error>;
 }

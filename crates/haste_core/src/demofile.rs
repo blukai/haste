@@ -1,9 +1,9 @@
-use std::io::{self, BufRead, Read, Seek, SeekFrom};
+use std::io::{self, Read, Seek, SeekFrom};
 
 use dungers::varint;
 use prost::Message;
 use valveprotos::common::{
-    CDemoClassInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables, EDemoCommands,
+    CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables, EDemoCommands,
 };
 use valveprotos::prost;
 
@@ -31,18 +31,18 @@ pub struct DemoHeader {
 }
 
 #[derive(thiserror::Error, Debug)]
-pub enum ReadDemoHeaderError {
+pub enum DemoHeaderError {
     #[error(transparent)]
     IoError(#[from] io::Error),
     #[error("invalid demo file stamp (got {got:?}; want id {DEMO_HEADER_ID:?})")]
     InvalidDemoFileStamp { got: [u8; DEMO_HEADER_ID_SIZE] },
 }
 
-fn read_demo_header<R: Read>(mut rdr: R) -> Result<DemoHeader, ReadDemoHeaderError> {
+fn read_demo_header<R: Read>(mut rdr: R) -> Result<DemoHeader, DemoHeaderError> {
     let mut demofilestamp = [0u8; DEMO_HEADER_ID_SIZE];
     rdr.read_exact(&mut demofilestamp)?;
     if demofilestamp != DEMO_HEADER_ID {
-        return Err(ReadDemoHeaderError::InvalidDemoFileStamp { got: demofilestamp });
+        return Err(DemoHeaderError::InvalidDemoFileStamp { got: demofilestamp });
     }
 
     let mut buf = [0u8; size_of::<i32>()];
@@ -65,9 +65,47 @@ pub struct DemoFile<R: Read + Seek> {
     rdr: R,
     buf: Vec<u8>,
     demo_header: DemoHeader,
+    file_info: Option<CDemoFileInfo>,
 }
 
-impl<R: BufRead + Seek> DemoStream for DemoFile<R> {
+impl<R: Read + Seek> DemoFile<R> {
+    /// creates a new [`DemoFile`] instance from the given reader.
+    ///
+    /// # performance note
+    ///
+    /// for optimal performance make sure to provide a reader that implements buffering (for
+    /// example [`std::io::BufReader`]).
+    pub fn start_reading(mut rdr: R) -> Result<Self, DemoHeaderError> {
+        let demo_header = read_demo_header(&mut rdr)?;
+        Ok(Self {
+            rdr,
+            buf: vec![0u8; DEMO_RECORD_BUFFER_SIZE],
+            demo_header,
+            file_info: None,
+        })
+    }
+
+    #[inline]
+    pub fn demo_header(&self) -> &DemoHeader {
+        &self.demo_header
+    }
+
+    pub fn file_info(&mut self) -> Result<&CDemoFileInfo, anyhow::Error> {
+        if self.file_info.is_none() {
+            let backup = self.stream_position()?;
+
+            self.seek(SeekFrom::Start(self.demo_header.fileinfo_offset as u64))?;
+            let cmd_header = self.read_cmd_header()?;
+            self.file_info = Some(CDemoFileInfo::decode(self.read_cmd(&cmd_header)?)?);
+
+            self.seek(SeekFrom::Start(backup))?;
+        }
+
+        Ok(self.file_info.as_ref().expect("file info have been read"))
+    }
+}
+
+impl<R: Read + Seek> DemoStream for DemoFile<R> {
     // stream ops
     // ----
 
@@ -86,10 +124,6 @@ impl<R: BufRead + Seek> DemoStream for DemoFile<R> {
     #[inline]
     fn stream_position(&mut self) -> Result<u64, io::Error> {
         self.rdr.stream_position()
-    }
-
-    fn is_at_eof(&mut self) -> Result<bool, io::Error> {
-        Ok(self.rdr.fill_buf()?.is_empty())
     }
 
     // cmd header
@@ -161,43 +195,28 @@ impl<R: BufRead + Seek> DemoStream for DemoFile<R> {
 
     #[inline(always)]
     fn decode_cmd_send_tables(data: &[u8]) -> Result<CDemoSendTables, DecodeCmdError> {
-        CDemoSendTables::decode(data).map_err(DecodeCmdError::DecodeError)
+        CDemoSendTables::decode(data).map_err(DecodeCmdError::DecodeProtobufError)
     }
 
     #[inline(always)]
     fn decode_cmd_class_info(data: &[u8]) -> Result<CDemoClassInfo, DecodeCmdError> {
-        CDemoClassInfo::decode(data).map_err(DecodeCmdError::DecodeError)
+        CDemoClassInfo::decode(data).map_err(DecodeCmdError::DecodeProtobufError)
     }
 
     #[inline(always)]
     fn decode_cmd_packet(data: &[u8]) -> Result<CDemoPacket, DecodeCmdError> {
-        CDemoPacket::decode(data).map_err(DecodeCmdError::DecodeError)
+        CDemoPacket::decode(data).map_err(DecodeCmdError::DecodeProtobufError)
     }
 
     #[inline(always)]
     fn decode_cmd_full_packet(data: &[u8]) -> Result<CDemoFullPacket, DecodeCmdError> {
-        CDemoFullPacket::decode(data).map_err(DecodeCmdError::DecodeError)
-    }
-}
-
-impl<R: BufRead + Seek> DemoFile<R> {
-    /// creates a new [`DemoFile`] instance from the given reader.
-    ///
-    /// # performance note
-    ///
-    /// for optimal performance make sure to provide a reader that implements buffering (for
-    /// example [`std::io::BufReader`]).
-    pub fn start_reading(mut rdr: R) -> Result<Self, ReadDemoHeaderError> {
-        let demo_header = read_demo_header(&mut rdr)?;
-        Ok(Self {
-            rdr,
-            buf: vec![0u8; DEMO_RECORD_BUFFER_SIZE],
-            demo_header,
-        })
+        CDemoFullPacket::decode(data).map_err(DecodeCmdError::DecodeProtobufError)
     }
 
-    #[inline]
-    pub fn demo_header(&self) -> &DemoHeader {
-        &self.demo_header
+    // other
+    // ----
+
+    fn total_ticks(&mut self) -> Result<i32, anyhow::Error> {
+        self.file_info().map(|file_info| file_info.playback_ticks())
     }
 }

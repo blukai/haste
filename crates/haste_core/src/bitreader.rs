@@ -29,19 +29,19 @@ impl<'a> Drop for BitReader<'a> {
 }
 
 /// rationale for using "unsafe" `_unchecked` methods of the underlying
-/// [dungers::bitbuf::BitReader]:
+/// [`dungers::bitbuf::BitReader`]:
 ///
-/// what makes safe methods of [dungers::bitbuf::BitReader] safe is overflow checks.
+/// what makes safe methods of [`dungers::bitbuf::BitReader`] safe is overflow checks.
 ///
-/// bounds checking is not omitted, it is "deferred". custom [Drop] impl helps to ensure that it is
-/// performed.
+/// bounds checking is not omitted, it is "deferred". custom [`Drop`] impl helps to ensure that it
+/// is performed.
 ///
-/// [BitReader]'s methods are being called very frequently, there's absolutely no value in
-/// performing bounds checking each time something is needed to be read because that is not going
-/// to help detect corrupt data.
+/// [`BitReader`]'s methods are called very frequently, there's absolutely no value in performing
+/// bounds checking each time something is needed to be read because that is not going to help
+/// detect corrupt data.
 ///
-/// deferred bounds checking allows to eliminate a very significant amout of branches which very
-/// noticeably improves performance.
+/// deferred bounds checking allows to eliminate a very significant amount of branches which
+/// results in very noticable speed boost.
 impl<'a> BitReader<'a> {
     #[inline]
     pub fn new(data: &'a [u8]) -> Self {

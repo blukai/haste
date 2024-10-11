@@ -302,9 +302,9 @@ impl Entity {
 
     /// get the value of the field with the provided key, and attempt to convert it.
     ///
-    /// - if the value is missing, it returns [`Error::FieldValueNotExist`]
+    /// - if the value is missing, it returns [`GetValueError::FieldNotExist`]
     /// - if the value is present but convesion failed, returns
-    /// [`Error::FieldValueInvalidConversion`]
+    /// [`GetValueError::FieldValueConversionError`]
     pub fn try_get_value<T>(&self, key: &u64) -> Result<T, GetValueError>
     where
         FieldValue: TryInto<T, Error = FieldValueConversionError>,

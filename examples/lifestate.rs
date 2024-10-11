@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
+use haste::demofile::DemoFile;
 use haste::entities::{fkey_from_path, DeltaHeader, Entity};
 use haste::parser::{Context, Parser, Visitor};
 
@@ -23,13 +24,17 @@ impl Visitor for MyVisitor {
         entity: &Entity,
     ) -> Result<()> {
         const LIFE_STATE_KEY: u64 = fkey_from_path(&["m_lifeState"]);
-        let next_life_state = entity.try_get_value(&LIFE_STATE_KEY)?;
+        let Some(next_life_state) = entity.get_value(&LIFE_STATE_KEY) else {
+            // NOTE: not all entities have life state field
+            return Ok(());
+        };
 
         let prev_life_state = *self.life_states.get(&entity.index()).unwrap_or(&LIFE_DEAD);
         if next_life_state == prev_life_state {
             return Ok(());
         }
 
+        // TODO: parser must provide a list of changed fields
         self.life_states.insert(entity.index(), next_life_state);
 
         match next_life_state {
@@ -54,14 +59,10 @@ impl Visitor for MyVisitor {
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    let filepath = args.get(1);
-    if filepath.is_none() {
-        eprintln!("usage: lifestate <filepath>");
-        std::process::exit(42);
-    }
-
-    let file = File::open(filepath.unwrap())?;
+    let filepath = args.get(1).context("usage: lifestate <filepath>")?;
+    let file = File::open(filepath)?;
     let buf_reader = BufReader::new(file);
-    let mut parser = Parser::from_reader_with_visitor(buf_reader, MyVisitor::default())?;
+    let demo_file = DemoFile::start_reading(buf_reader)?;
+    let mut parser = Parser::from_stream_with_visitor(demo_file, MyVisitor::default())?;
     parser.run_to_end()
 }

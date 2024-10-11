@@ -1,10 +1,11 @@
 /// this example shows how to compute game time in deadlock.
-///
-/// logic for dota 2 would be different. if you need an example - open an issue on github.
+/// note that logic for dota 2 would be a little bit different, especially for older replays.
 use std::fs::File;
 use std::io::BufReader;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
+use haste::demofile::DemoFile;
+use haste::demostream::CmdHeader;
 use haste::entities::{fkey_from_path, DeltaHeader, Entity};
 use haste::fxhash;
 use haste::parser::{Context, Parser, Visitor};
@@ -67,12 +68,7 @@ impl MyVisitor {
 }
 
 impl Visitor for MyVisitor {
-    fn on_cmd(
-        &mut self,
-        ctx: &Context,
-        cmd_header: &haste::demofile::CmdHeader,
-        _data: &[u8],
-    ) -> Result<()> {
+    fn on_cmd(&mut self, ctx: &Context, cmd_header: &CmdHeader, _data: &[u8]) -> Result<()> {
         // DemSyncTick indicates that all initialization messages were handled and now actual data
         // will flow; at this point tick interval is known.
         if self.tick_interval.is_none() && cmd_header.cmd == EDemoCommands::DemSyncTick {
@@ -108,14 +104,10 @@ impl Visitor for MyVisitor {
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
-    let filepath = args.get(1);
-    if filepath.is_none() {
-        eprintln!("usage: deadlock-gametime <filepath>");
-        std::process::exit(42);
-    }
-
-    let file = File::open(filepath.unwrap())?;
+    let filepath = args.get(1).context("usage: deadlock-gametime <filepath>")?;
+    let file = File::open(filepath)?;
     let buf_reader = BufReader::new(file);
-    let mut parser = Parser::from_reader_with_visitor(buf_reader, MyVisitor::default())?;
+    let demo_file = DemoFile::start_reading(buf_reader)?;
+    let mut parser = Parser::from_stream_with_visitor(demo_file, MyVisitor::default())?;
     parser.run_to_end()
 }

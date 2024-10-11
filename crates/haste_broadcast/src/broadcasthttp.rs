@@ -1,12 +1,20 @@
 use std::error::Error;
-use std::io::{self, BufRead, Read};
+use std::io::{self, BufRead, Cursor, Seek, SeekFrom, Write};
 use std::marker::PhantomData;
 use std::time::{Duration, Instant};
 
 use bytes::buf::Reader;
 use bytes::{Buf, Bytes};
+use haste_core::demostream::{
+    CmdHeader, DecodeCmdError, DemoStream, ReadCmdError, ReadCmdHeaderError,
+};
 use serde::Deserialize;
+use valveprotos::common::{CDemoClassInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables};
 
+use crate::demostream::{
+    decode_cmd_class_info, decode_cmd_full_packet, decode_cmd_packet, decode_cmd_send_tables,
+    read_cmd_header, scan_for_last_tick,
+};
 use crate::httpclient::HttpClient;
 
 // thanks to Bulbasaur (/ johnpyp) for bringing up tv broadcasts in discord, see
@@ -81,14 +89,19 @@ pub fn default_headers(app_id: u32) -> Result<http::HeaderMap, http::header::Inv
 
 #[derive(Debug, Deserialize)]
 pub struct SyncResponse {
-    pub tick: i32, // tick can also be referred as start tick (nStartTick)
+    /// start tick of the current fragment
+    pub tick: i32,
     pub endtick: i32,
     pub maxtick: i32,
+    /// delay of this fragment from real-time, seconds
     pub rtdelay: f32,
+    /// receive age: how many seconds since relay last received data from game server
     pub rcvage: f32,
     pub fragment: i32,
+    /// numeric value index of signup fragment
     pub signup_fragment: i32,
     pub tps: i32,
+    /// the interval between full keyframes, in seconds
     pub keyframe_interval: i32,
     pub map: String,
     pub protocol: i32,
@@ -99,6 +112,9 @@ pub enum FragmentType {
     Delta,
     Full,
 }
+
+// TODO: move all BroadcastHttpClient's methods into BroadcastHttp and get rid of
+// BroadcasHttpClient.
 
 #[derive(thiserror::Error, Debug)]
 pub enum BroadcastHttpClientError<HttpClientError: Error + Send + Sync + 'static> {
@@ -112,7 +128,7 @@ pub enum BroadcastHttpClientError<HttpClientError: Error + Send + Sync + 'static
     JsonError(#[source] serde_json::Error),
 }
 
-pub struct BroadcasHttpClient<'client, C: HttpClient + 'client> {
+struct BroadcasHttpClient<'client, C: HttpClient + 'client> {
     http_client: C,
     base_url: String,
     _marker: PhantomData<&'client ()>,
@@ -120,7 +136,7 @@ pub struct BroadcasHttpClient<'client, C: HttpClient + 'client> {
 
 // TODO: don't ask for app_id + don't set default headers
 impl<'client, C: HttpClient + 'client> BroadcasHttpClient<'client, C> {
-    pub fn new(http_client: C, base_url: impl Into<String>) -> Self {
+    fn new(http_client: C, base_url: impl Into<String>) -> Self {
         Self {
             http_client,
             base_url: base_url.into(),
@@ -148,7 +164,7 @@ impl<'client, C: HttpClient + 'client> BroadcasHttpClient<'client, C> {
     // `SendGet( request, new CSyncRequest( m_SyncParams, nResync ) )`
     // call within the
     // `void CDemoStreamHttp::SendSync( int nResync )`
-    pub async fn get_sync(&self) -> Result<SyncResponse, BroadcastHttpClientError<C::Error>> {
+    async fn get_sync(&self) -> Result<SyncResponse, BroadcastHttpClientError<C::Error>> {
         let url = format!("{}/sync", &self.base_url);
         serde_json::from_slice(&self.get(&url).await?.into_body()?)
             .map_err(BroadcastHttpClientError::JsonError)
@@ -157,7 +173,7 @@ impl<'client, C: HttpClient + 'client> BroadcasHttpClient<'client, C> {
     // `SendGet( CFmtStr( "/%d/start", m_SyncResponse.nSignupFragment ), new CStartRequest( ) )`
     // call within the
     // `bool CDemoStreamHttp::OnSync( int nResync )`.
-    pub async fn get_start(
+    async fn get_start(
         &self,
         signup_fragment: i32,
     ) -> Result<Bytes, BroadcastHttpClientError<C::Error>> {
@@ -167,7 +183,7 @@ impl<'client, C: HttpClient + 'client> BroadcasHttpClient<'client, C> {
     }
 
     // void CDemoStreamHttp::RequestFragment( int nFragment, FragmentTypeEnum_t nType )
-    pub async fn get_fragment(
+    async fn get_fragment(
         &self,
         fragment: i32,
         typ: FragmentType,
@@ -200,6 +216,11 @@ enum StreamState {
     },
 }
 
+enum StreamBuffer {
+    Last(Option<Reader<Bytes>>),
+    Seekable(Cursor<Vec<u8>>),
+}
+
 pub struct BroadcastHttp<'client, C: HttpClient + 'client> {
     client: BroadcasHttpClient<'client, C>,
     stream_fragment: i32,
@@ -207,7 +228,8 @@ pub struct BroadcastHttp<'client, C: HttpClient + 'client> {
     signup_fragment: i32,
     sync_response: SyncResponse,
     stream_state: StreamState,
-    buf: Option<Reader<Bytes>>,
+    stream_buffer: StreamBuffer,
+    total_ticks: Option<i32>,
 }
 
 impl<'client, C: HttpClient + 'client> BroadcastHttp<'client, C> {
@@ -226,8 +248,19 @@ impl<'client, C: HttpClient + 'client> BroadcastHttp<'client, C> {
             signup_fragment: sync_response.signup_fragment,
             sync_response,
             stream_state: StreamState::Start,
-            buf: None,
+            stream_buffer: StreamBuffer::Last(None),
+            total_ticks: None,
         })
+    }
+
+    /// buffer all packets. this enables seeking on [`DemoStream`].
+    pub async fn start_streaming_and_buffer(
+        http_client: C,
+        base_url: impl Into<String>,
+    ) -> Result<Self, BroadcastHttpClientError<C::Error>> {
+        let mut this = Self::start_streaming(http_client, base_url).await?;
+        this.stream_buffer = StreamBuffer::Seekable(Cursor::default());
+        Ok(this)
     }
 
     pub fn sync_response(&self) -> &SyncResponse {
@@ -340,14 +373,42 @@ impl<'client, C: HttpClient + 'client> BroadcastHttp<'client, C> {
 
     // TODO: can a consumer pass buffer to http client to read body into to avoid allocations / or
     // what is the alternative?
-    async fn next_packet(&mut self) -> Option<Result<Bytes, BroadcastHttpClientError<C::Error>>> {
+    pub async fn next_packet(
+        &mut self,
+    ) -> Option<Result<Bytes, BroadcastHttpClientError<C::Error>>> {
         match match self.stream_state {
             StreamState::Stop => return None,
             StreamState::Start => self.handle_start().await,
             StreamState::Fullframe => self.handle_fullframe().await,
             StreamState::Deltaframes { .. } => self.handle_deltaframes().await,
         } {
-            Ok(packet) => Some(Ok(packet)),
+            Ok(packet) => {
+                match self.stream_buffer {
+                    StreamBuffer::Last(ref mut value) => {
+                        use bytes::Buf;
+
+                        *value = Some(
+                            packet
+                                // NOTE: clone is not cloning underlying bytes, but just increases
+                                // ref count.
+                                .clone()
+                                .reader(),
+                        );
+                    }
+                    StreamBuffer::Seekable(ref mut cursor) => {
+                        cursor
+                            .write_all(packet.as_ref())
+                            // TODO: this should not panic. probably it's fine. there are very few
+                            // things that could go wrong with Vec<u8> in rust.
+                            .expect("could not buffer");
+                        // invalidate last tick so that it can be re-scanned if needed.
+                        self.total_ticks = None;
+                    }
+                }
+
+                Some(Ok(packet))
+            }
+
             Err(err) => {
                 self.stream_state = StreamState::Stop;
                 match err {
@@ -358,55 +419,159 @@ impl<'client, C: HttpClient + 'client> BroadcastHttp<'client, C> {
             }
         }
     }
-
-    async fn prepare_packet(
-        &mut self,
-    ) -> Option<Result<&mut Reader<Bytes>, BroadcastHttpClientError<C::Error>>> {
-        let stop = matches!(self.stream_state, StreamState::Stop);
-        let has_remaining = matches!(self.buf.as_ref(), Some(buf) if buf.get_ref().has_remaining());
-        if !stop && !has_remaining {
-            if let Ok(packet) = self.next_packet().await? {
-                self.buf = Some(packet.reader());
-            }
-        }
-        Some(Ok(self.buf.as_mut().unwrap()))
-    }
 }
 
 // ----
-// read + buf read
+// demo stream
 
-// NOTE: by implementing DemoStream trait directly on BroadcastHttp in read_cmd method it is
-// possible to do a no-copy read by getting Bytes from Reader and calling slice + advance:
-// - https://docs.rs/bytes/latest/bytes/struct.Bytes.html#method.slice
-// - https://docs.rs/bytes/latest/bytes/buf/trait.Buf.html#tymethod.advance
-
-// TODO: is there a better way to get value out of async fn into sync then using pollster? don't
-// even try to get ideas that this can be done with tokio's task spawn or runtime block on - it
-// can't.
-
-impl<'client, C: HttpClient + 'client> Read for BroadcastHttp<'client, C> {
-    #[inline]
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match pollster::block_on(self.prepare_packet()) {
-            Some(Ok(rdr)) => rdr.read(buf),
-            Some(Err(err)) => Err(io::Error::other(err).into()),
-            None => Err(io::ErrorKind::UnexpectedEof.into()),
-        }
-    }
+// NOTE: interacting with stream (read/seek) that has not packets is a developer error, it's is
+// okay to panic.
+macro_rules! no_packet_panic {
+    () => {
+        panic!("attempted reading on BroadcastHttp with no packets")
+    };
 }
 
-impl<'client, C: HttpClient + 'client> BufRead for BroadcastHttp<'client, C> {
-    #[inline]
-    fn fill_buf(&mut self) -> io::Result<&[u8]> {
-        match pollster::block_on(self.prepare_packet()) {
-            Some(Ok(rdr)) => rdr.fill_buf(),
-            Some(Err(err)) => Err(io::Error::other(err).into()),
-            None => Err(io::ErrorKind::UnexpectedEof.into()),
+// NOTE: this is a developer error, it's is okay to panic.
+macro_rules! not_seekable_panic {
+    () => {
+        panic!("attempted invoking seek-related operation on BroadcastHttp constructed not with `start_streaming_and_buffer`")
+    };
+}
+
+impl<'client, C: HttpClient + 'client> DemoStream for BroadcastHttp<'client, C> {
+    // stream ops
+    // ----
+
+    /// panics if [`BroadcastHttp`] was not constructed with `start_reading_and_buffer`. othwerwise
+    /// delegated to [`std::io::Cursor`].
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64, io::Error> {
+        match self.stream_buffer {
+            StreamBuffer::Last(_) => not_seekable_panic!(),
+            StreamBuffer::Seekable(ref mut c) => c.seek(pos),
         }
     }
 
-    fn consume(&mut self, amt: usize) {
-        self.buf.as_mut().expect("invalid consume").consume(amt);
+    /// panics if [`BroadcastHttp`] was not constructed with `start_reading_and_buffer`.
+    fn stream_position(&mut self) -> Result<u64, io::Error> {
+        match self.stream_buffer {
+            StreamBuffer::Last(_) => not_seekable_panic!(),
+            StreamBuffer::Seekable(ref mut c) => Ok(c.position()),
+        }
+    }
+
+    /// panics if [`BroadcastHttp`] was not constructed with `start_reading_and_buffer`.
+    fn stream_len(&mut self) -> Result<u64, io::Error> {
+        match self.stream_buffer {
+            StreamBuffer::Last(_) => not_seekable_panic!(),
+            StreamBuffer::Seekable(ref c) => Ok(c.get_ref().len() as u64),
+        }
+    }
+
+    /// panics if `next_packet` never succeded.
+    fn is_at_eof(&mut self) -> Result<bool, io::Error> {
+        match self.stream_buffer {
+            StreamBuffer::Last(None) => no_packet_panic!(),
+            StreamBuffer::Last(Some(ref r)) => Ok(!r.get_ref().has_remaining()),
+            StreamBuffer::Seekable(ref c) => Ok(c.position() as usize >= c.get_ref().len()),
+        }
+    }
+
+    // cmd header
+    // ----
+
+    /// panics if `next_packet` never succeded.
+    fn read_cmd_header(&mut self) -> Result<CmdHeader, ReadCmdHeaderError> {
+        match self.stream_buffer {
+            StreamBuffer::Last(None) => no_packet_panic!(),
+            StreamBuffer::Last(Some(ref mut r)) => read_cmd_header(r),
+            StreamBuffer::Seekable(ref mut c) => read_cmd_header(c),
+        }
+    }
+
+    // cmd
+    // ----
+
+    /// panics if `next_packet` never succeded.
+    fn read_cmd(&mut self, cmd_header: &CmdHeader) -> Result<&[u8], ReadCmdError> {
+        match self.stream_buffer {
+            StreamBuffer::Last(None) => no_packet_panic!(),
+
+            StreamBuffer::Last(Some(ref mut r)) => {
+                use bytes::Buf;
+
+                let size = cmd_header.body_size as usize;
+                let bytes = r.get_mut();
+
+                // it probably could be possible that body of the response was not transferred /
+                // read correctly?
+                if bytes.remaining() < size {
+                    return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into());
+                }
+
+                // SAFETY: this is safe because lifetime of the returned slice is tied to the
+                // lifetime of r (if i'm not missing anything, am i?).
+                let data = unsafe {
+                    // NOTE: start is 0 because Reader's advance will increase start position of
+                    // the underlying slice
+                    let ptr = bytes.as_ref()[0..size].as_ptr();
+                    std::slice::from_raw_parts(ptr, size)
+                };
+                bytes.advance(size);
+                Ok(data)
+            }
+
+            StreamBuffer::Seekable(ref mut c) => {
+                let size = cmd_header.body_size as usize;
+                let pos = c.position() as usize;
+
+                // it probably could be possible that body of the response was not transferred /
+                // read correctly?
+                let remaining = c.get_ref().len() - pos;
+                if remaining < size {
+                    return Err(io::Error::from(io::ErrorKind::UnexpectedEof).into());
+                }
+
+                // NOTE: Cursor's advance will not discard data from the underlying Vec<u8>
+                c.consume(size);
+                Ok(&c.get_ref()[pos..pos + size])
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn decode_cmd_send_tables(data: &[u8]) -> Result<CDemoSendTables, DecodeCmdError> {
+        decode_cmd_send_tables(data)
+    }
+
+    #[inline(always)]
+    fn decode_cmd_class_info(data: &[u8]) -> Result<CDemoClassInfo, DecodeCmdError> {
+        decode_cmd_class_info(data)
+    }
+
+    #[inline(always)]
+    fn decode_cmd_packet(data: &[u8]) -> Result<CDemoPacket, DecodeCmdError> {
+        decode_cmd_packet(data)
+    }
+
+    #[inline(always)]
+    fn decode_cmd_full_packet(data: &[u8]) -> Result<CDemoFullPacket, DecodeCmdError> {
+        decode_cmd_full_packet(data)
+    }
+
+    // other
+    // ----
+
+    /// panics if [`BroadcastHttp`] was not constructed with `start_reading_and_buffer`.
+    fn total_ticks(&mut self) -> Result<i32, anyhow::Error> {
+        match self.stream_buffer {
+            StreamBuffer::Last(_) => not_seekable_panic!(),
+            StreamBuffer::Seekable(_) => {
+                if self.total_ticks.is_none() {
+                    self.total_ticks = Some(scan_for_last_tick(self)?);
+                }
+                Ok(self.total_ticks.unwrap())
+            }
+        }
     }
 }

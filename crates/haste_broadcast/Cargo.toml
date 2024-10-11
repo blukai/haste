@@ -4,6 +4,7 @@ version = "0.0.0"
 edition.workspace = true
 
 [dependencies]
+anyhow.workspace = true
 bytes.workspace = true
 haste_core.workspace = true
 http.workspace = true
@@ -21,7 +22,6 @@ valveprotos.workspace = true
 default = ["reqwest", "tokio"]
 # "standard" http client
 reqwest = ["dep:reqwest", "tokio"]
-# reqwest is built on top of hyper, hyper need tokio; but that is not all, tokio
-# also provides async-friendly sleep function and block_on for dealing with
-# async rust in sync code (DemoStream)
+# reqwest is built on top of hyper, hyper needs tokio; also tokio also provides
+# async-friendly sleep function
 tokio = ["dep:tokio"] 
