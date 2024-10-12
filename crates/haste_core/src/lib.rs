@@ -16,6 +16,7 @@ pub mod flattenedserializers;
 pub mod fxhash;
 pub(crate) mod instancebaseline;
 pub mod parser;
+pub(crate) mod protobuf;
 pub(crate) mod quantizedfloat;
 pub mod stringtables;
 

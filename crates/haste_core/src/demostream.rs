@@ -96,10 +96,10 @@ pub trait DemoStream {
     // fn decode_cmd_file_header(data: &[u8]) -> Result<CDemoFileHeader, DecodeCmdError>;
     // fn decode_cmd_file_info(data: &[u8]) -> Result<CDemoFileInfo, DecodeCmdError>;
     // SyncTick (empty msg)
-    fn decode_cmd_send_tables(data: &[u8]) -> Result<CDemoSendTables, DecodeCmdError>;
+    fn decode_cmd_send_tables(data: &[u8]) -> Result<&[u8], DecodeCmdError>;
     fn decode_cmd_class_info(data: &[u8]) -> Result<CDemoClassInfo, DecodeCmdError>;
     // fn decode_cmd_string_tables(data: &[u8]) -> Result<CDemoStringTables, DecodeCmdError>;
-    fn decode_cmd_packet(data: &[u8]) -> Result<CDemoPacket, DecodeCmdError>;
+    fn decode_cmd_packet(data: &[u8]) -> Result<&[u8], DecodeCmdError>;
     // SignonPacket (same as Packet)
     // fn decode_cmd_console_cmd(data: &[u8]) -> Result<CDemoConsoleCmd, DecodeCmdError>;
     // fn decode_cmd_custom_data(data: &[u8]) -> Result<CDemoCustomData, DecodeCmdError>;

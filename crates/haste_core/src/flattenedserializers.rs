@@ -1,4 +1,5 @@
 use std::hash::BuildHasherDefault;
+use std::io::Cursor;
 use std::rc::Rc;
 
 use dungers::varint;
@@ -224,23 +225,11 @@ pub struct FlattenedSerializerContainer {
 }
 
 impl FlattenedSerializerContainer {
-    pub fn parse(cmd: CDemoSendTables) -> Result<Self, FlattenedSerializersError> {
+    pub fn parse(data: &[u8]) -> Result<Self, FlattenedSerializersError> {
         let msg = {
-            // TODO: make prost work with ByteString and turn data into Bytes
-            //
-            // NOTE: calling unwrap_or_default is for some reason faster then
-            // relying on prost's default unwrapping by calling .data().
-            let mut data = &cmd.data.unwrap_or_default()[..];
-            // NOTE: count is useless because read_uvarint32 will "consume"
-            // bytes that it'll read from data; size is useless because data
-            // supposedly contains only one message.
-            //
-            // NOTE: there are 2 levels of indirection here, but rust's compiler
-            // may optimize them away. but if this will be affecting performance
-            // -> createa a function that will be capable of reading varint from
-            // &[u8] without multiple levels of indirection.
-            let (_size, _count) = varint::read_uvarint64(&mut data)?;
-            CsvcMsgFlattenedSerializer::decode(data)?
+            let mut cursor = Cursor::new(data);
+            let (size, n) = varint::read_uvarint64(&mut cursor)?;
+            CsvcMsgFlattenedSerializer::decode(&data[n..n + size as usize])?
         };
 
         let mut field_map: FieldMap =

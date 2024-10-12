@@ -2,8 +2,8 @@ use std::io::{self, SeekFrom};
 
 use anyhow::Result;
 use valveprotos::common::{
-    CDemoFullPacket, CDemoPacket, CDemoStringTables, CsvcMsgCreateStringTable,
-    CsvcMsgPacketEntities, CsvcMsgServerInfo, CsvcMsgUpdateStringTable, EDemoCommands, SvcMessages,
+    CDemoFullPacket, CDemoStringTables, CsvcMsgCreateStringTable, CsvcMsgPacketEntities,
+    CsvcMsgServerInfo, CsvcMsgUpdateStringTable, EDemoCommands, SvcMessages,
 };
 use valveprotos::prost::Message;
 
@@ -301,7 +301,12 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
         // TODO: consider introducing CmdInstance thing that would allow to decode body once and
         // not read it, but skip, if unconsumed. note that to work temporary ownership of
         // demo_stream will need to be taken.
-        let cmd_body = self.demo_stream.read_cmd(cmd_header)?;
+        //
+        // TODO: DO NOT UNSAFE HERE
+        let cmd_body = unsafe {
+            let cmd_body = self.demo_stream.read_cmd(cmd_header)?;
+            std::slice::from_raw_parts(cmd_body.as_ptr(), cmd_body.len())
+        };
         self.visitor.on_cmd(&self.ctx, cmd_header, cmd_body)?;
 
         match cmd_header.cmd {
@@ -358,9 +363,8 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
         Ok(())
     }
 
-    fn handle_cmd_packet(&mut self, cmd: CDemoPacket) -> Result<()> {
-        let data = cmd.data.unwrap_or_default();
-        let mut br = BitReader::new(&data);
+    fn handle_cmd_packet(&mut self, data: &[u8]) -> Result<()> {
+        let mut br = BitReader::new(data);
 
         while br.num_bits_left() > 8 {
             let command = br.read_ubitvar();
@@ -569,7 +573,7 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
         }
 
         if let Some(packet) = cmd.packet {
-            self.handle_cmd_packet(packet)?;
+            self.handle_cmd_packet(packet.data())?;
         }
 
         Ok(())

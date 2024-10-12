@@ -1,13 +1,14 @@
-use std::io::{self, Read, Seek, SeekFrom};
+use std::io::{self, Cursor, Read, Seek, SeekFrom};
 
 use dungers::varint;
 use prost::Message;
 use valveprotos::common::{
-    CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables, EDemoCommands,
+    CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoSendTables, EDemoCommands,
 };
 use valveprotos::prost;
 
 use crate::demostream::{CmdHeader, DecodeCmdError, DemoStream, ReadCmdError, ReadCmdHeaderError};
+use crate::protobuf;
 
 // #define DEMO_RECORD_BUFFER_SIZE 2*1024*1024
 //
@@ -194,8 +195,18 @@ impl<R: Read + Seek> DemoStream for DemoFile<R> {
     }
 
     #[inline(always)]
-    fn decode_cmd_send_tables(data: &[u8]) -> Result<CDemoSendTables, DecodeCmdError> {
-        CDemoSendTables::decode(data).map_err(DecodeCmdError::DecodeProtobufError)
+    fn decode_cmd_send_tables(data: &[u8]) -> Result<&[u8], DecodeCmdError> {
+        // NOTE: see comment within decode_cmd_packet. same stuff.
+
+        let mut cursor = Cursor::new(data);
+
+        let tag = protobuf::read_tag(&mut cursor)?;
+        assert!(matches!(tag.wire_type, protobuf::WireType::LengthDelimited));
+        assert!(tag.field_number == 1);
+
+        let len = protobuf::read_uvarint64(&mut cursor)? as usize;
+        let pos = cursor.position() as usize;
+        Ok(&data[pos..pos + len])
     }
 
     #[inline(always)]
@@ -204,12 +215,26 @@ impl<R: Read + Seek> DemoStream for DemoFile<R> {
     }
 
     #[inline(always)]
-    fn decode_cmd_packet(data: &[u8]) -> Result<CDemoPacket, DecodeCmdError> {
-        CDemoPacket::decode(data).map_err(DecodeCmdError::DecodeProtobufError)
+    fn decode_cmd_packet(data: &[u8]) -> Result<&[u8], DecodeCmdError> {
+        // NOTE: this is no-copy protobuf decoding.
+        // number of calls to allocation functions (measured with heaptrack) went down
+        // from 330,461 (433,675/s) to 252,465 (343,957/s).
+
+        let mut cursor = Cursor::new(data);
+
+        let tag = protobuf::read_tag(&mut cursor)?;
+        assert!(matches!(tag.wire_type, protobuf::WireType::LengthDelimited));
+        assert!(tag.field_number == 3);
+
+        let len = protobuf::read_uvarint64(&mut cursor)? as usize;
+        let pos = cursor.position() as usize;
+        Ok(&data[pos..pos + len])
     }
 
     #[inline(always)]
     fn decode_cmd_full_packet(data: &[u8]) -> Result<CDemoFullPacket, DecodeCmdError> {
+        // TODO: can string tables be decoded using prost, but packet with custom no-copy decoding
+        // like in `decode_cmd_packet`?
         CDemoFullPacket::decode(data).map_err(DecodeCmdError::DecodeProtobufError)
     }
 
