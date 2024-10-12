@@ -8,3 +8,4 @@ anyhow.workspace = true
 dungers = { workspace = true, features = ["varint"] }
 haste.workspace = true
 haste_vartype.workspace = true
+prost.workspace = true

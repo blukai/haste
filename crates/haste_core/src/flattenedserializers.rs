@@ -5,11 +5,11 @@ use dungers::varint;
 use hashbrown::hash_map::Values;
 use hashbrown::HashMap;
 use nohash::NoHashHasher;
+use prost::{self, Message};
 use valveprotos::common::{
     CDemoSendTables, CsvcMsgFlattenedSerializer, ProtoFlattenedSerializerFieldT,
     ProtoFlattenedSerializerT,
 };
-use valveprotos::prost::{self, Message};
 
 use crate::fieldmetadata::{
     get_field_metadata, FieldMetadata, FieldMetadataError, FieldSpecialDescriptor,

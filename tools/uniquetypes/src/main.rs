@@ -7,8 +7,8 @@ use dungers::varint;
 use haste::demofile::DemoFile;
 use haste::demostream::DemoStream;
 use haste::valveprotos::common::{CDemoSendTables, CsvcMsgFlattenedSerializer, EDemoCommands};
-use haste::valveprotos::prost::Message;
 use haste_vartype::{TokenKind, Tokenizer};
+use prost::Message;
 
 fn resolve_sym(
     flattened_serializer: &CsvcMsgFlattenedSerializer,

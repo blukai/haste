@@ -5,7 +5,6 @@ use prost::Message;
 use valveprotos::common::{
     CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables, EDemoCommands,
 };
-use valveprotos::prost;
 
 use crate::demostream::{CmdHeader, DecodeCmdError, DemoStream, ReadCmdError, ReadCmdHeaderError};
 

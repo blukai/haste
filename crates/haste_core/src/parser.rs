@@ -1,11 +1,11 @@
 use std::io::{self, SeekFrom};
 
 use anyhow::Result;
+use prost::Message;
 use valveprotos::common::{
     CDemoFullPacket, CDemoPacket, CDemoStringTables, CsvcMsgCreateStringTable,
     CsvcMsgPacketEntities, CsvcMsgServerInfo, CsvcMsgUpdateStringTable, EDemoCommands, SvcMessages,
 };
-use valveprotos::prost::Message;
 
 use crate::bitreader::BitReader;
 use crate::demofile::{DemoHeaderError, DEMO_RECORD_BUFFER_SIZE};
