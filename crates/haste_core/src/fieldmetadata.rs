@@ -235,6 +235,7 @@ fn visit_array(
             // https://github.com/SteamDatabase/GameTracking-CS2/blob/6b3bf6ad44266e3ee4440a0b9b2fee1268812840/game/core/tools/demoinfo2/demoinfo2.txt#L160
             // TODO: test ability draft game
             "MAX_ABILITY_DRAFT_ABILITIES" => Ok(48),
+            "DOTA_ABILITY_DRAFT_HEROES_PER_GAME" => Ok(10),
             _ => Err(FieldMetadataError::UnknownArrayLengthIdent(
                 ident.to_owned(),
             )),

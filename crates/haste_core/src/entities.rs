@@ -2,8 +2,8 @@ use std::fmt::{self, Binary};
 use std::hash::BuildHasherDefault;
 use std::rc::Rc;
 
-use hashbrown::hash_map::Entry;
 use hashbrown::HashMap;
+use hashbrown::hash_map::Entry;
 use nohash::NoHashHasher;
 
 use crate::bitreader::{BitReader, BitReaderOverflowError};
@@ -374,9 +374,9 @@ impl EntityContainer {
                 BuildHasherDefault::default(),
             ),
 
-            // NOTE: 4096 is an arbitrary value that is large enough that that came out of printing
-            // out count of fps collected per "run". (sort -nr can be handy)
-            field_paths: vec![FieldPath::default(); 4096],
+            // NOTE: 8192 is an arbitrary value that is double the previous one which was 4096 came
+            // out of printing out count of fps collected per "run". (sort -nr can be handy)
+            field_paths: vec![FieldPath::default(); 8192],
         }
     }
 
