@@ -4,8 +4,9 @@ version = "0.0.0"
 edition.workspace = true
 
 [dependencies]
-dungers = { workspace = true, features = ["charsor"] }
 thiserror.workspace = true
+# my other repos
+charsor.workspace = true
 
 [dev-dependencies]
 expect-test.workspace = true

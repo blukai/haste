@@ -5,6 +5,8 @@ edition.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-dungers = { workspace = true, features = ["varint"] }
+# my other repose
+varint.workspace = true
+# workspace
 haste.workspace = true
 haste_vartype.workspace = true

@@ -14,11 +14,14 @@ haste = { path = "." }
 haste_broadcast = { path = "crates/haste_broadcast", default-features = false }
 haste_core = { path = "crates/haste_core" }
 haste_vartype = { path = "crates/haste_vartype" }
+# my other repos
+bitbuf = { git = "https://github.com/blukai/dungers.git", rev = "854b1e2", package = "bitbuf" }
+charsor = { git = "https://github.com/blukai/dungers.git", rev = "854b1e2", package = "charsor" }
+varint = { git = "https://github.com/blukai/dungers.git", rev = "854b1e2", package = "varint" }
 # external
 anyhow = "1.0.86"
 argh = "0.1.12"
 bytes = "1.7.2"
-dungers = { git = "https://github.com/blukai/dungers.git", rev = "5419784ef771089369bdce5463a6cf6da35d3a79" }
 dyn-clone = "1.0.17"
 env_logger = "0.11.5"
 expect-test = "1.5.0"

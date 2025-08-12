@@ -1,11 +1,11 @@
 use std::io::{self, Read, Seek, SeekFrom};
 
-use dungers::varint;
 use prost::Message;
 use valveprotos::common::{
     CDemoClassInfo, CDemoFileInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables, EDemoCommands,
 };
 use valveprotos::prost;
+use varint;
 
 use crate::demostream::{CmdHeader, DecodeCmdError, DemoStream, ReadCmdError, ReadCmdHeaderError};
 
