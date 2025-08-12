@@ -334,7 +334,7 @@ impl StringTableContainer {
         &mut self.tables[len]
     }
 
-    pub fn do_full_update(&mut self, cmd: CDemoStringTables) {
+    pub fn do_full_update(&mut self, cmd: &CDemoStringTables) {
         for incoming in &cmd.tables {
             if let Some(existing) = self.find_table_mut(incoming.table_name()) {
                 existing.do_full_update(incoming);

@@ -42,6 +42,66 @@ pub enum DecodeCmdError {
     DecodeProtobufError(#[from] prost::DecodeError),
 }
 
+pub enum Cmd<'a> {
+    SendTables(CDemoSendTables),
+    ClassInfo(CDemoClassInfo),
+    Packet(CDemoPacket),
+    FullPacket(CDemoFullPacket),
+    Other(&'a [u8]),
+}
+
+pub struct CmdInstance<'d, D: DemoStream + 'd> {
+    pub header: CmdHeader,
+    cmd: Option<Cmd<'d>>,
+    demo_stream: &'d mut D,
+}
+
+impl<'d, D: DemoStream> CmdInstance<'d, D> {
+    // NOCOMMIT: proper/precise error type
+    #[inline(always)]
+    pub fn new(demo_stream: &'d mut D) -> Result<Self, anyhow::Error> {
+        Ok(Self {
+            header: demo_stream.read_cmd_header()?,
+            cmd: None,
+            demo_stream,
+        })
+    }
+
+    // NOCOMMIT: proper/precise error type
+    pub fn cmd(&'d mut self) -> Result<&'d Cmd<'d>, anyhow::Error> {
+        if self.cmd.is_none() {
+            let data = self.demo_stream.read_cmd(&self.header)?;
+            self.cmd = Some(match self.header.cmd {
+                EDemoCommands::DemSendTables => Cmd::SendTables(D::decode_cmd_send_tables(data)?),
+                EDemoCommands::DemClassInfo => Cmd::ClassInfo(D::decode_cmd_class_info(data)?),
+                EDemoCommands::DemPacket | EDemoCommands::DemSignonPacket => {
+                    Cmd::Packet(D::decode_cmd_packet(data)?)
+                }
+                EDemoCommands::DemFullPacket => Cmd::FullPacket(D::decode_cmd_full_packet(data)?),
+                _ => Cmd::Other(data),
+            });
+        }
+        Ok(self.cmd.as_ref().unwrap())
+    }
+
+    // TODO: maybe think of a better name, or nicer way to skipping
+    #[inline]
+    pub fn skip_cmd_if_unread(&mut self) -> Result<(), io::Error> {
+        if self.cmd.is_none() {
+            self.demo_stream.skip_cmd(&self.header)
+        } else {
+            Ok(())
+        }
+    }
+
+    // TODO: maybe think of a better name, or nicer way to unreading
+    #[inline]
+    pub fn unread_cmd_header(&mut self) -> Result<(), io::Error> {
+        assert!(self.cmd.is_none());
+        self.demo_stream.unread_cmd_header(&self.header)
+    }
+}
+
 // TODO: is there a way to restrict (idk if this is a correct word) DemoStream trait so that it'll
 // require seek ops to be implemented only if the underlying thing binds to io::Seek trait? thus
 // making so that Parser will not provide methods (such as run_to_tick) that need seeking
@@ -126,4 +186,16 @@ pub trait DemoStream {
 
     // TODO: how not cool is it to rely on anyhow here?
     fn total_ticks(&mut self) -> Result<i32, anyhow::Error>;
+
+    // next
+    // ----
+
+    // NOCOMMIT: meaningful/precise error type
+    // TODO: must return Option<Result<..; None on eof.
+    fn next_cmd_instance<'d>(&'d mut self) -> Result<CmdInstance<'d, Self>, anyhow::Error>
+    where
+        Self: Sized,
+    {
+        CmdInstance::new(self)
+    }
 }

@@ -9,7 +9,7 @@ use valveprotos::common::{
 
 use crate::bitreader::BitReader;
 use crate::demofile::{DemoHeaderError, DEMO_RECORD_BUFFER_SIZE};
-use crate::demostream::{CmdHeader, DemoStream};
+use crate::demostream::{Cmd, CmdHeader, CmdInstance, DemoStream};
 use crate::entities::{DeltaHeader, Entity, EntityContainer};
 use crate::entityclasses::EntityClasses;
 use crate::fielddecoder::FieldDecodeContext;
@@ -127,7 +127,7 @@ struct HandleCmdOptions {
 
 // TODO: maybe rename to DemoPlayer (or DemoRunner?)
 pub struct Parser<D: DemoStream, V: Visitor> {
-    demo_stream: D,
+    demo_stream: Option<D>,
     buf: Vec<u8>,
     visitor: V,
     ctx: Context,
@@ -138,7 +138,7 @@ pub struct Parser<D: DemoStream, V: Visitor> {
 impl<D: DemoStream, V: Visitor> Parser<D, V> {
     pub fn from_stream_with_visitor(demo_stream: D, visitor: V) -> Result<Self, DemoHeaderError> {
         Ok(Self {
-            demo_stream,
+            demo_stream: Some(demo_stream),
             buf: vec![0; DEMO_RECORD_BUFFER_SIZE],
             visitor,
             ctx: Context {
@@ -164,24 +164,30 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
     // recorded).
 
     pub fn run_to_end(&mut self) -> Result<()> {
+        let Some(mut demo_stream) = self.demo_stream.take() else {
+            unreachable!();
+        };
+
         loop {
-            let cmd_header = match self.demo_stream.read_cmd_header() {
-                Ok(cmd_header) => cmd_header,
+            let mut cmd_instance = match demo_stream.next_cmd_instance() {
+                Ok(cmd_instance) => cmd_instance,
                 Err(err) => {
-                    if self.demo_stream.is_at_eof().unwrap_or_default() {
+                    if demo_stream.is_at_eof().unwrap_or_default() {
                         return Ok(());
                     }
                     return Err(err.into());
                 }
             };
 
-            self.handle_cmd(&cmd_header, HandleCmdOptions::default())?;
+            self.handle_cmd(&mut cmd_instance, HandleCmdOptions::default())?;
         }
     }
 
     fn reset(&mut self) -> Result<(), io::Error> {
-        self.demo_stream
-            .seek(SeekFrom::Start(self.demo_stream.start_position()))?;
+        let Some(demo_stream) = self.demo_stream.as_mut() else {
+            unreachable!();
+        };
+        demo_stream.seek(SeekFrom::Start(demo_stream.start_position()))?;
 
         self.ctx.entities.clear();
         self.ctx.string_tables.clear();
@@ -201,100 +207,114 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
         // packet interval
         self.reset()?;
 
-        // NOTE: EDemoCommands::DemSyncTick is the last command with 4294967295
-        // tick (normlized to -1). last "initialization" command.
-        let mut did_handle_first_sync_tick = false;
+        todo!();
 
-        // NOTE: EDemoCommands::DemFullPacket contains snapshot of everything...
-        // everything? it does not seem like it: string tables must be handled.
-        let mut did_handle_last_full_packet = false;
-
-        loop {
-            let cmd_header = match self.demo_stream.read_cmd_header() {
-                Ok(cmd_header) => cmd_header,
-                Err(err) => {
-                    if self.demo_stream.is_at_eof().unwrap_or_default() {
-                        return Ok(());
-                    }
-                    return Err(err.into());
-                }
-            };
-
-            if cmd_header.tick > target_tick {
-                self.demo_stream.unread_cmd_header(&cmd_header)?;
-                return Ok(());
-            }
-
-            // init string tables, flattened serializers and entity classes
-            if !did_handle_first_sync_tick {
-                did_handle_first_sync_tick = cmd_header.cmd == EDemoCommands::DemSyncTick;
-                self.handle_cmd(&cmd_header, HandleCmdOptions::default())?;
-                continue;
-            }
-
-            if cmd_header.cmd == EDemoCommands::DemFullPacket {
-                let distance_to_target_tick = target_tick - cmd_header.tick;
-                // TODO: what if there's no full packet ahead? maybe dem file is
-                // corrupted or something... scan for full packets before enterint
-                // the "run"?
-                //
-                // TODO: broadcasts don't contain full packets
-                let has_full_packet_ahead =
-                    distance_to_target_tick > self.ctx.full_packet_interval + 100;
-                self.handle_cmd(
-                    &cmd_header,
-                    HandleCmdOptions {
-                        handle_full_packet: true,
-                        // TODO: verify that is okay to ignore "intermediary" full packet's packet.
-                        // (clarity seem to ignore "intermediary" full packet's packet).
-                        handle_full_packet_packet: !has_full_packet_ahead,
-                    },
-                )?;
-                did_handle_last_full_packet = !has_full_packet_ahead;
-                continue;
-            }
-
-            if did_handle_last_full_packet {
-                self.handle_cmd(&cmd_header, HandleCmdOptions::default())?;
-                continue;
-            }
-
-            self.demo_stream.skip_cmd(&cmd_header)?;
-        }
+        // // NOTE: EDemoCommands::DemSyncTick is the last command with 4294967295
+        // // tick (normlized to -1). last "initialization" command.
+        // let mut did_handle_first_sync_tick = false;
+        //
+        // // NOTE: EDemoCommands::DemFullPacket contains snapshot of everything...
+        // // everything? it does not seem like it: string tables must be handled.
+        // let mut did_handle_last_full_packet = false;
+        //
+        // loop {
+        //     let cmd_header = match self.demo_stream.read_cmd_header() {
+        //         Ok(cmd_header) => cmd_header,
+        //         Err(err) => {
+        //             if self.demo_stream.is_at_eof().unwrap_or_default() {
+        //                 return Ok(());
+        //             }
+        //             return Err(err.into());
+        //         }
+        //     };
+        //
+        //     if cmd_header.tick > target_tick {
+        //         self.demo_stream.unread_cmd_header(&cmd_header)?;
+        //         return Ok(());
+        //     }
+        //
+        //     // init string tables, flattened serializers and entity classes
+        //     if !did_handle_first_sync_tick {
+        //         did_handle_first_sync_tick = cmd_header.cmd == EDemoCommands::DemSyncTick;
+        //         self.handle_cmd(&cmd_header, HandleCmdOptions::default())?;
+        //         continue;
+        //     }
+        //
+        //     if cmd_header.cmd == EDemoCommands::DemFullPacket {
+        //         let distance_to_target_tick = target_tick - cmd_header.tick;
+        //         // TODO: what if there's no full packet ahead? maybe dem file is
+        //         // corrupted or something... scan for full packets before enterint
+        //         // the "run"?
+        //         //
+        //         // TODO: broadcasts don't contain full packets
+        //         let has_full_packet_ahead =
+        //             distance_to_target_tick > self.ctx.full_packet_interval + 100;
+        //         self.handle_cmd(
+        //             &cmd_header,
+        //             HandleCmdOptions {
+        //                 handle_full_packet: true,
+        //                 // TODO: verify that is okay to ignore "intermediary" full packet's packet.
+        //                 // (clarity seem to ignore "intermediary" full packet's packet).
+        //                 handle_full_packet_packet: !has_full_packet_ahead,
+        //             },
+        //         )?;
+        //         did_handle_last_full_packet = !has_full_packet_ahead;
+        //         continue;
+        //     }
+        //
+        //     if did_handle_last_full_packet {
+        //         self.handle_cmd(&cmd_header, HandleCmdOptions::default())?;
+        //         continue;
+        //     }
+        //
+        //     self.demo_stream.skip_cmd(&cmd_header)?;
+        // }
     }
 
     // important initialization messages:
     // 1. DemSignonPacket (SvcCreateStringTable)
     // 2. DemSendTables (flattened serializers; never update)
     // 3. DemClassInfo (never update)
-    fn handle_cmd(&mut self, cmd_header: &CmdHeader, options: HandleCmdOptions) -> Result<()> {
+    fn handle_cmd<'a>(
+        &mut self,
+        cmd_instance: &'a mut CmdInstance<'a, D>,
+        options: HandleCmdOptions,
+    ) -> Result<()> {
         let prev_tick = self.ctx.tick;
-        self.ctx.tick = cmd_header.tick;
+        self.ctx.tick = cmd_instance.header.tick;
 
         // TODO: consider introducing CmdInstance thing that would allow to decode body once and
         // not read it, but skip, if unconsumed. note that to work temporary ownership of
         // demo_stream will need to be taken.
-        let data = self.demo_stream.read_cmd(cmd_header)?;
-        self.visitor.on_cmd(&self.ctx, cmd_header, data)?;
+        //
+        // NOCOMMIT: pass cmd_instace
+        // let data = self.demo_stream.read_cmd(cmd_header)?;
+        // self.visitor.on_cmd(&self.ctx, cmd_header, data)?;
 
-        match cmd_header.cmd {
+        match cmd_instance.header.cmd {
             EDemoCommands::DemPacket | EDemoCommands::DemSignonPacket => {
-                let packet = D::decode_cmd_packet(data)?;
-                self.handle_cmd_packet(packet)?;
+                let Cmd::Packet(packet) = cmd_instance.cmd()? else {
+                    unreachable!();
+                };
+                self.handle_cmd_packet(&packet)?;
             }
 
             // NOTE: is_none check exists because seeking exists, there's no need to re-parse
             // flattened serializers.
             EDemoCommands::DemSendTables if self.ctx.serializers.is_none() => {
-                let send_tables = D::decode_cmd_send_tables(data)?;
-                self.ctx.serializers = Some(FlattenedSerializerContainer::parse(send_tables)?);
+                let Cmd::SendTables(send_tables) = cmd_instance.cmd()? else {
+                    unreachable!();
+                };
+                self.ctx.serializers = Some(FlattenedSerializerContainer::parse(&send_tables)?);
             }
 
             // NOTE: is_none check exists because seeking exists, there's no need to re-parse
             // entity classes.
             EDemoCommands::DemClassInfo if self.ctx.entity_classes.is_none() => {
-                let class_info = D::decode_cmd_class_info(data)?;
-                self.ctx.entity_classes = Some(EntityClasses::parse(class_info));
+                let Cmd::ClassInfo(class_info) = cmd_instance.cmd()? else {
+                    unreachable!();
+                };
+                self.ctx.entity_classes = Some(EntityClasses::parse(&class_info));
 
                 // NOTE: DemClassInfo message becomes available after
                 // SvcCreateStringTable(which has instancebaselines). to know
@@ -316,13 +336,15 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
             }
 
             EDemoCommands::DemFullPacket if options.handle_full_packet => {
-                let full_packet = D::decode_cmd_full_packet(data)?;
+                let Cmd::FullPacket(full_packet) = cmd_instance.cmd()? else {
+                    unreachable!();
+                };
 
-                if let Some(string_table) = full_packet.string_table {
+                if let Some(ref string_table) = full_packet.string_table {
                     self.handle_cmd_string_tables(string_table)?;
                 }
 
-                if let Some(packet) = full_packet.packet {
+                if let Some(ref packet) = full_packet.packet {
                     if options.handle_full_packet_packet {
                         self.handle_cmd_packet(packet)?;
                     }
@@ -331,6 +353,7 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
 
             _ => {
                 // ignore
+                cmd_instance.skip_cmd_if_unread()?;
             }
         }
 
@@ -341,7 +364,7 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
         Ok(())
     }
 
-    fn handle_cmd_packet(&mut self, cmd: CDemoPacket) -> Result<()> {
+    fn handle_cmd_packet(&mut self, cmd: &CDemoPacket) -> Result<()> {
         let mut br = BitReader::new(cmd.data());
 
         while br.num_bits_left() > 8 {
@@ -527,7 +550,7 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
         Ok(())
     }
 
-    fn handle_cmd_string_tables(&mut self, cmd: CDemoStringTables) -> Result<()> {
+    fn handle_cmd_string_tables(&mut self, cmd: &CDemoStringTables) -> Result<()> {
         self.ctx.string_tables.do_full_update(cmd);
 
         // SAFETY: entity_classes value is expected to be already assigned
@@ -550,12 +573,14 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
 
     #[inline]
     pub fn demo_stream(&self) -> &D {
-        &self.demo_stream
+        // &self.demo_stream
+        todo!()
     }
 
     #[inline]
     pub fn demo_stream_mut(&mut self) -> &mut D {
-        &mut self.demo_stream
+        // &mut self.demo_stream
+        todo!()
     }
 
     #[inline]

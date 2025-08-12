@@ -14,7 +14,7 @@ pub struct EntityClasses {
 }
 
 impl EntityClasses {
-    pub fn parse(cmd: CDemoClassInfo) -> Self {
+    pub fn parse(cmd: &CDemoClassInfo) -> Self {
         let class_count = cmd.classes.len();
 
         // bits is the number of bits to read for entity classes. stolen from

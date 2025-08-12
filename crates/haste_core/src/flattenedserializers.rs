@@ -224,13 +224,10 @@ pub struct FlattenedSerializerContainer {
 }
 
 impl FlattenedSerializerContainer {
-    pub fn parse(cmd: CDemoSendTables) -> Result<Self, FlattenedSerializersError> {
+    pub fn parse(cmd: &CDemoSendTables) -> Result<Self, FlattenedSerializersError> {
         let msg = {
             // TODO: make prost work with ByteString and turn data into Bytes
-            //
-            // NOTE: calling unwrap_or_default is for some reason faster then
-            // relying on prost's default unwrapping by calling .data().
-            let mut data = &cmd.data.unwrap_or_default()[..];
+            let mut data = cmd.data();
             // NOTE: count is useless because read_uvarint32 will "consume"
             // bytes that it'll read from data; size is useless because data
             // supposedly contains only one message.

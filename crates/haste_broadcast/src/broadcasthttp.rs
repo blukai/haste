@@ -431,7 +431,9 @@ fn no_packet_panic() -> ! {
 #[cold]
 #[inline(never)]
 fn not_seekable_panic() -> ! {
-    panic!("attempted invoking seek-related operation on BroadcastHttp constructed not with `start_streaming_and_buffer`")
+    panic!(
+        "attempted invoking seek-related operation on BroadcastHttp constructed not with `start_streaming_and_buffer`"
+    )
 }
 
 impl<'client, C: HttpClient + 'client> DemoStream for BroadcastHttp<'client, C> {
