@@ -20,7 +20,11 @@ pub enum FieldDecoderConstructionError {
 // ----
 
 // public/dt_common.h
-const DT_MAX_STRING_BITS: u32 = 9;
+//
+// NOTE(blukai): all pieces of public code define DT_MAX_STRING_BITS to 9, but that does not appear
+// to be enough for deadlock (the game):
+// https://github.com/blukai/haste/issues/4
+const DT_MAX_STRING_BITS: u32 = 10;
 /// maximum length of a string that can be sent.
 const DT_MAX_STRING_BUFFERSIZE: u32 = 1 << DT_MAX_STRING_BITS;
 
