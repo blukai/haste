@@ -263,6 +263,8 @@ impl<'a> BitReader<'a> {
     //
     // Returns the number of characters left in out when the routine is complete (this will never
     // exceed buf.len()-1).
+    //
+    // Will panic if buff is too small.
     pub fn read_string(&mut self, buf: &mut [u8], line: bool) -> usize {
         assert!(!buf.is_empty());
 
@@ -289,6 +291,20 @@ impl<'a> BitReader<'a> {
         // did it fit?
         assert!(!too_small);
 
+        num_chars
+    }
+
+    // same as read_string, but grows the buffer and appends to to it instead of overwritting.
+    pub fn read_string_to_end(&mut self, buf: &mut Vec<u8>, line: bool) -> usize {
+        let mut num_chars = 0;
+        loop {
+            let val = self.read_byte();
+            if val == 0 || (line && val == b'\n') {
+                break;
+            }
+            buf.push(val);
+            num_chars += 1;
+        }
         num_chars
     }
 
