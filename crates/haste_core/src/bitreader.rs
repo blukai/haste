@@ -294,7 +294,7 @@ impl<'a> BitReader<'a> {
         num_chars
     }
 
-    // same as read_string, but grows the buffer and appends to to it instead of overwritting.
+    // same as read_string, but grows the buffer and appends to to it instead of overwriting.
     pub fn read_string_to_end(&mut self, buf: &mut Vec<u8>, line: bool) -> usize {
         let mut num_chars = 0;
         loop {

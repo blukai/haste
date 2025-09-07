@@ -19,20 +19,20 @@ pub enum FieldValue {
     /// NOTE: not all strings are valid utf8 strings.
     ///
     /// deadlock has `CCitadelPlayerPawn` entity which has a `m_sHeroBuildSerialized` field of type
-    /// `CUtlString` which, as the name suggests, contains serialized data which canno't be
+    /// `CUtlString` which, as the name suggests, contains serialized data which cannot be
     /// successfully converted to str/String.
     ///
-    /// in c/cpp there's no enforcement on validition of strings. but in rust there is, see
-    /// https://doc.rust-lang.org/stable/std/string/struct.String.html#utf-8.
+    /// in c/cpp there's no enforcement on validation of strings. but in rust there is, see
+    /// <https://doc.rust-lang.org/stable/std/string/struct.String.html#utf-8>.
     ///
-    /// it doesn't not seem like thre's a reliable way to know which strings are treated as actual
+    /// it does not seem like there is a reliable way to know which strings are treated as actual
     /// strings and which ones are represent non-utf8 byte sequences to encode other data.
     ///
-    /// also note that there's no data type in demo files that is dedicated specifically for
-    /// transfering bytes.
+    /// also note that there is no data type in demo files that is dedicated specifically for
+    /// transferring bytes.
     ///
-    /// use String::from_utf8_lossy in your code to convert this to an actual string, and handle
-    /// conversion errors.
+    /// use `String::from_utf8_lossy` in your code to convert this into an actual string, and
+    /// handle conversion errors.
     String(Box<[u8]>),
 }
 
@@ -40,12 +40,7 @@ pub enum FieldValue {
 // or something..
 #[derive(Debug, thiserror::Error)]
 #[error("incompatible types or out of range integer type conversion attempted")]
-pub enum FieldValueConversionError {
-    #[error("incompatible types or out of range integer type conversion attempted")]
-    IncompatibleTypeOrOutOfRangeInteger,
-    #[error("utf-8 conversion error: {0}")]
-    FromUtf8Error(#[from] std::string::FromUtf8Error),
-}
+pub struct FieldValueConversionError;
 
 macro_rules! impl_try_into_numeric {
     ($($variant:ident => $ty:ty),+) => {
@@ -55,8 +50,8 @@ macro_rules! impl_try_into_numeric {
 
                 fn try_into(self) -> Result<$ty, Self::Error> {
                     match self {
-                        FieldValue::$variant(value) => value.try_into().map_err(|_| FieldValueConversionError::IncompatibleTypeOrOutOfRangeInteger),
-                        _ => Err(FieldValueConversionError::IncompatibleTypeOrOutOfRangeInteger),
+                        FieldValue::$variant(value) => value.try_into().map_err(|_| FieldValueConversionError),
+                        _ => Err(FieldValueConversionError),
                     }
                 }
             }
@@ -85,7 +80,7 @@ macro_rules! impl_try_into_inner {
                 fn try_into(self) -> Result<$ty, Self::Error> {
                     match self {
                         FieldValue::$variant(value) => Ok(value),
-                        _ => Err(FieldValueConversionError::IncompatibleTypeOrOutOfRangeInteger),
+                        _ => Err(FieldValueConversionError),
                     }
                 }
             }
@@ -107,19 +102,18 @@ impl TryInto<[f32; 3]> for FieldValue {
     fn try_into(self) -> Result<[f32; 3], Self::Error> {
         match self {
             FieldValue::Vector3(value) | FieldValue::QAngle(value) => Ok(value),
-            _ => Err(FieldValueConversionError::IncompatibleTypeOrOutOfRangeInteger),
+            _ => Err(FieldValueConversionError),
         }
     }
 }
 
-impl TryInto<String> for FieldValue {
+impl TryInto<Box<[u8]>> for FieldValue {
     type Error = FieldValueConversionError;
 
-    fn try_into(self) -> Result<String, Self::Error> {
+    fn try_into(self) -> Result<Box<[u8]>, Self::Error> {
         match self {
-            FieldValue::String(value) => String::from_utf8(value.into_vec())
-                .map_err(FieldValueConversionError::FromUtf8Error),
-            _ => Err(FieldValueConversionError::IncompatibleTypeOrOutOfRangeInteger),
+            FieldValue::String(value) => Ok(value),
+            _ => Err(FieldValueConversionError),
         }
     }
 }
