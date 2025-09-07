@@ -1,5 +1,5 @@
 // NOTE: looking into public/dt_common.h might help to get more ideas about field value thing.
-
+//
 // NOTE: don't bother creating variants for ints that are smaller then 64 bits. that will not make
 // enum consume less space; that will not make decoding any faster (the exception could be i8/u8
 // cause those won't branch, but that ain't worth it really).
@@ -16,7 +16,24 @@ pub enum FieldValue {
     Vector2([f32; 2]),
     Vector4([f32; 4]),
     QAngle([f32; 3]),
-    String(Box<str>),
+    /// NOTE: not all strings are valid utf8 strings.
+    ///
+    /// deadlock has `CCitadelPlayerPawn` entity which has a `m_sHeroBuildSerialized` field of type
+    /// `CUtlString` which, as the name suggests, contains serialized data which cannot be
+    /// successfully converted to str/String.
+    ///
+    /// in c/cpp there's no enforcement on validation of strings. but in rust there is, see
+    /// <https://doc.rust-lang.org/stable/std/string/struct.String.html#utf-8>.
+    ///
+    /// it does not seem like there is a reliable way to know which strings are treated as actual
+    /// strings and which ones are represent non-utf8 byte sequences to encode other data.
+    ///
+    /// also note that there is no data type in demo files that is dedicated specifically for
+    /// transferring bytes.
+    ///
+    /// use `String::from_utf8_lossy` in your code to convert this into an actual string, and
+    /// handle conversion errors.
+    String(Box<[u8]>),
 }
 
 // TODO(blukai): when you'll be unfucking errors - rename this one to FieldValueInvalidConversion
@@ -90,12 +107,12 @@ impl TryInto<[f32; 3]> for FieldValue {
     }
 }
 
-impl TryInto<String> for FieldValue {
+impl TryInto<Box<[u8]>> for FieldValue {
     type Error = FieldValueConversionError;
 
-    fn try_into(self) -> Result<String, Self::Error> {
+    fn try_into(self) -> Result<Box<[u8]>, Self::Error> {
         match self {
-            FieldValue::String(value) => Ok(value.to_string()),
+            FieldValue::String(value) => Ok(value),
             _ => Err(FieldValueConversionError),
         }
     }
