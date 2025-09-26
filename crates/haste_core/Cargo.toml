@@ -13,6 +13,7 @@ snap.workspace = true
 thiserror.workspace = true
 # my other repos
 bitbuf = { workspace = true, features = ["varint"] }
+fxhash.workspace = true
 valveprotos.workspace = true
 varint.workspace = true
 # workspace

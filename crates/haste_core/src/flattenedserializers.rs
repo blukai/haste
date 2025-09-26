@@ -13,7 +13,6 @@ use varint;
 use crate::fieldmetadata::{
     FieldMetadata, FieldMetadataError, FieldSpecialDescriptor, get_field_metadata,
 };
-use crate::fxhash;
 
 #[derive(thiserror::Error, Debug)]
 pub enum FlattenedSerializersError {

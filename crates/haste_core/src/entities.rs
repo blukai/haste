@@ -13,7 +13,6 @@ use crate::fieldvalue::{FieldValue, FieldValueConversionError};
 use crate::flattenedserializers::{
     FlattenedSerializer, FlattenedSerializerContainer, FlattenedSerializerField,
 };
-use crate::fxhash;
 use crate::instancebaseline::InstanceBaseline;
 
 #[derive(thiserror::Error, Debug)]

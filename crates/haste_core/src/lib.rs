@@ -13,7 +13,6 @@ pub(crate) mod fieldmetadata;
 pub mod fieldpath;
 pub mod fieldvalue;
 pub mod flattenedserializers;
-pub mod fxhash;
 pub(crate) mod instancebaseline;
 pub mod parser;
 pub(crate) mod quantizedfloat;
@@ -21,7 +20,8 @@ pub mod stringtables;
 
 // own crate re-exports
 pub(crate) use haste_vartype as vartype;
-// external re-resports
+// my other repo re-exports
+pub use fxhash;
 pub use valveprotos;
 
 // TOOD: more optimizations, specifically look into

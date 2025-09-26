@@ -5,7 +5,6 @@ use dyn_clone::DynClone;
 use crate::bitreader::BitReader;
 use crate::fieldvalue::FieldValue;
 use crate::flattenedserializers::FlattenedSerializerField;
-use crate::fxhash;
 use crate::quantizedfloat::{QuantizedFloat, QuantizedFloatError};
 
 // NOTE: PropTypeFns (from csgo source code) is what you are looking for, it has all the encoders,
