@@ -2,7 +2,7 @@ use std::collections::hash_map;
 use std::hash::BuildHasherDefault;
 use std::rc::Rc;
 
-use nohash::IntMap as NoHashMap;
+use nohash::NoHashMap;
 use valveprotos::common::{
     CDemoSendTables, CsvcMsgFlattenedSerializer, ProtoFlattenedSerializerFieldT,
     ProtoFlattenedSerializerT,

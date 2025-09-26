@@ -15,9 +15,10 @@ haste_broadcast = { path = "crates/haste_broadcast", default-features = false }
 haste_core = { path = "crates/haste_core" }
 haste_vartype = { path = "crates/haste_vartype" }
 # my other repos
-bitbuf = { git = "https://github.com/blukai/dungers.git", rev = "854b1e2", package = "bitbuf" }
-charsor = { git = "https://github.com/blukai/dungers.git", rev = "854b1e2", package = "charsor" }
-varint = { git = "https://github.com/blukai/dungers.git", rev = "854b1e2", package = "varint" }
+bitbuf = { git = "https://github.com/blukai/dungers.git", rev = "8b97aac", package = "bitbuf" }
+charsor = { git = "https://github.com/blukai/dungers.git", rev = "8b97aac", package = "charsor" }
+nohash = { git = "https://github.com/blukai/dungers.git", rev = "8b97aac", package = "nohash" }
+varint = { git = "https://github.com/blukai/dungers.git", rev = "8b97aac", package = "varint" }
 # external
 anyhow = "1.0.86"
 argh = "0.1.12"
@@ -28,7 +29,6 @@ expect-test = "1.5.0"
 http = "1.1.0"
 lazy_static = "1.5.0"
 log = "0.4.22"
-nohash = "0.2.0"
 pollster = "0.3.0"
 prost = "0.13.3"
 rand = "0.8.5"
