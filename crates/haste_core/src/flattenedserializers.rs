@@ -1,9 +1,8 @@
+use std::collections::hash_map;
 use std::hash::BuildHasherDefault;
 use std::rc::Rc;
 
-use hashbrown::HashMap;
-use hashbrown::hash_map::Values;
-use nohash::NoHashHasher;
+use nohash::IntMap as NoHashMap;
 use valveprotos::common::{
     CDemoSendTables, CsvcMsgFlattenedSerializer, ProtoFlattenedSerializerFieldT,
     ProtoFlattenedSerializerT,
@@ -216,11 +215,8 @@ impl FlattenedSerializer {
     }
 }
 
-type FieldMap = HashMap<i32, Rc<FlattenedSerializerField>, BuildHasherDefault<NoHashHasher<i32>>>;
-type SerializerMap = HashMap<u64, Rc<FlattenedSerializer>, BuildHasherDefault<NoHashHasher<u64>>>;
-
 pub struct FlattenedSerializerContainer {
-    serializer_map: SerializerMap,
+    serializer_map: NoHashMap<u64, Rc<FlattenedSerializer>>,
 }
 
 impl FlattenedSerializerContainer {
@@ -243,12 +239,13 @@ impl FlattenedSerializerContainer {
             CsvcMsgFlattenedSerializer::decode(data)?
         };
 
-        let mut field_map: FieldMap =
-            FieldMap::with_capacity_and_hasher(msg.fields.len(), BuildHasherDefault::default());
-        let mut serializer_map: SerializerMap = SerializerMap::with_capacity_and_hasher(
-            msg.serializers.len(),
-            BuildHasherDefault::default(),
-        );
+        let mut field_map: NoHashMap<i32, Rc<FlattenedSerializerField>> =
+            NoHashMap::with_capacity_and_hasher(msg.fields.len(), BuildHasherDefault::default());
+        let mut serializer_map: NoHashMap<u64, Rc<FlattenedSerializer>> =
+            NoHashMap::with_capacity_and_hasher(
+                msg.serializers.len(),
+                BuildHasherDefault::default(),
+            );
 
         for serializer in msg.serializers.iter() {
             let mut flattened_serializer = FlattenedSerializer::new(&msg, serializer);
@@ -345,7 +342,7 @@ impl FlattenedSerializerContainer {
     }
 
     #[inline]
-    pub fn values(&self) -> Values<'_, u64, Rc<FlattenedSerializer>> {
+    pub fn values(&self) -> hash_map::Values<'_, u64, Rc<FlattenedSerializer>> {
         self.serializer_map.values()
     }
 }

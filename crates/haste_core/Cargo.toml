@@ -6,7 +6,6 @@ edition.workspace = true
 [dependencies]
 anyhow.workspace = true
 dyn-clone.workspace = true
-hashbrown = { workspace = true, features = ["inline-more"] }
 lazy_static.workspace = true
 nohash.workspace = true
 prost.workspace = true

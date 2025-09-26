@@ -1,10 +1,9 @@
+use std::collections::hash_map;
 use std::fmt::{self, Binary};
 use std::hash::BuildHasherDefault;
 use std::rc::Rc;
 
-use hashbrown::HashMap;
-use hashbrown::hash_map::Entry;
-use nohash::NoHashHasher;
+use nohash::IntMap as NoHashMap;
 
 use crate::bitreader::{BitReader, BitReaderOverflowError};
 use crate::entityclasses::EntityClasses;
@@ -210,7 +209,7 @@ struct EntityField {
 #[derive(Debug, Clone)]
 pub struct Entity {
     index: i32,
-    fields: HashMap<u64, EntityField, BuildHasherDefault<NoHashHasher<u64>>>,
+    fields: NoHashMap<u64, EntityField>,
     serializer: Rc<FlattenedSerializer>,
 }
 
@@ -260,10 +259,10 @@ impl Entity {
                 // eprintln!(" -> {:?}", &field_value);
 
                 match self.fields.entry(field_key) {
-                    Entry::Occupied(mut oe) => {
+                    hash_map::Entry::Occupied(mut oe) => {
                         oe.get_mut().value = field_value;
                     }
-                    Entry::Vacant(ve) => {
+                    hash_map::Entry::Vacant(ve) => {
                         ve.insert(EntityField {
                             #[cfg(feature = "preserve-metadata")]
                             path: fp.clone(),
@@ -349,8 +348,8 @@ impl Entity {
 #[derive(Debug)]
 pub struct EntityContainer {
     // NOTE: hashbrown hashmap with no hash performs better then Vec.
-    entities: HashMap<i32, Entity, BuildHasherDefault<NoHashHasher<i32>>>,
-    baseline_entities: HashMap<i32, Entity, BuildHasherDefault<NoHashHasher<i32>>>,
+    entities: NoHashMap<i32, Entity>,
+    baseline_entities: NoHashMap<i32, Entity>,
 
     // NOTE: it might be tempting to introduce a "wrapper" struct, something like FieldPathReader
     // and turn read_field_path function into a method, but that's just suggar with no practical
@@ -364,12 +363,12 @@ pub struct EntityContainer {
 impl EntityContainer {
     pub(crate) fn new() -> Self {
         Self {
-            entities: HashMap::with_capacity_and_hasher(
+            entities: NoHashMap::with_capacity_and_hasher(
                 // NOTE(blukai): in dota this value can be actually higher.
                 MAX_EDICTS as usize,
                 BuildHasherDefault::default(),
             ),
-            baseline_entities: HashMap::with_capacity_and_hasher(
+            baseline_entities: NoHashMap::with_capacity_and_hasher(
                 1024,
                 BuildHasherDefault::default(),
             ),
@@ -398,15 +397,15 @@ impl EntityContainer {
             unsafe { serializers.by_name_hash_unckecked(class_info.network_name_hash) };
 
         let mut entity = match self.baseline_entities.entry(class_id) {
-            Entry::Occupied(oe) => {
+            hash_map::Entry::Occupied(oe) => {
                 let mut entity = oe.get().clone();
                 entity.index = index;
                 entity
             }
-            Entry::Vacant(ve) => {
+            hash_map::Entry::Vacant(ve) => {
                 let mut entity = Entity {
                     index,
-                    fields: HashMap::with_capacity_and_hasher(
+                    fields: NoHashMap::with_capacity_and_hasher(
                         serializer.fields.len(),
                         BuildHasherDefault::default(),
                     ),

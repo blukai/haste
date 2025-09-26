@@ -3,9 +3,8 @@ use std::hash::BuildHasherDefault;
 use std::mem::MaybeUninit;
 use std::rc::Rc;
 
-use hashbrown::HashMap;
-use nohash::NoHashHasher;
-use valveprotos::common::{c_demo_string_tables, CDemoStringTables};
+use nohash::IntMap as NoHashMap;
+use valveprotos::common::{CDemoStringTables, c_demo_string_tables};
 
 use crate::bitreader::BitReader;
 
@@ -52,7 +51,7 @@ pub struct StringTable {
     flags: i32,
     using_varint_bitcounts: bool,
 
-    items: HashMap<i32, StringTableItem, BuildHasherDefault<NoHashHasher<i32>>>,
+    items: NoHashMap<i32, StringTableItem>,
 
     history: Vec<StringHistoryEntry>,
     string_buf: Vec<u8>,
@@ -83,7 +82,7 @@ impl StringTable {
             user_data_size_bits,
             flags,
             using_varint_bitcounts,
-            items: HashMap::with_capacity_and_hasher(1024, BuildHasherDefault::default()),
+            items: NoHashMap::with_capacity_and_hasher(1024, BuildHasherDefault::default()),
 
             history: unsafe { make_vec(HISTORY_SIZE) },
             string_buf: unsafe { make_vec(1024) },
