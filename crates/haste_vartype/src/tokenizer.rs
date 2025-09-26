@@ -1,5 +1,3 @@
-use charsor::Charsor;
-
 use crate::{Error, Span};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -27,7 +25,8 @@ impl<'a> Token<'a> {
 
 #[derive(Debug, Clone)]
 pub struct Tokenizer<'a> {
-    cursor: Charsor<'a>,
+    input: &'a str,
+    offset: usize,
 }
 
 #[inline(always)]
@@ -43,52 +42,86 @@ fn is_ident_continue(ch: char) -> bool {
 impl<'a> Tokenizer<'a> {
     #[inline]
     pub fn new(input: &'a str) -> Self {
-        Self {
-            cursor: Charsor::new(input),
-        }
+        Self { input, offset: 0 }
+    }
+
+    // ----
+
+    #[inline]
+    pub fn peek_char(&self) -> Option<char> {
+        self.input[self.offset..].chars().next()
     }
 
     #[inline]
-    fn emit(&mut self, kind: TokenKind<'a>) -> Token<'a> {
-        let start = self.cursor.prev_offset();
-        let end = self.cursor.offset();
+    pub fn next_char(&mut self) -> Option<char> {
+        self.peek_char().map(|ch| {
+            self.offset += ch.len_utf8();
+            ch
+        })
+    }
 
+    #[inline]
+    pub fn prev_char(&self) -> Option<char> {
+        self.input[..self.offset].chars().next_back()
+    }
+
+    pub fn eat_while(&mut self, func: impl Fn(char) -> bool) -> usize {
+        let mut n = 0;
+        while let Some(ch) = self.peek_char() {
+            if !func(ch) {
+                break;
+            }
+            n += 1;
+            self.offset += ch.len_utf8();
+        }
+        n
+    }
+
+    #[inline]
+    pub fn prev_offset(&self) -> usize {
+        self.offset - self.prev_char().map_or(0, |ch| ch.len_utf8())
+    }
+
+    // ----
+
+    #[inline]
+    fn emit(&mut self, kind: TokenKind<'a>) -> Token<'a> {
+        let start = self.prev_offset();
+        let end = self.offset;
         Token::new(kind, Span::new(start as u16, end as u16))
     }
 
     #[inline]
     fn emit_ident(&mut self) -> Token<'a> {
-        let start = self.cursor.prev_offset();
-        self.cursor.eat_while(is_ident_continue);
-        let end = self.cursor.offset();
-
+        let start = self.prev_offset();
+        self.eat_while(is_ident_continue);
+        let end = self.offset;
         Token::new(
-            TokenKind::Ident(self.cursor.slice_range(start..end)),
+            TokenKind::Ident(&self.input[start..end]),
             Span::new(start as u16, end as u16),
         )
     }
 
     #[inline]
     fn emit_lit(&mut self) -> Token<'a> {
-        let start = self.cursor.prev_offset();
-        self.cursor.eat_while(|ch| ch.is_ascii_digit());
-        let end = self.cursor.offset();
-
+        let start = self.prev_offset();
+        self.eat_while(|ch| ch.is_ascii_digit());
+        let end = self.offset;
         Token::new(
-            TokenKind::Lit(self.cursor.slice_range(start..end)),
+            TokenKind::Lit(&self.input[start..end]),
             Span::new(start as u16, end as u16),
         )
     }
 
     #[inline]
     fn eat_whitespace(&mut self) {
-        self.cursor.eat_while(|ch| ch.is_whitespace());
+        self.eat_while(|ch| ch.is_whitespace());
     }
 
     #[inline(always)]
     fn next_token(&mut self) -> Option<Result<Token<'a>, Error>> {
         loop {
-            let Some(ch) = self.cursor.next() else {
+            let Some(ch) = self.next_char() else {
                 break None;
             };
 

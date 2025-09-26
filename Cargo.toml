@@ -16,7 +16,6 @@ haste_core = { path = "crates/haste_core" }
 haste_vartype = { path = "crates/haste_vartype" }
 # my other repos
 bitbuf = { git = "https://github.com/blukai/dungers.git", rev = "36b4bec", package = "bitbuf" }
-charsor = { git = "https://github.com/blukai/dungers.git", rev = "36b4bec", package = "charsor" }
 fxhash = { git = "https://github.com/blukai/dungers.git", rev = "36b4bec", package = "fxhash" }
 nohash = { git = "https://github.com/blukai/dungers.git", rev = "36b4bec", package = "nohash" }
 valveprotos = { git = "https://github.com/blukai/valveprotos-rs.git", rev = "63620c46236ed0f03a9e8b75954a4dafd0fe8e53" }
