@@ -138,13 +138,20 @@ pub use dota2::coord_from_cell as dota2_coord_from_cell;
 pub const fn fkey_from_path(path: &[&str]) -> u64 {
     assert!(path.len() > 0, "invalid path");
 
+    // NOTE(blukai): this must match what send_node hashing in flattenedserializers.rs. in
+    // FlattenedSerializerField::new; and field_key in entities.rs in Entity::parse.
+    //
+    //   this function needs to be const.
+    //   it cannot be generalized into something that would handle all cases where field key needs
+    //   to be constructed.
+
     let seed = fxhash::hash_bytes(path[0].as_bytes());
     let mut hash = seed;
 
     let mut i = 1;
     while i < path.len() {
-        let part = fxhash::hash_bytes(path[i].as_bytes());
-        hash = fxhash::add_u64_to_hash(hash, part);
+        let part_hash = fxhash::hash_bytes(path[i].as_bytes());
+        hash = fxhash::add_u64_to_hash(hash, part_hash);
         i += 1;
     }
 
@@ -232,8 +239,8 @@ impl Entity {
                 // version of it, probably because a bunch of ifs cause a bunch
                 // of branch misses and branch missles are disasterous.
                 let mut field = self.serializer.get_child_unchecked(fp.get_unchecked(0));
-                // NOTE: field.var_name.hash is a "seed" for field_key_hash.
-                let mut field_key = field.var_name.hash;
+                // NOTE: field_key construction logic needs to match what `fkey_from_path` does.
+                let mut field_key = field.key;
                 for i in 1..=fp.last() {
                     if field.is_dynamic_array() {
                         field = field.get_child_unchecked(0);

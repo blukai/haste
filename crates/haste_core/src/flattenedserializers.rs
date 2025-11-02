@@ -77,10 +77,12 @@ pub struct FlattenedSerializerField {
     pub high_value: Option<f32>,
     pub encode_flags: Option<i32>,
     pub field_serializer_name: Option<Symbol>,
+    pub send_node: Option<Symbol>,
     pub var_encoder: Option<Symbol>,
 
     pub field_serializer: Option<Rc<FlattenedSerializer>>,
     pub(crate) metadata: FieldMetadata,
+    pub(crate) key: u64,
 }
 
 // TODO: try to split flattened serializer field initialization into 3 clearly separate stages
@@ -103,16 +105,64 @@ impl FlattenedSerializerField {
                 .map(resolve_sym_unchecked)
                 .unwrap_unchecked()
         };
-        let var_name = unsafe {
+
+        let var_name_symbol = Symbol::from(unsafe {
             field
                 .var_name_sym
                 .map(resolve_sym_unchecked)
                 .unwrap_unchecked()
+        });
+        let mut key = var_name_symbol.hash;
+
+        // NOTE(blukai): send node is like a path for a field.
+        //   the field itself is from a different struct that is embedded into this one.
+        //   seems to be a result of `CNetworkVarEmbedded` macro work.
+        //
+        //   deadlock's CCitadelPlayerPawn entity has two m_nHeroID fields.
+        //   send_node allows to differentiate them:
+        //     - m_CCitadelHeroComponent.m_spawnedHero.m_nHeroID
+        //     - m_CCitadelHeroComponent.m_loadingHero.m_nHeroID
+        //     where `m_CCitadelHeroComponent.*` is `send_node` and `m_nHeroID` is `var_name`.
+        //
+        //   examples:
+        //     - `m_CCitadelHeroComponent.m_loadingHero`
+        //     - `m_CCitadelHeroComponent`
+        //     - `m_CHitboxComponent`
+        //     - `m_skybox3d.fog`
+        //
+        //   each component needs to be hashed separately, to be consistent with what
+        //   `fkey_from_path` does.
+        let send_node = match field.send_node_sym.map(resolve_sym) {
+            Some(send_node) if !send_node.is_empty() => {
+                let mut parts = send_node.split('.');
+                let Some(first_part) = parts.next() else {
+                    // NOTE(blukai): send_node is not empty.
+                    //   even if it contains no `.` at least one part (the original) value is
+                    //   there.
+                    unreachable!();
+                };
+                // NOTE(blukai): this needs to match what `fkey_from_path` does.
+                let seed = fxhash::hash_bytes(first_part.as_bytes());
+                let mut hash = seed;
+                for part in parts {
+                    let part_hash = fxhash::hash_bytes(part.as_bytes());
+                    hash = fxhash::add_u64_to_hash(hash, part_hash);
+                }
+
+                key = fxhash::add_u64_to_hash(hash, var_name_symbol.hash);
+
+                Some(Symbol {
+                    hash,
+                    #[cfg(feature = "preserve-metadata")]
+                    str: send_node.clone().into_boxed_str(),
+                })
+            }
+            _ => None,
         };
 
         let mut ret = Self {
             var_type: Symbol::from(var_type),
-            var_name: Symbol::from(var_name),
+            var_name: var_name_symbol,
             bit_count: field.bit_count,
             low_value: field.low_value,
             high_value: field.high_value,
@@ -121,10 +171,12 @@ impl FlattenedSerializerField {
                 .field_serializer_name_sym
                 .map(resolve_sym)
                 .map(Symbol::from),
+            send_node,
             var_encoder: field.var_encoder_sym.map(resolve_sym).map(Symbol::from),
 
             field_serializer: None,
             metadata: Default::default(),
+            key,
         };
         ret.metadata = get_field_metadata(&ret, var_type)?;
         Ok(ret)
