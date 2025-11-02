@@ -239,16 +239,8 @@ impl Entity {
                 // version of it, probably because a bunch of ifs cause a bunch
                 // of branch misses and branch missles are disasterous.
                 let mut field = self.serializer.get_child_unchecked(fp.get_unchecked(0));
-                // NOTE: field.var_name.hash is a "seed" for field_key_hash.
-                //
                 // NOTE: field_key construction logic needs to match what `fkey_from_path` does.
-                let mut field_key = if let Some(ref send_node) = field.send_node {
-                    // TODO(blukai): consider storing combo of send node and var name hashes as a
-                    // field of FlattenedSerializerField.
-                    fxhash::add_u64_to_hash(send_node.hash, field.var_name.hash)
-                } else {
-                    field.var_name.hash
-                };
+                let mut field_key = field.key;
                 for i in 1..=fp.last() {
                     if field.is_dynamic_array() {
                         field = field.get_child_unchecked(0);
