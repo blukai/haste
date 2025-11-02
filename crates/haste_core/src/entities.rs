@@ -256,6 +256,8 @@ impl Entity {
                         field = field.get_child_unchecked(fp.get_unchecked(i));
                         field_key = fxhash::add_u64_to_hash(field_key, field.var_name.hash);
                     };
+                    // NOTE: child fields are not known to have send_node.
+                    debug_assert!(field.send_node.is_none());
                 }
 
                 // eprint!("{:?} {:?} ", field.var_name, field.var_type);
