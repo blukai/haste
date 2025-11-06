@@ -138,8 +138,7 @@ pub use dota2::coord_from_cell as dota2_coord_from_cell;
 pub const fn fkey_from_path(path: &[&str]) -> u64 {
     assert!(path.len() > 0, "invalid path");
 
-    // NOTE(blukai): this must match what send_node hashing in flattenedserializers.rs. in
-    // FlattenedSerializerField::new; and field_key in entities.rs in Entity::parse.
+    // NOTE(blukai): this must match with field_key in Entity::parse.
     //
     //   this function needs to be const.
     //   it cannot be generalized into something that would handle all cases where field key needs
@@ -239,25 +238,51 @@ impl Entity {
                 // version of it, probably because a bunch of ifs cause a bunch
                 // of branch misses and branch missles are disasterous.
                 let mut field = self.serializer.get_child_unchecked(fp.get_unchecked(0));
-                // NOTE: field_key construction logic needs to match what `fkey_from_path` does.
-                let mut field_key = field.key;
+                // NOTE(blukai): field_key construction logic needs to match `fkey_from_path`.
+                //   field key needs to be constructed from send node parts AND var name.
+                //   this needs to be done not only on top-level field, but all levels.
+                let mut field_key = if let Some(send_node) = field.send_node.as_ref() {
+                    let mut part_iter = send_node.iter();
+                    let Some(Some(first_part)) = part_iter.next() else {
+                        // NOTE(blukai): send_node always has at least one part.
+                        unreachable!();
+                    };
+                    let seed = first_part.hash;
+                    let mut hash = seed;
+                    while let Some(Some(part)) = part_iter.next() {
+                        hash = fxhash::add_u64_to_hash(hash, part.hash);
+                    }
+                    fxhash::add_u64_to_hash(hash, field.var_name.hash)
+                } else {
+                    field.var_name.hash
+                };
                 for i in 1..=fp.last() {
                     if field.is_dynamic_array() {
                         field = field.get_child_unchecked(0);
+                        debug_assert!(field.send_node.is_none());
                         // NOTE: it's sort of weird to hash index, yup. but it simplifies things
                         // when "user" builds a key that has numbers / it makes it so that there's
                         // no need to check whether part of a key needs to be hashed or not - just
                         // hash all parts.
+                        //
+                        // TODO(blukai): does indexing actually work?
+                        //   cause here we're adding A NUMBER to hash,
+                        //   BUT fkey_from_path accepts only &str.
+                        //   this doesn't make sense, does it?
                         field_key = fxhash::add_u64_to_hash(
                             field_key,
                             fxhash::add_u64_to_hash(0, fp.get_unchecked(i) as u64),
                         );
                     } else {
                         field = field.get_child_unchecked(fp.get_unchecked(i));
+                        if let Some(send_node) = field.send_node.as_ref() {
+                            let mut part_iter = send_node.iter();
+                            while let Some(Some(part)) = part_iter.next() {
+                                field_key = fxhash::add_u64_to_hash(field_key, part.hash);
+                            }
+                        }
                         field_key = fxhash::add_u64_to_hash(field_key, field.var_name.hash);
                     };
-                    // NOTE: child fields are not known to have send_node.
-                    debug_assert!(field.send_node.is_none());
                 }
 
                 // eprint!("{:?} {:?} ", field.var_name, field.var_type);

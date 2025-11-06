@@ -45,6 +45,7 @@ fn main() -> Result<()> {
     let mut var_type_idents: HashSet<String> = HashSet::new();
     let mut var_types: HashSet<String> = HashSet::new();
     let mut var_encoders: HashSet<String> = HashSet::new();
+    let mut send_nodes: HashSet<String> = HashSet::new();
 
     for fs in &flattened_serializer.serializers {
         for field_index in fs.fields_index.iter().cloned() {
@@ -70,35 +71,59 @@ fn main() -> Result<()> {
             {
                 var_encoders.insert(var_encoder);
             };
+
+            match resolve_sym(&flattened_serializer, field.send_node_sym.as_ref()) {
+                Some(send_node) if !send_node.is_empty() => {
+                    send_nodes.insert(send_node);
+                }
+                _ => {}
+            }
         }
     }
 
-    eprintln!("----------------------");
-    eprintln!("unique var type idents");
-    eprintln!("----------------------");
+    println!("----------------------");
+    println!("unique var type idents");
+    println!("----------------------");
     let mut var_type_idents = var_type_idents.into_iter().collect::<Vec<String>>();
     var_type_idents.sort();
     var_type_idents.iter().for_each(|var_type_ident| {
-        eprintln!("{var_type_ident}");
+        println!("{var_type_ident}");
     });
 
-    eprintln!("----------------");
-    eprintln!("unique var types");
-    eprintln!("----------------");
+    println!("----------------");
+    println!("unique var types");
+    println!("----------------");
     let mut var_types = var_types.into_iter().collect::<Vec<String>>();
     var_types.sort();
     var_types.iter().for_each(|var_type| {
-        eprintln!("{var_type}");
+        println!("{var_type}");
     });
 
-    eprintln!("-------------------");
-    eprintln!("unique var encoders");
-    eprintln!("-------------------");
+    println!("-------------------");
+    println!("unique var encoders");
+    println!("-------------------");
     let mut var_encoders = var_encoders.into_iter().collect::<Vec<String>>();
     var_encoders.sort();
     var_encoders.iter().for_each(|var_encoder| {
-        eprintln!("{var_encoder}");
+        println!("{var_encoder}");
     });
+
+    println!("-------------------");
+    println!("unique send nodes");
+    println!("-------------------");
+    let mut send_nodes = send_nodes.iter().map(String::from).collect::<Vec<String>>();
+    send_nodes.sort();
+    send_nodes.iter().for_each(|var_encoder| {
+        println!("{var_encoder}");
+    });
+
+    println!("-------------------");
+    println!("max send node parts");
+    println!("-------------------");
+    let max_send_node_part_count = send_nodes
+        .iter()
+        .fold(0, |acc, send_node| acc.max(send_node.split('.').count()));
+    println!("{max_send_node_part_count}");
 
     Ok(())
 }

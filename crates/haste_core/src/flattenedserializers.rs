@@ -1,3 +1,4 @@
+use std::array;
 use std::collections::hash_map;
 use std::hash::BuildHasherDefault;
 use std::rc::Rc;
@@ -13,6 +14,10 @@ use varint;
 use crate::fieldmetadata::{
     FieldMetadata, FieldMetadataError, FieldSpecialDescriptor, get_field_metadata,
 };
+
+// NOTE: max known count of send node parts is 3.
+//   you can re-calculate it with tools/uniquetypes/src/main.rs.
+const MAX_SEND_NODE_PARTS: usize = 3;
 
 #[derive(thiserror::Error, Debug)]
 pub enum FlattenedSerializersError {
@@ -39,13 +44,15 @@ pub struct Symbol {
     pub str: Box<str>,
 }
 
-impl From<&String> for Symbol {
+impl<T: AsRef<str>> From<T> for Symbol {
     #[inline(always)]
-    fn from(value: &String) -> Self {
+    fn from(value: T) -> Self {
+        let s = value.as_ref();
         Self {
-            hash: fxhash::hash_bytes(value.as_bytes()),
+            hash: fxhash::hash_bytes(s.as_bytes()),
             #[cfg(feature = "preserve-metadata")]
-            str: value.clone().into_boxed_str(),
+            // TODO(blukai): is this the most efficient way of turning str into Box<str>?
+            str: s.to_string().into_boxed_str(),
         }
     }
 }
@@ -54,8 +61,6 @@ impl From<&String> for Symbol {
 // https://developer.valvesoftware.com/wiki/Networking_Events_%26_Messages
 // https://developer.valvesoftware.com/wiki/Networking_Entities
 
-// TODO: merge string + hash into a single struct or something
-//
 // TODO: do not clone strings, but reference them instead -> introduce lifetimes
 // or build a symbol table from symbols (string cache?)
 
@@ -77,12 +82,11 @@ pub struct FlattenedSerializerField {
     pub high_value: Option<f32>,
     pub encode_flags: Option<i32>,
     pub field_serializer_name: Option<Symbol>,
-    pub send_node: Option<Symbol>,
+    pub send_node: Option<[Option<Symbol>; MAX_SEND_NODE_PARTS]>,
     pub var_encoder: Option<Symbol>,
 
     pub field_serializer: Option<Rc<FlattenedSerializer>>,
     pub(crate) metadata: FieldMetadata,
-    pub(crate) key: u64,
 }
 
 // TODO: try to split flattened serializer field initialization into 3 clearly separate stages
@@ -105,18 +109,22 @@ impl FlattenedSerializerField {
                 .map(resolve_sym_unchecked)
                 .unwrap_unchecked()
         };
+        let var_type_symbol = Symbol::from(var_type);
 
-        let var_name_symbol = Symbol::from(unsafe {
+        let var_name = unsafe {
             field
                 .var_name_sym
                 .map(resolve_sym_unchecked)
                 .unwrap_unchecked()
-        });
-        let mut key = var_name_symbol.hash;
+        };
+        let var_name_symbol = Symbol::from(var_name);
 
         // NOTE(blukai): send node is like a path for a field.
         //   the field itself is from a different struct that is embedded into this one.
-        //   seems to be a result of `CNetworkVarEmbedded` macro work.
+        //   seems to be a result of `CNetworkVarEmbedded`, `SENDINFO_STRUCTELEM`, macro work:
+        //     - `CNetworkVarEmbedded( fogparams_t, m_fog )`
+        //     - `SendPropFloat( SENDINFO_STRUCTELEM( fogparams_t, m_fog, start ), 0, SPROP_NOSCALE )`
+        //     - `SendPropDataTable( SENDINFO_DT( m_AttributeManager ), &REFERENCE_SEND_TABLE(DT_AttributeManager) )`
         //
         //   deadlock's CCitadelPlayerPawn entity has two m_nHeroID fields.
         //   send_node allows to differentiate them:
@@ -134,34 +142,17 @@ impl FlattenedSerializerField {
         //   `fkey_from_path` does.
         let send_node = match field.send_node_sym.map(resolve_sym) {
             Some(send_node) if !send_node.is_empty() => {
-                let mut parts = send_node.split('.');
-                let Some(first_part) = parts.next() else {
-                    // NOTE(blukai): send_node is not empty.
-                    //   even if it contains no `.` at least one part (the original) value is
-                    //   there.
-                    unreachable!();
-                };
-                // NOTE(blukai): this needs to match what `fkey_from_path` does.
-                let seed = fxhash::hash_bytes(first_part.as_bytes());
-                let mut hash = seed;
-                for part in parts {
-                    let part_hash = fxhash::hash_bytes(part.as_bytes());
-                    hash = fxhash::add_u64_to_hash(hash, part_hash);
+                let mut ret: [Option<Symbol>; MAX_SEND_NODE_PARTS] = array::from_fn(|_| None);
+                for (i, part) in send_node.split('.').enumerate() {
+                    ret[i] = Some(Symbol::from(part));
                 }
-
-                key = fxhash::add_u64_to_hash(hash, var_name_symbol.hash);
-
-                Some(Symbol {
-                    hash,
-                    #[cfg(feature = "preserve-metadata")]
-                    str: send_node.clone().into_boxed_str(),
-                })
+                Some(ret)
             }
             _ => None,
         };
 
         let mut ret = Self {
-            var_type: Symbol::from(var_type),
+            var_type: var_type_symbol,
             var_name: var_name_symbol,
             bit_count: field.bit_count,
             low_value: field.low_value,
@@ -176,7 +167,6 @@ impl FlattenedSerializerField {
 
             field_serializer: None,
             metadata: Default::default(),
-            key,
         };
         ret.metadata = get_field_metadata(&ret, var_type)?;
         Ok(ret)

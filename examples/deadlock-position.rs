@@ -1,11 +1,11 @@
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::fs::File;
 use std::io::BufReader;
 
 use anyhow::{Context as _, Result};
 use haste::demofile::DemoFile;
-use haste::entities::{deadlock_coord_from_cell, fkey_from_path, DeltaHeader, Entity};
+use haste::entities::{DeltaHeader, Entity, deadlock_coord_from_cell, fkey_from_path};
 use haste::fxhash;
 use haste::parser::{Context, Parser, Visitor};
 
@@ -17,13 +17,43 @@ fn get_entity_coord(entity: &Entity, cell_key: &u64, vec_key: &u64) -> Option<f3
 }
 
 fn get_entity_position(entity: &Entity) -> Option<[f32; 3]> {
-    const CX: u64 = fkey_from_path(&["CBodyComponent", "m_cellX"]);
-    const CY: u64 = fkey_from_path(&["CBodyComponent", "m_cellY"]);
-    const CZ: u64 = fkey_from_path(&["CBodyComponent", "m_cellZ"]);
+    const CX: u64 = fkey_from_path(&[
+        "CBodyComponent",
+        "m_skeletonInstance",
+        "m_vecOrigin",
+        "m_cellX",
+    ]);
+    const CY: u64 = fkey_from_path(&[
+        "CBodyComponent",
+        "m_skeletonInstance",
+        "m_vecOrigin",
+        "m_cellY",
+    ]);
+    const CZ: u64 = fkey_from_path(&[
+        "CBodyComponent",
+        "m_skeletonInstance",
+        "m_vecOrigin",
+        "m_cellZ",
+    ]);
 
-    const VX: u64 = fkey_from_path(&["CBodyComponent", "m_vecX"]);
-    const VY: u64 = fkey_from_path(&["CBodyComponent", "m_vecY"]);
-    const VZ: u64 = fkey_from_path(&["CBodyComponent", "m_vecZ"]);
+    const VX: u64 = fkey_from_path(&[
+        "CBodyComponent",
+        "m_skeletonInstance",
+        "m_vecOrigin",
+        "m_vecX",
+    ]);
+    const VY: u64 = fkey_from_path(&[
+        "CBodyComponent",
+        "m_skeletonInstance",
+        "m_vecOrigin",
+        "m_vecY",
+    ]);
+    const VZ: u64 = fkey_from_path(&[
+        "CBodyComponent",
+        "m_skeletonInstance",
+        "m_vecOrigin",
+        "m_vecZ",
+    ]);
 
     let x = get_entity_coord(entity, &CX, &VX)?;
     let y = get_entity_coord(entity, &CY, &VY)?;
