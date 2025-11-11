@@ -6,7 +6,6 @@ edition.workspace = true
 [dependencies]
 anyhow.workspace = true
 dyn-clone.workspace = true
-lazy_static.workspace = true
 prost.workspace = true
 snap.workspace = true
 thiserror.workspace = true

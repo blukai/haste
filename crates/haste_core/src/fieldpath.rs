@@ -1,8 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::fmt::Debug;
-
-use lazy_static::lazy_static;
+use std::sync::LazyLock;
 
 use crate::bitreader::BitReader;
 
@@ -629,10 +628,7 @@ fn build_fieldop_hierarchy() -> Node<FieldOp> {
     bh.pop().unwrap()
 }
 
-// TODO(blukai): can lazy_static be replaced with std::cell::OnceCell or something?
-lazy_static! {
-    static ref FIELDOP_HIERARCHY: Node<FieldOp> = build_fieldop_hierarchy();
-}
+static FIELDOP_HIERARCHY: LazyLock<Node<FieldOp>> = LazyLock::new(|| build_fieldop_hierarchy());
 
 pub(crate) fn read_field_paths(br: &mut BitReader, fps: &mut [FieldPath]) -> usize {
     // NOTE: majority of field path reads are shorter then 32 (but some are beyond thousand).
