@@ -3,7 +3,8 @@ use std::fmt::{self, Binary};
 use std::hash::BuildHasherDefault;
 use std::rc::Rc;
 
-use nohash::NoHashMap;
+use mars::fxhash;
+use mars::nohash::NoHashMap;
 
 use crate::bitreader::{BitReader, BitReaderOverflowError};
 use crate::entityclasses::EntityClasses;

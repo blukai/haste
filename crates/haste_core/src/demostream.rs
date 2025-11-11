@@ -1,9 +1,9 @@
 use std::io::{self, SeekFrom};
 
+use mars::varint;
 use valveprotos::common::{
     CDemoClassInfo, CDemoFullPacket, CDemoPacket, CDemoSendTables, EDemoCommands,
 };
-use varint;
 
 #[derive(Debug, Clone)]
 pub struct CmdHeader {

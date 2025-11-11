@@ -3,7 +3,7 @@ use std::hash::BuildHasherDefault;
 use std::mem::MaybeUninit;
 use std::rc::Rc;
 
-use nohash::NoHashMap;
+use mars::nohash::NoHashMap;
 use valveprotos::common::{CDemoStringTables, c_demo_string_tables};
 
 use crate::bitreader::BitReader;

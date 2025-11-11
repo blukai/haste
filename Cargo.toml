@@ -15,11 +15,7 @@ haste_broadcast = { path = "crates/haste_broadcast", default-features = false }
 haste_core = { path = "crates/haste_core" }
 haste_vartype = { path = "crates/haste_vartype" }
 # my other repos
-bitbuf = { git = "https://github.com/blukai/dungers.git", rev = "36b4bec", package = "bitbuf" }
-fxhash = { git = "https://github.com/blukai/dungers.git", rev = "36b4bec", package = "fxhash" }
-nohash = { git = "https://github.com/blukai/dungers.git", rev = "36b4bec", package = "nohash" }
 valveprotos = { git = "https://github.com/blukai/valveprotos-rs.git", rev = "63620c46236ed0f03a9e8b75954a4dafd0fe8e53" }
-varint = { git = "https://github.com/blukai/dungers.git", rev = "36b4bec", package = "varint" }
 # external
 anyhow = "1.0.86"
 argh = "0.1.12"
@@ -39,6 +35,17 @@ serde_json = "1.0.128"
 snap = "1.1.1"
 thiserror = "1.0.64"
 tokio = { version = "1.40.0", default-features = false }
+
+[workspace.dependencies.mars]
+package = "mars"
+git = "https://github.com/blukai/mars.git"
+rev = "5d831c5"
+features = [
+  "bitbuf",
+  "fxhash",
+  "nohash",
+  "varint",
+]
 
 # enable more optimizations in dev (/debug) builds for dependencies
 [profile.dev.package."*"]
@@ -87,4 +94,3 @@ required-features = ["preserve-metadata"]
 
 [[example]]
 name = "seek"
-

@@ -1,5 +1,5 @@
-use bitbuf;
-pub use bitbuf::OverflowError as BitReaderOverflowError;
+use mars::bitbuf;
+pub use mars::bitbuf::OverflowError as BitReaderOverflowError;
 
 // public/coordsize.h
 const COORD_INTEGER_BITS: usize = 14;
@@ -337,5 +337,7 @@ mod test {
         let num_chars = br.read_string(&mut out, false);
         assert_eq!(&out, &buf);
         assert_eq!(num_chars, buf.len() - 1);
+
+        br.is_overflowed().unwrap();
     }
 }

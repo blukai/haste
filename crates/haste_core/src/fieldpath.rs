@@ -629,6 +629,7 @@ fn build_fieldop_hierarchy() -> Node<FieldOp> {
     bh.pop().unwrap()
 }
 
+// TODO(blukai): can lazy_static be replaced with std::cell::OnceCell or something?
 lazy_static! {
     static ref FIELDOP_HIERARCHY: Node<FieldOp> = build_fieldop_hierarchy();
 }

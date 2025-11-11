@@ -21,7 +21,7 @@ pub mod stringtables;
 // own crate re-exports
 pub(crate) use haste_vartype as vartype;
 // my other repo re-exports
-pub use fxhash;
+pub use mars::fxhash;
 pub use valveprotos;
 
 // TOOD: more optimizations, specifically look into

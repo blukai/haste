@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use dyn_clone::DynClone;
+use mars::fxhash;
 
 use crate::bitreader::BitReader;
 use crate::fieldvalue::FieldValue;

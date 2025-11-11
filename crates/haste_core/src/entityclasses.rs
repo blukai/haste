@@ -1,3 +1,4 @@
+use mars::fxhash;
 use valveprotos::common::CDemoClassInfo;
 
 #[derive(Clone)]

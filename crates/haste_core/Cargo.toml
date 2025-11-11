@@ -7,15 +7,12 @@ edition.workspace = true
 anyhow.workspace = true
 dyn-clone.workspace = true
 lazy_static.workspace = true
-nohash.workspace = true
 prost.workspace = true
 snap.workspace = true
 thiserror.workspace = true
 # my other repos
-bitbuf = { workspace = true, features = ["varint"] }
-fxhash.workspace = true
+mars.workspace = true
 valveprotos.workspace = true
-varint.workspace = true
 # workspace
 haste_vartype.workspace = true
 
