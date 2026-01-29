@@ -158,6 +158,13 @@ fn visit_ident(
         "GameTime_t" => non_special!(F32Decoder::new(field)?),
         // public/mathlib/vector.h
         "Vector" => non_special!(Vector3Decoder::new(field)?),
+        // QUOTE:
+        // > this is a hack for now since VectorWS curently derives or shares the same
+        // > memory layout as Vector.  Once we build a more shippable version of VectorWS
+        // > we will need to add in some code to know how to convert old replay Vector to
+        // > VectorWS etc.  ywb 8/15/2025
+        // - https://github.com/SteamDatabase/GameTracking-Deadlock/blob/429d362a65725f0f068606a33efae46ddb3b315a/game/core/pak01_dir/scripts/replay_compatability_settings.txt#L36
+        "VectorWS" => non_special!(Vector3Decoder::new(field)?),
         // public/mathlib/vector2d.h
         "Vector2D" => non_special!(Vector2Decoder::new(field)?),
         // public/mathlib/vector4d.h
