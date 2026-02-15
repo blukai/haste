@@ -202,6 +202,11 @@ impl DeltaHeader {
         br.read_bits(&mut buf, 2);
         Self(buf[0])
     }
+
+    #[inline(always)]
+    pub fn bits(&self) -> u8 {
+        self.0
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -462,7 +467,7 @@ impl EntityContainer {
         Ok(unsafe { self.entities.get(&index).unwrap_unchecked() })
     }
 
-    // SAFETY: if it's being deleted menas that it was created, riiight? but
+    // SAFETY: if it's being deleted means that it was created, right? but
     // there's a risk (that only should exist if replay is corrupted).
     #[inline]
     pub(crate) unsafe fn handle_delete_unchecked(&mut self, index: i32) -> Entity {
@@ -495,6 +500,22 @@ impl EntityContainer {
         let entity = entity.unwrap_unchecked();
         entity.parse(field_decode_ctx, br, &mut self.field_paths)?;
         Ok(entity)
+    }
+
+    // SAFETY: if it's being deleted menas that it was created, right? but
+    // there's a risk (that only should exist if replay is corrupted).
+    //
+    // NOTE: this method doesn't do anything; it's just here for the symmetry.
+    #[inline]
+    pub(crate) unsafe fn handle_leave_unchecked(&mut self, index: i32) -> &Entity {
+        let entity = self.entities.get(&index);
+
+        debug_assert!(
+            entity.is_some(),
+            "non-existent entity #{index} tried to leave pvs"
+        );
+
+        entity.unwrap_unchecked()
     }
 
     // public api
