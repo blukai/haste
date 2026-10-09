@@ -153,6 +153,31 @@ impl FieldDecode for U64Decoder {
 
 // ----
 
+// Since Dota 2 build 6951 serializers declare the "fixed8" var encoder on many 8-bit fields (int8,
+// uint8, enums, handles, CNetworkUtlVectorBase<uint8> elements). The server writes them as 8 raw
+// bits; reading them by type name as varints agrees only below 128 and desynchronizes the stream.
+// Same rule as clarity 17b33df and manta d29a082.
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct U8Fixed8Decoder;
+
+impl FieldDecode for U8Fixed8Decoder {
+    fn decode(&self, _ctx: &mut FieldDecodeContext, br: &mut BitReader) -> FieldValue {
+        FieldValue::U64(br.read_ubit64(8))
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub(crate) struct I8Fixed8Decoder;
+
+impl FieldDecode for I8Fixed8Decoder {
+    fn decode(&self, _ctx: &mut FieldDecodeContext, br: &mut BitReader) -> FieldValue {
+        FieldValue::I64(br.read_ubit64(8) as u8 as i8 as i64)
+    }
+}
+
+// ----
+
 #[derive(Debug, Clone, Default)]
 pub(crate) struct BoolDecoder;
 
@@ -548,5 +573,37 @@ impl QAngleDecoder {
 impl FieldDecode for QAngleDecoder {
     fn decode(&self, ctx: &mut FieldDecodeContext, br: &mut BitReader) -> FieldValue {
         self.decoder.decode(ctx, br)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_fixed8_decoders_read_eight_raw_bits() {
+        // 255 and -128 would be misread as varints: 0xff has the continuation bit set.
+        let buf = [0xffu8, 0x29, 0x80, 0xff];
+        let mut br = BitReader::new(&buf);
+        let mut ctx = FieldDecodeContext::default();
+
+        assert!(matches!(
+            U8Fixed8Decoder.decode(&mut ctx, &mut br),
+            FieldValue::U64(255)
+        ));
+        assert!(matches!(
+            I8Fixed8Decoder.decode(&mut ctx, &mut br),
+            FieldValue::I64(41)
+        ));
+        assert!(matches!(
+            I8Fixed8Decoder.decode(&mut ctx, &mut br),
+            FieldValue::I64(-128)
+        ));
+        assert!(matches!(
+            I8Fixed8Decoder.decode(&mut ctx, &mut br),
+            FieldValue::I64(-1)
+        ));
+
+        br.is_overflowed().unwrap();
     }
 }

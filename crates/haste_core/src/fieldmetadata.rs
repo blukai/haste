@@ -1,7 +1,9 @@
+use mars::fxhash;
+
 use crate::fielddecoder::{
-    BoolDecoder, F32Decoder, FieldDecode, FieldDecoderConstructionError, I64Decoder,
-    InvalidDecoder, QAngleDecoder, StringDecoder, U64Decoder, Vector2Decoder, Vector3Decoder,
-    Vector4Decoder,
+    BoolDecoder, F32Decoder, FieldDecode, FieldDecoderConstructionError, I8Fixed8Decoder,
+    I64Decoder, InvalidDecoder, QAngleDecoder, StringDecoder, U8Fixed8Decoder, U64Decoder,
+    Vector2Decoder, Vector3Decoder, Vector4Decoder,
 };
 use crate::flattenedserializers::FlattenedSerializerField;
 use crate::vartype::{self, Expr, Lit};
@@ -119,6 +121,14 @@ fn visit_ident(
                 special_descriptor: Some(FieldSpecialDescriptor::Pointer),
                 decoder: Box::<BoolDecoder>::default(),
             })
+        };
+    }
+
+    if field.var_encoder_heq(fxhash::hash_bytes(b"fixed8")) {
+        return if ident == "int8" {
+            non_special!(I8Fixed8Decoder)
+        } else {
+            non_special!(U8Fixed8Decoder)
         };
     }
 
