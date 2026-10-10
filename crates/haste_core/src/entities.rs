@@ -8,7 +8,7 @@ use mars::nohash::NoHashMap;
 
 use crate::bitreader::{BitReader, BitReaderOverflowError};
 use crate::entityclasses::EntityClasses;
-use crate::fielddecoder::FieldDecodeContext;
+use crate::fielddecoder::FieldDecoderContext;
 use crate::fieldpath::{self, FieldPath};
 use crate::fieldvalue::{FieldValue, FieldValueConversionError};
 use crate::flattenedserializers::{
@@ -222,7 +222,7 @@ pub struct Entity {
 impl Entity {
     fn parse(
         &mut self,
-        field_decode_ctx: &mut FieldDecodeContext,
+        field_decode_ctx: &mut FieldDecoderContext,
         br: &mut BitReader,
         fps: &mut [FieldPath],
     ) -> Result<(), BitReaderOverflowError> {
@@ -416,7 +416,7 @@ impl EntityContainer {
     pub(crate) fn handle_create(
         &mut self,
         index: i32,
-        field_decode_ctx: &mut FieldDecodeContext,
+        field_decode_ctx: &mut FieldDecoderContext,
         br: &mut BitReader,
         entity_classes: &EntityClasses,
         instance_baseline: &InstanceBaseline,
@@ -482,7 +482,7 @@ impl EntityContainer {
     pub(crate) unsafe fn handle_update_unchecked(
         &mut self,
         index: i32,
-        field_decode_ctx: &mut FieldDecodeContext,
+        field_decode_ctx: &mut FieldDecoderContext,
         br: &mut BitReader,
     ) -> Result<&Entity, BitReaderOverflowError> {
         let entity = self.entities.get_mut(&index);

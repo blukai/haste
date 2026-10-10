@@ -20,7 +20,6 @@ valveprotos = { git = "https://github.com/blukai/valveprotos-rs.git", rev = "636
 anyhow = "1.0.86"
 argh = "0.1.12"
 bytes = "1.7.2"
-dyn-clone = "1.0.17"
 env_logger = "0.11.5"
 expect-test = "1.5.0"
 http = "1.1.0"

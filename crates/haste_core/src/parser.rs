@@ -8,13 +8,13 @@ use valveprotos::common::{
 use valveprotos::prost::Message;
 
 use crate::bitreader::BitReader;
-use crate::demofile::{DemoHeaderError, DEMO_RECORD_BUFFER_SIZE};
+use crate::demofile::{DEMO_RECORD_BUFFER_SIZE, DemoHeaderError};
 use crate::demostream::{CmdHeader, DemoStream};
 use crate::entities::{DeltaHeader, Entity, EntityContainer};
 use crate::entityclasses::EntityClasses;
-use crate::fielddecoder::FieldDecodeContext;
+use crate::fielddecoder::FieldDecoderContext;
 use crate::flattenedserializers::FlattenedSerializerContainer;
-use crate::instancebaseline::{InstanceBaseline, INSTANCE_BASELINE_TABLE_NAME};
+use crate::instancebaseline::{INSTANCE_BASELINE_TABLE_NAME, InstanceBaseline};
 use crate::stringtables::StringTableContainer;
 
 // as can be observed when dumping commands. also as specified in clarity
@@ -140,7 +140,7 @@ pub struct Parser<D: DemoStream, V: Visitor> {
     visitor: V,
     ctx: Context,
     // NOTE(blukai): is this the place for this? can it be moved "closer" to entities somewhere?
-    field_decode_ctx: FieldDecodeContext,
+    field_decode_ctx: FieldDecoderContext,
 }
 
 impl<D: DemoStream, V: Visitor> Parser<D, V> {
@@ -160,7 +160,7 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
                 tick: -1,
                 prev_tick: -1,
             },
-            field_decode_ctx: FieldDecodeContext::default(),
+            field_decode_ctx: FieldDecoderContext::default(),
         })
     }
 
