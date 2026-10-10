@@ -59,13 +59,11 @@ mod decoders {
     pub fn decode_placeholder(_fd: &Fd, _ctx: &mut Ctx, _br: &mut Br) -> FieldValue { unreachable!() }
 
     pub fn decode_i64_varint(_fd: &Fd, _ctx: &mut Ctx, br: &mut Br) -> FieldValue { I64(br.read_varint64()) }
+    pub fn decode_i64_fixed8(_fd: &Fd, _ctx: &mut Ctx, br: &mut Br) -> FieldValue { I64(br.read_ubit64(8) as i8 as i64) }
 
     pub fn decode_u64_varint(_fd: &Fd, _ctx: &mut Ctx, br: &mut Br) -> FieldValue { U64(br.read_uvarint64()) }
-    pub fn decode_u64_fixed64(_fd: &Fd, _ctx: &mut Ctx, br: &mut Br) -> FieldValue {
-        let mut buf = const { [0u8; 8] };
-        br.read_bytes(&mut buf);
-        U64(u64::from_le_bytes(buf))
-    }
+    pub fn decode_u64_fixed64(_fd: &Fd, _ctx: &mut Ctx, br: &mut Br) -> FieldValue { U64(br.read_ubit64(64)) }
+    pub fn decode_u64_fixed8(_fd: &Fd, _ctx: &mut Ctx, br: &mut Br) -> FieldValue { U64(br.read_ubit64(8)) }
 
     pub fn decode_bool(_fd: &Fd, _ctx: &mut Ctx, br: &mut Br) -> FieldValue { Bool(br.read_bool()) }
 
@@ -206,14 +204,20 @@ impl FieldDecoder {
     // ----
 
     #[inline(always)]
-    pub(crate) fn new_i64(_field: &FlattenedSerializerField) -> Self {
-        Self::new(decode_i64_varint)
+    pub(crate) fn new_i64(field: &FlattenedSerializerField) -> Self {
+        Self::new(if field.var_encoder_heq(fxhash::hash_bytes(b"fixed8")) {
+            decode_i64_fixed8
+        } else {
+            decode_i64_varint
+        })
     }
 
     #[inline(always)]
     pub(crate) fn new_u64(field: &FlattenedSerializerField) -> Self {
         Self::new(if field.var_encoder_heq(fxhash::hash_bytes(b"fixed64")) {
             decode_u64_fixed64
+        } else if field.var_encoder_heq(fxhash::hash_bytes(b"fixed8")) {
+            decode_u64_fixed8
         } else {
             decode_u64_varint
         })
