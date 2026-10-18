@@ -140,6 +140,7 @@ fn visit_ident(
         // other custom types
         "CUtlSymbolLarge" => non_special!(FieldDecoder::new_string()),
         "CUtlString" => non_special!(FieldDecoder::new_string()),
+        "CUtlBinaryBlock" => non_special!(FieldDecoder::new_binary_block()),
         // public/mathlib/vector.h
         "QAngle" => non_special!(FieldDecoder::new_qangle(field)),
         // NOTE: not all quantized floats are actually quantized (if bit_count is 0 or 32 it's
@@ -275,4 +276,30 @@ pub(crate) fn get_field_metadata(
 ) -> Result<FieldMetadata, FieldMetadataError> {
     let expr = vartype::parse(var_type.as_str())?;
     visit_any(expr, field)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
+mod tests {
+    use super::*;
+    use crate::bitreader::BitReader;
+    use crate::fielddecoder::FieldDecoderContext;
+    use crate::fieldvalue::FieldValue;
+    use crate::flattenedserializers::Symbol;
+
+    #[test]
+    fn binary_block_is_not_a_number() {
+        let field = FlattenedSerializerField::default();
+        let metadata = get_field_metadata(&field, &"CUtlBinaryBlock".to_string()).unwrap();
+        let data = [1, 0xaa];
+        let mut br = BitReader::new(&data);
+        let value = metadata
+            .decoder
+            .decode(&mut FieldDecoderContext::default(), &mut br);
+        br.is_overflowed().unwrap();
+        assert!(
+            matches!(&value, FieldValue::String(bytes) if bytes[..] == [0xaa]),
+            "{value:?}"
+        );
+    }
 }

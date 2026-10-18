@@ -73,6 +73,17 @@ mod decoders {
         String(Box::from(&ctx.string_buf[..n]))
     }
 
+    // varint byte count followed by that many bytes. the count is capped at what is left so that a
+    // corrupt one cannot make this allocate or read far past the end of the data; the overflow
+    // check after the packet still catches it.
+    pub fn decode_binary_block(_fd: &Fd, ctx: &mut Ctx, br: &mut Br) -> FieldValue {
+        let len = (br.read_uvarint32() as usize).min(br.num_bits_left() >> 3);
+        ctx.string_buf.clear();
+        ctx.string_buf.resize(len, 0);
+        br.read_bytes(&mut ctx.string_buf);
+        String(Box::from(&ctx.string_buf[..]))
+    }
+
     pub fn decode_f32_coord(_fd: &Fd, _ctx: &mut Ctx, br: &mut Br) -> FieldValue { F32(br.read_bitcoord()) }
     pub fn decode_f32_no_scale(_fd: &Fd, _ctx: &mut Ctx, br: &mut Br) -> FieldValue { F32(br.read_bitfloat()) }
     pub fn decode_f32_normal(_fd: &Fd, _ctx: &mut Ctx, br: &mut Br) -> FieldValue { F32(br.read_bitnormal()) }
@@ -234,6 +245,11 @@ impl FieldDecoder {
     }
 
     #[inline(always)]
+    pub(crate) fn new_binary_block() -> Self {
+        Self::new(decode_binary_block)
+    }
+
+    #[inline(always)]
     pub(crate) fn new_f32(
         field: &FlattenedSerializerField,
     ) -> Result<Self, FieldDecoderConstructionError> {
@@ -347,5 +363,38 @@ impl FieldDecoder {
     #[inline(always)]
     pub(crate) fn decode(&self, ctx: &mut FieldDecoderContext, br: &mut BitReader) -> FieldValue {
         (self.decode_fn)(self, ctx, br)
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    fn decode_binary_block(data: &[u8]) -> (Box<[u8]>, usize) {
+        let mut br = BitReader::new(data);
+        let value =
+            FieldDecoder::new_binary_block().decode(&mut FieldDecoderContext::default(), &mut br);
+        let bits_left = br.num_bits_left();
+        br.is_overflowed().unwrap();
+        let FieldValue::String(bytes) = value else {
+            panic!("expected bytes, got {value:?}");
+        };
+        (bytes, bits_left)
+    }
+
+    #[test]
+    fn binary_block_is_a_byte_count_then_bytes() {
+        let (bytes, bits_left) = decode_binary_block(&[3, 0xff, 0x00, 0x7f, 0xaa]);
+        assert_eq!(&bytes[..], &[0xff, 0x00, 0x7f]);
+        assert_eq!(bits_left, 8);
+    }
+
+    #[test]
+    fn binary_block_count_is_capped_at_what_is_left() {
+        // count is u32::MAX, but only two bytes follow it.
+        let (bytes, bits_left) = decode_binary_block(&[0xff, 0xff, 0xff, 0xff, 0x0f, 1, 2]);
+        assert_eq!(&bytes[..], &[1, 2]);
+        assert_eq!(bits_left, 0);
     }
 }
