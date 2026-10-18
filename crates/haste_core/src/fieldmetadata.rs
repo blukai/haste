@@ -197,7 +197,7 @@ fn visit_template(
         if field.field_serializer_name.is_some() {
             return Ok(FieldMetadata {
                 special_descriptor: Some(FieldSpecialDescriptor::DynamicSerializerArray),
-                decoder: FieldDecoder::new_u64(field),
+                decoder: FieldDecoder::new_dynamic_array_length(),
             });
         }
 
@@ -205,7 +205,7 @@ fn visit_template(
             special_descriptor: Some(FieldSpecialDescriptor::DynamicArray {
                 decoder: field_metadata.decoder,
             }),
-            decoder: FieldDecoder::new_u64(field),
+            decoder: FieldDecoder::new_dynamic_array_length(),
         });
     }
 
@@ -286,6 +286,34 @@ mod tests {
     use crate::fielddecoder::FieldDecoderContext;
     use crate::fieldvalue::FieldValue;
     use crate::flattenedserializers::Symbol;
+
+    // deadlock's m_SerializePoseRecipeAG2Dynamic is a `CNetworkUtlVectorBase< uint8 >` with the
+    // fixed8 encoder. the encoder applies to the items; the length stays a varint, which takes two
+    // bytes once it reaches 128.
+    #[test]
+    fn fixed8_vector_length_is_a_varint() {
+        let field = FlattenedSerializerField {
+            var_encoder: Some(Symbol::from("fixed8")),
+            ..Default::default()
+        };
+        let metadata =
+            get_field_metadata(&field, &"CNetworkUtlVectorBase< uint8 >".to_string()).unwrap();
+        let Some(FieldSpecialDescriptor::DynamicArray { decoder: item }) =
+            metadata.special_descriptor
+        else {
+            panic!("expected a dynamic array");
+        };
+
+        let data = [0x80, 0x01, 0xc8];
+        let mut br = BitReader::new(&data);
+        let mut ctx = FieldDecoderContext::default();
+        let length = metadata.decoder.decode(&mut ctx, &mut br);
+        let first = item.decode(&mut ctx, &mut br);
+        assert_eq!(br.num_bits_left(), 0);
+        br.is_overflowed().unwrap();
+        assert!(matches!(length, FieldValue::U64(128)), "{length:?}");
+        assert!(matches!(first, FieldValue::U64(200)), "{first:?}");
+    }
 
     #[test]
     fn binary_block_is_not_a_number() {

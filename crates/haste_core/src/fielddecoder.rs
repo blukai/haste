@@ -234,6 +234,13 @@ impl FieldDecoder {
         })
     }
 
+    /// the length of a dynamic array is always a varint; the field's encoder (e.g. fixed8) applies
+    /// to its items.
+    #[inline(always)]
+    pub(crate) fn new_dynamic_array_length() -> Self {
+        Self::new(decode_u64_varint)
+    }
+
     #[inline(always)]
     pub(crate) fn new_bool() -> Self {
         Self::new(decode_bool)
