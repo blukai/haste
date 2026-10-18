@@ -141,6 +141,20 @@ mod tests {
         expected.assert_debug_eq(&result);
     }
 
+    // seen in deadlock replays since the patch that added baba.
+    #[test]
+    fn scoped_ident() {
+        let result = parse("CCitadel_Ability_Baba_HexingBrew::EBrewEffect");
+        let expected = expect![[r#"
+            Ok(
+                Ident(
+                    "CCitadel_Ability_Baba_HexingBrew::EBrewEffect",
+                ),
+            )
+        "#]];
+        expected.assert_debug_eq(&result);
+    }
+
     #[test]
     fn it_works() -> Result<(), Error> {
         const INPUTS: [&'static str; 5] = [

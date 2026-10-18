@@ -91,10 +91,31 @@ impl<'a> Tokenizer<'a> {
         Token::new(kind, Span::new(start as u16, end as u16))
     }
 
+    /// eats `::` if an identifier follows it.
+    #[inline]
+    fn eat_scope_separator(&mut self) -> bool {
+        let rest = &self.input[self.offset..];
+        let is_separator = rest
+            .strip_prefix("::")
+            .and_then(|after| after.chars().next())
+            .is_some_and(is_ident_start);
+        if is_separator {
+            self.offset += 2;
+        }
+        is_separator
+    }
+
     #[inline]
     fn emit_ident(&mut self) -> Token<'a> {
         let start = self.prev_offset();
-        self.eat_while(is_ident_continue);
+        // types declared inside a class come with their scope, e.g.
+        // `CCitadel_Ability_Baba_HexingBrew::EBrewEffect`; the scope is part of the name.
+        loop {
+            self.eat_while(is_ident_continue);
+            if !self.eat_scope_separator() {
+                break;
+            }
+        }
         let end = self.offset;
         Token::new(
             TokenKind::Ident(&self.input[start..end]),
@@ -340,5 +361,60 @@ CDOTA_AbilityDraftAbilityState[MAX_ABILITY_DRAFT_ABILITIES]
             ]
         "#]];
         expected.assert_debug_eq(&tokens);
+    }
+
+    #[test]
+    fn scoped_ident() {
+        const INPUT: &str = "CHandle< A::B_c::D1 >";
+
+        let tokenizer = Tokenizer::new(INPUT);
+        let tokens: Vec<Result<Token, Error>> = tokenizer.collect();
+
+        let expected = expect![[r#"
+            [
+                Ok(
+                    Token {
+                        kind: Ident(
+                            "CHandle",
+                        ),
+                        span: Span { 0, 7 },
+                    },
+                ),
+                Ok(
+                    Token {
+                        kind: LAngle,
+                        span: Span { 7, 8 },
+                    },
+                ),
+                Ok(
+                    Token {
+                        kind: Ident(
+                            "A::B_c::D1",
+                        ),
+                        span: Span { 9, 19 },
+                    },
+                ),
+                Ok(
+                    Token {
+                        kind: RAngle,
+                        span: Span { 20, 21 },
+                    },
+                ),
+            ]
+        "#]];
+        expected.assert_debug_eq(&tokens);
+    }
+
+    #[test]
+    fn colon_without_ident_after_it_is_unknown() {
+        for input in ["A:B", "A::", "A::1", "::A"] {
+            let tokens: Vec<Result<Token, Error>> = Tokenizer::new(input).collect();
+            assert!(
+                tokens
+                    .iter()
+                    .any(|token| matches!(token, Err(Error::UnknownChar(':')))),
+                "{input}: {tokens:?}"
+            );
+        }
     }
 }
