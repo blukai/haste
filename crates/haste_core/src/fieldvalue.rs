@@ -34,6 +34,7 @@ pub enum FieldValue {
     /// use `String::from_utf8_lossy` in your code to convert this into an actual string, and
     /// handle conversion errors.
     String(Box<[u8]>),
+    BinaryBlock(Box<[u8]>),
 }
 
 // TODO(blukai): when you'll be unfucking errors - rename this one to FieldValueInvalidConversion
@@ -141,7 +142,8 @@ impl_debug! {
     Vector2,
     Vector4,
     QAngle,
-    String
+    String,
+    BinaryBlock
 }
 
 macro_rules! impl_display {
@@ -165,5 +167,6 @@ impl_display! {
     Vector2,
     Vector4,
     QAngle,
-    String
+    String,
+    BinaryBlock
 }

@@ -103,6 +103,15 @@ mod decoders {
         QAngle([br.read_bitangle(fd.bit_count), br.read_bitangle(fd.bit_count), br.read_bitangle(fd.bit_count)])
     }
 
+    pub fn decode_binary_block(_fd: &Fd, _ctx: &mut Ctx, br: &mut Br) -> FieldValue {
+        let len = br.read_uvarint64();
+        let mut buf = Box::new_uninit_slice(len as usize);
+        unsafe {
+            br.read_bytes(buf.assume_init_mut());
+            BinaryBlock(buf.assume_init())
+        }
+    }
+
     macro_rules! make_decode_vector_fn {
         ($name:ident, $variant:ident, |$fd:ident, $ctx:ident, $br: ident| $f:expr) => {
             pub fn $name($fd: &Fd, $ctx: &mut Ctx, $br: &mut Br) -> FieldValue {
@@ -340,6 +349,11 @@ impl FieldDecoder {
         let mut decoder = Self::new(decode_qangle_bit_count);
         decoder.bit_count = bit_count;
         decoder
+    }
+
+    #[inline(always)]
+    pub(crate) fn new_binary_block() -> Self {
+        Self::new(decode_binary_block)
     }
 
     #[inline(always)]

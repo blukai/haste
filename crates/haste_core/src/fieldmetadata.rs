@@ -170,12 +170,11 @@ fn visit_ident(
             special_descriptor: Some(FieldSpecialDescriptor::DynamicSerializerArray),
             decoder: FieldDecoder::new_u64_varint(),
         }),
+        // NOTE: this is from report in https://github.com/blukai/haste/issues/13.
+        "CUtlBinaryBlock" => non_special!(FieldDecoder::new_binary_block()),
 
         // default
-        _ => Ok(FieldMetadata {
-            special_descriptor: None,
-            decoder: FieldDecoder::new_u64(field),
-        }),
+        _ => non_special!(FieldDecoder::new_u64(field)),
     }
 }
 
