@@ -342,6 +342,11 @@ impl FieldDecoder {
         decoder
     }
 
+    #[inline(always)]
+    pub(crate) fn new_u64_varint() -> Self {
+        Self::new(decode_u64_varint)
+    }
+
     // ----
 
     #[inline(always)]

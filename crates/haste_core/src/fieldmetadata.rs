@@ -163,12 +163,12 @@ fn visit_ident(
         // exceptional specials xd
         "m_SpeechBubbles" => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::DynamicSerializerArray),
-            decoder: FieldDecoder::new_u64(field),
+            decoder: FieldDecoder::new_u64_varint(),
         }),
         // https://github.com/SteamDatabase/GameTracking-CS2/blob/6b3bf6ad44266e3ee4440a0b9b2fee1268812840/game/core/tools/demoinfo2/demoinfo2.txt#L155C83-L155C111
         "DOTA_CombatLogQueryProgress" => Ok(FieldMetadata {
             special_descriptor: Some(FieldSpecialDescriptor::DynamicSerializerArray),
-            decoder: FieldDecoder::new_u64(field),
+            decoder: FieldDecoder::new_u64_varint(),
         }),
 
         // default
@@ -196,7 +196,7 @@ fn visit_template(
         if field.field_serializer_name.is_some() {
             return Ok(FieldMetadata {
                 special_descriptor: Some(FieldSpecialDescriptor::DynamicSerializerArray),
-                decoder: FieldDecoder::new_u64(field),
+                decoder: FieldDecoder::new_u64_varint(),
             });
         }
 
@@ -204,7 +204,7 @@ fn visit_template(
             special_descriptor: Some(FieldSpecialDescriptor::DynamicArray {
                 decoder: field_metadata.decoder,
             }),
-            decoder: FieldDecoder::new_u64(field),
+            decoder: FieldDecoder::new_u64_varint(),
         });
     }
 
