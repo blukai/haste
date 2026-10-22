@@ -256,16 +256,30 @@ fn visit_pointer() -> Result<FieldMetadata, FieldMetadataError> {
 }
 
 #[inline]
+fn visit_path(
+    segments: &[Expr<'_>],
+    field: &FlattenedSerializerField,
+) -> Result<FieldMetadata, FieldMetadataError> {
+    match segments {
+        _ => Ok(FieldMetadata {
+            special_descriptor: None,
+            decoder: FieldDecoder::new_u64(field),
+        }),
+    }
+}
+
+#[inline]
 fn visit_any(
     expr: Expr,
     field: &FlattenedSerializerField,
 ) -> Result<FieldMetadata, FieldMetadataError> {
     match expr {
         Expr::Ident(ident) => visit_ident(ident, field),
+        Expr::Lit(_) => unreachable!(),
         Expr::Template { expr, arg } => visit_template(*expr, *arg, field),
         Expr::Array { expr, len } => visit_array(*expr, *len, field),
         Expr::Pointer(_) => visit_pointer(),
-        _ => unreachable!(),
+        Expr::Path(segments) => visit_path(&segments, field),
     }
 }
 

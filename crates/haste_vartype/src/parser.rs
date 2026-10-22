@@ -19,6 +19,7 @@ pub enum Expr<'a> {
         expr: Box<Expr<'a>>,
         len: Box<Expr<'a>>,
     },
+    Path(Box<[Expr<'a>]>),
 }
 
 #[derive(Debug, Clone)]
@@ -56,12 +57,58 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse(&mut self) -> Result<Expr<'a>, Error> {
-        let first = self.expect_token(|k| matches!(k, TokenKind::Ident(_)))?;
-        let TokenKind::Ident(ident) = first.kind else {
-            unreachable!();
+    fn parse_path(&mut self) -> Result<Expr<'a>, Error> {
+        let segment = {
+            let token = self.expect_token(|k| matches!(k, TokenKind::Ident(_)))?;
+            let TokenKind::Ident(ident) = token.kind else {
+                unreachable!();
+            };
+            Expr::Ident(ident)
         };
-        let mut expr = Expr::Ident(ident);
+        match self.next_token()? {
+            Some(Token {
+                kind: TokenKind::ColonColon,
+                ..
+            }) => {}
+            Some(token) => {
+                self.prev_token = Some(token);
+                return Ok(segment);
+            }
+            None => return Ok(segment),
+        }
+
+        let mut segments = vec![segment];
+        loop {
+            let segment = match self.next_token()? {
+                Some(Token {
+                    kind: TokenKind::Ident(ident),
+                    ..
+                }) => Expr::Ident(ident),
+                Some(token) => {
+                    self.prev_token = Some(token);
+                    break;
+                }
+                None => break,
+            };
+            segments.push(segment);
+            match self.next_token()? {
+                Some(Token {
+                    kind: TokenKind::ColonColon,
+                    ..
+                }) => {}
+                Some(next) => {
+                    self.prev_token = Some(next);
+                    break;
+                }
+                None => break,
+            }
+        }
+        Ok(Expr::Path(segments.into_boxed_slice()))
+    }
+
+    fn parse(&mut self) -> Result<Expr<'a>, Error> {
+        let mut expr = self.parse_path()?;
+
         while let Some(next) = self.next_token()? {
             match next.kind {
                 TokenKind::LAngle => {
@@ -74,16 +121,16 @@ impl<'a> Parser<'a> {
                     };
                 }
                 TokenKind::LSquare => {
-                    let identorlit = self.expect_token(|_| true)?;
-                    let len = match identorlit.kind {
+                    let token = self.expect_token(|_| true)?;
+                    let len = match token.kind {
                         TokenKind::Ident(ident) => Expr::Ident(ident),
                         TokenKind::Lit(lit) => {
                             let num = lit
                                 .parse::<usize>()
-                                .map_err(|_| Error::UnexpectedToken(identorlit.span.start))?;
+                                .map_err(|_| Error::UnexpectedToken(token.span.start))?;
                             Expr::Lit(Lit::Num(num))
                         }
-                        _ => return Err(Error::UnexpectedToken(identorlit.span.start)),
+                        _ => return Err(Error::UnexpectedToken(token.span.start)),
                     };
 
                     let _rsquare = self.expect_token(|k| matches!(k, TokenKind::RSquare))?;
@@ -143,12 +190,13 @@ mod tests {
 
     #[test]
     fn it_works() -> Result<(), Error> {
-        const INPUTS: [&'static str; 5] = [
+        const INPUTS: &[&'static str] = &[
             "uint64[256]",
             "CDOTAGameManager*",
             "CNetworkUtlVectorBase< CHandle< CBasePlayerController > >",
             "CHandle< CDOTASpecGraphPlayerData >[24]",
             "CDOTA_AbilityDraftAbilityState[MAX_ABILITY_DRAFT_ABILITIES]",
+            "CCitadel_Ability_Baba_BubblingBrew::EState",
         ];
 
         let mut outputs: Vec<Result<Expr<'static>, Error>> = Vec::with_capacity(INPUTS.len());
@@ -217,6 +265,18 @@ mod tests {
                             "MAX_ABILITY_DRAFT_ABILITIES",
                         ),
                     },
+                ),
+                Ok(
+                    Path(
+                        [
+                            Ident(
+                                "CCitadel_Ability_Baba_BubblingBrew",
+                            ),
+                            Ident(
+                                "EState",
+                            ),
+                        ],
+                    ),
                 ),
             ]
         "#]];

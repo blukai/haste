@@ -9,6 +9,7 @@ pub enum TokenKind<'a> {
     Asterisk,       // *
     Ident(&'a str), // uint64, MAX_ABILITY_DRAFT_ABILITIES, etc..
     Lit(&'a str),   // 256
+    ColonColon,     // ::
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -131,6 +132,10 @@ impl<'a> Tokenizer<'a> {
                 '[' => break Some(Ok(self.emit(TokenKind::LSquare))),
                 ']' => break Some(Ok(self.emit(TokenKind::RSquare))),
                 '*' => break Some(Ok(self.emit(TokenKind::Asterisk))),
+                ':' if self.peek_char() == Some(':') => {
+                    _ = self.next_char();
+                    break Some(Ok(self.emit(TokenKind::ColonColon)));
+                }
                 ch if is_ident_start(ch) => break Some(Ok(self.emit_ident())),
                 ch if ch.is_ascii_digit() => break Some(Ok(self.emit_lit())),
                 ch if ch.is_whitespace() => {
@@ -164,6 +169,7 @@ CDOTAGameManager*
 CNetworkUtlVectorBase< CHandle< CBasePlayerController > >
 CHandle< CDOTASpecGraphPlayerData >[24]
 CDOTA_AbilityDraftAbilityState[MAX_ABILITY_DRAFT_ABILITIES]
+CCitadel_Ability_Baba_BubblingBrew::EState
             "#;
 
         let tokenizer = Tokenizer::new(INPUT);
@@ -335,6 +341,28 @@ CDOTA_AbilityDraftAbilityState[MAX_ABILITY_DRAFT_ABILITIES]
                     Token {
                         kind: RSquare,
                         span: Span { 187, 188 },
+                    },
+                ),
+                Ok(
+                    Token {
+                        kind: Ident(
+                            "CCitadel_Ability_Baba_BubblingBrew",
+                        ),
+                        span: Span { 189, 223 },
+                    },
+                ),
+                Ok(
+                    Token {
+                        kind: ColonColon,
+                        span: Span { 224, 225 },
+                    },
+                ),
+                Ok(
+                    Token {
+                        kind: Ident(
+                            "EState",
+                        ),
+                        span: Span { 225, 231 },
                     },
                 ),
             ]
