@@ -537,6 +537,14 @@ impl<D: DemoStream, V: Visitor> Parser<D, V> {
                     };
                     self.visitor.on_entity(&self.ctx, delta_header, entity)?;
                 }
+                DeltaHeader::LEAVE => {
+                    let entity = unsafe {
+                        let entity = self.ctx.entities.handle_leave_unchecked(entity_index);
+                        // SAFETY: see comment above (below .handle_create call); same stuff.
+                        &*(entity as *const Entity)
+                    };
+                    self.visitor.on_entity(&self.ctx, delta_header, entity)?;
+                }
                 _ => {}
             }
         }
